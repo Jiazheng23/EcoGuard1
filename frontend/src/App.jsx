@@ -1,20 +1,18 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import Login from './Login'
-import Register from './Register'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import AuthPage from './features/auth/AuthPage'
+import TouristWorkspace from './features/tourist/TouristWorkspace'
 
-function App() {
+export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* 默认打开网页时，自动跳转到登录页 */}
-        <Route path="/" element={<Navigate to="/login" />} />
-        
-        {/* 定义具体的页面路径 */}
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
+        <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="/login" element={<AuthPage initialMode="login" />} />
+        <Route path="/register" element={<AuthPage initialMode="register" />} />
+        <Route path="/forgot-password" element={<AuthPage initialMode="forgot" />} />
+        <Route path="/tourist/dashboard" element={<TouristWorkspace />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
   )
 }
-
-export default App
