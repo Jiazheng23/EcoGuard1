@@ -18,7 +18,7 @@ import {
   loginUser,
   registerUser,
   sendPasswordReset,
-} from "../services/authService";
+} from "../../services/authService";
 
 const features = [
   {
