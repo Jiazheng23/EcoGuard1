@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { ArrowLeft, BarChart3, CheckCircle2, Eye, EyeOff, Leaf, LockKeyhole, Mail, ShieldCheck, UserRound } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import './auth.css'
+import { supabase } from '../../services/supabaseClient'
 
 const features = [
   { icon: Leaf, title: 'Personal Eco Score', description: 'Track your environmental impact in real time' },
@@ -16,6 +17,7 @@ export default function AuthPage({ initialMode }) {
   const [showPassword, setShowPassword] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [message, setMessage] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [form, setForm] = useState({ name: '', email: '', password: '', confirmPassword: '' })
 
   useEffect(() => {
@@ -34,8 +36,18 @@ export default function AuthPage({ initialMode }) {
     setMessage('')
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault()
+
+    if (!event.currentTarget.checkValidity()) {
+      event.currentTarget.reportValidity()
+      return
+    }
+
+    if (!supabase) {
+      setMessage('Supabase is not configured. Add your VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY values.')
+      return
+    }
 
     if (mode === 'register' && form.password !== form.confirmPassword) {
       setMessage('Passwords do not match. Please check and try again.')
@@ -43,11 +55,64 @@ export default function AuthPage({ initialMode }) {
     }
 
     if (mode === 'forgot') {
-      setSubmitted(true)
+      try {
+        const { error } = await supabase.auth.resetPasswordForEmail(form.email, {
+          redirectTo: `${window.location.origin}/login`,
+        })
+
+        if (error) throw error
+
+        setMessage('')
+        setSubmitted(true)
+      } catch (error) {
+        setMessage(error.message || 'Unable to send reset link. Please try again.')
+        setSubmitted(false)
+      }
       return
     }
 
-    navigate('/tourist/dashboard')
+    try {
+      if (mode === 'login') {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: form.email,
+          password: form.password,
+        })
+
+        if (error) throw error
+
+        setMessage('')
+        navigate('/tourist/dashboard')
+      } else if (mode === 'register') {
+        setIsSubmitting(true)
+
+        try {
+          const response = await fetch('/api/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: form.name,
+              email: form.email,
+              password: form.password,
+            }),
+          })
+
+          const data = await response.json()
+
+          if (!response.ok) {
+            throw new Error(data.error || 'Unable to create account.')
+          }
+
+          setMessage(data.message || 'Account created successfully.')
+          navigate('/login')
+        } catch (error) {
+          setMessage(error.message || 'Registration failed. Please try again.')
+        } finally {
+          setIsSubmitting(false)
+        }
+      }
+    } catch (error) {
+      setMessage(error.message || 'Authentication failed. Please try again.')
+    }
   }
 
   const heading = {
@@ -83,13 +148,13 @@ export default function AuthPage({ initialMode }) {
           </div>}
 
           {submitted ? <div className="auth-success"><CheckCircle2 size={48} /><strong>Reset link sent!</strong><p>Check your email for instructions to reset your password.</p><button type="button" onClick={() => switchMode('login')}>Back to Sign In</button></div> :
-            <form onSubmit={handleSubmit} noValidate>
+            <form onSubmit={handleSubmit}>
               {mode === 'register' && <Field label="Full name" icon={<UserRound size={17} />} name="name" placeholder="Ahmad Rizal" value={form.name} onChange={updateField} />}
               <Field label="Email address" icon={<Mail size={17} />} name="email" type="email" placeholder={role === 'admin' ? 'location.admin@ecoguard.my' : 'tourist@example.com'} value={form.email} onChange={updateField} />
               {mode !== 'forgot' && <div className="field"><div className="field__label"><label htmlFor="password">Password</label>{mode === 'login' && <button type="button" onClick={() => switchMode('forgot')}>Forgot password?</button>}</div><div className="field__input"><LockKeyhole size={17} /><input id="password" name="password" type={showPassword ? 'text' : 'password'} placeholder="••••••••" value={form.password} onChange={updateField} required /><button type="button" aria-label={showPassword ? 'Hide password' : 'Show password'} onClick={() => setShowPassword((visible) => !visible)}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></div></div>}
               {mode === 'register' && <Field label="Confirm password" icon={<LockKeyhole size={17} />} name="confirmPassword" type="password" placeholder="••••••••" value={form.confirmPassword} onChange={updateField} />}
               {message && <p className="form-message" role="alert">{message}</p>}
-              <button className="auth-submit" type="submit">{mode === 'login' ? `Sign In as ${role === 'admin' ? 'Location Admin' : 'Tourist'}` : mode === 'register' ? 'Create Account' : 'Send Reset Link'}</button>
+              <button className="auth-submit" type="submit" disabled={isSubmitting}>{mode === 'login' ? `Sign In as ${role === 'admin' ? 'Location Admin' : 'Tourist'}` : mode === 'register' ? (isSubmitting ? 'Creating account...' : 'Create Account') : 'Send Reset Link'}</button>
             </form>}
 
           {!submitted && <p className="auth-switch">{mode === 'login' ? <>Don't have an account? <button onClick={() => switchMode('register')}>Sign up free</button></> : mode === 'register' ? <>Already have an account? <button onClick={() => switchMode('login')}>Sign in</button></> : <>Remember your password? <button onClick={() => switchMode('login')}>Sign in</button></>}</p>}

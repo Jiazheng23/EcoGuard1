@@ -1,27 +1,31 @@
-import express from 'express';
-import cors from 'cors';
-import dotenv from 'dotenv';
+import express from 'express'
+import cors from 'cors'
+import { env } from './src/config/env.js'
+import authRoutes from './src/routes/authRoutes.js'
 
-// 加载环境变量
-dotenv.config();
+const app = express()
 
-const app = express();
-// 如果环境变量里没有定义 PORT，就默认使用 5000 端口
-const PORT = process.env.PORT || 5000;
+app.use(cors({
+  origin: 'http://localhost:5173',
+}))
 
-// 设置中间件
-app.use(cors()); // 允许跨域请求
-app.use(express.json()); // 允许 Express 解析前端传来的 JSON 数据
+app.use(express.json())
 
-// 编写一个简单的测试 API 路由
 app.get('/api/health', (req, res) => {
-    res.json({ 
-        status: 'success', 
-        message: 'EcoGuard 后端服务器运行正常！' 
-    });
-});
+  res.json({
+    status: 'success',
+    message: 'EcoGuard backend is running.',
+  })
+})
 
-// 启动服务器
-app.listen(PORT, () => {
-    console.log(`EcoGuard Backend is running on http://localhost:${PORT}`);
-});
+app.use('/api', authRoutes)
+
+app.use((req, res) => {
+  res.status(404).json({
+    error: 'Route not found.',
+  })
+})
+
+app.listen(env.port, () => {
+  console.log(`Backend running on http://localhost:${env.port}`)
+})
