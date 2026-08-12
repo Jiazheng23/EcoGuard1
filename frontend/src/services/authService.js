@@ -11,19 +11,14 @@ export async function loginUser(email, password) {
   return data
 }
 
-export async function registerUser({
-  name,
-  email,
-  password,
-  role = 'tourist',
-}) {
+export async function registerUser({ name, email, password }) {
   const { data, error } = await supabase.auth.signUp({
     email: email.trim().toLowerCase(),
     password,
     options: {
       data: {
         full_name: name.trim(),
-        role,
+        role: 'tourist',
       },
     },
   })

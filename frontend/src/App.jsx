@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import AuthPage from './features/auth/AuthPage'
 import TouristWorkspace from './features/tourist/TouristWorkspace'
+import AdminWorkspace from './features/admin/AdminWorkspace'
 
 export default function App() {
   return (
@@ -12,6 +13,9 @@ export default function App() {
         <Route path="/forgot-password" element={<AuthPage initialMode="forgot" />} />
         <Route path="/tourist/dashboard" element={<TouristWorkspace />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
+
+        // Admin routes
+        <Route path="/admin/dashboard" element={<AdminWorkspace />} />
       </Routes>
     </BrowserRouter>
   )

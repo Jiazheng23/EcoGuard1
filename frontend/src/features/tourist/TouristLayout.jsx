@@ -8,7 +8,6 @@ import {
   Map,
   Menu,
   Search,
-  Settings,
   Trash2,
   UserRound,
   X,
@@ -16,14 +15,27 @@ import {
 import { useState } from "react";
 
 const navItems = [
-  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { id: "carbon", label: "Carbon Calculator", icon: Calculator },
-  { id: "waste", label: "Waste Information", icon: Trash2 },
-  { id: "monitoring", label: "Eco Monitoring", icon: Map },
-  { id: "reports", label: "Reports", icon: FileText },
-  { id: "profile", label: "Profile", icon: UserRound },
-  { id: "settings", label: "Settings", icon: Settings },
-];
+  {
+    id: 'dashboard',
+    label: 'Dashboard',
+    icon: LayoutDashboard,
+  },
+  {
+    id: 'carbon',
+    label: 'Carbon Calculator',
+    icon: Calculator,
+  },
+  {
+    id: 'monitoring',
+    label: 'Eco Monitoring',
+    icon: Map,
+  },
+  {
+    id: 'profile',
+    label: 'Profile',
+    icon: UserRound,
+  },
+]
 
 export default function TouristLayout({ activePage, onNavigate, user, onLogout, children }) {
   const fullName =

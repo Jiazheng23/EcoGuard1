@@ -310,12 +310,6 @@ export default function TouristDashboard({ onNavigate, user }) {
             Achievement Badges{" "}
             <span className="font-normal text-slate-400">(3 of 6 earned)</span>
           </h2>
-          <button
-            onClick={() => onNavigate("reports")}
-            className="text-xs font-semibold text-green-600"
-          >
-            View reports →
-          </button>
         </div>
         <div className="grid grid-cols-3 gap-3 md:grid-cols-6">
           {badges.map((badge) => (
