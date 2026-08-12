@@ -76,48 +76,79 @@ export default function AuthPage({ initialMode }) {
     setMessage("");
   }
 
-  async function handleSubmit(event) {
-    event.preventDefault();
+async function handleSubmit(event) {
+  event.preventDefault()
 
-    if (!event.currentTarget.checkValidity()) {
-      event.currentTarget.reportValidity();
-      return;
-    }
-
-    if (!supabase) {
-      setMessage(
-        "Supabase is not configured. Add your VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY values.",
-      );
-      return;
-    }
-
-    if (mode === "register" && form.password !== form.confirmPassword) {
-      setMessage("Passwords do not match. Please check and try again.");
-      return;
-    }
-
-    if (mode === "forgot") {
-      await sendPasswordReset(form.email);
-      setSubmitted(true);
-      return;
-    }
-    try {
-      if (mode === "login") {
-        await loginUser(form.email, form.password);
-        navigate("/tourist/dashboard");
-      } else if (mode === "register") {
-        await registerUser({
-          name: form.name,
-          email: form.email,
-          password: form.password,
-          role,
-        });
-        navigate("/login");
-      }
-    } catch (error) {
-      setMessage(error.message || "Authentication failed. Please try again.");
-    }
+  if (!event.currentTarget.checkValidity()) {
+    event.currentTarget.reportValidity()
+    return
   }
+
+  if (!supabase) {
+    setMessage(
+      'Supabase is not configured. Add your VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY values.',
+    )
+    return
+  }
+
+  if (mode === 'register' && form.password !== form.confirmPassword) {
+    setMessage('Passwords do not match. Please check and try again.')
+    return
+  }
+
+  setMessage('')
+  setIsSubmitting(true)
+
+  const cleanEmail = form.email.trim().toLowerCase()
+
+  try {
+    if (mode === 'forgot') {
+      await sendPasswordReset(cleanEmail)
+      setSubmitted(true)
+      return
+    }
+
+    if (mode === 'login') {
+      const data = await loginUser(cleanEmail, form.password)
+
+      const accountRole =
+        data.user?.user_metadata?.role || 'tourist'
+
+      if (role !== accountRole) {
+        await supabase.auth.signOut()
+
+        throw new Error(
+          `This account is registered as ${accountRole === 'admin' ? 'a Location Admin' : 'a Tourist'}.`,
+        )
+      }
+
+      if (accountRole === 'admin') {
+        navigate('/admin/dashboard')
+      } else {
+        navigate('/tourist/dashboard')
+      }
+
+      return
+    }
+
+    if (mode === 'register') {
+      await registerUser({
+        name: form.name.trim(),
+        email: cleanEmail,
+        password: form.password,
+        role: 'tourist',
+      })
+
+      navigate('/login')
+    }
+  } catch (error) {
+    setMessage(
+      error.message || 'Authentication failed. Please try again.',
+    )
+  } finally {
+    setIsSubmitting(false)
+  }
+}
 
   const heading = {
     login: ["Welcome back", "Sign in to your EcoGuard account"],
@@ -327,9 +358,6 @@ export default function AuthPage({ initialMode }) {
               )}
             </p>
           )}
-          <p className="auth-terms">
-            Demo mode: any email and password can access the tourist dashboard.
-          </p>
         </div>
       </section>
     </main>

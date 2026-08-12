@@ -2,6 +2,7 @@ import express from 'express'
 import cors from 'cors'
 import { env } from './src/config/env.js'
 import authRoutes from './src/routes/authRoutes.js'
+import mapRoutes from './src/routes/mapRoutes.js'
 
 const app = express()
 
@@ -19,6 +20,7 @@ app.get('/api/health', (req, res) => {
 })
 
 app.use('/api', authRoutes)
+app.use('/api/maps', mapRoutes)
 
 app.use((req, res) => {
   res.status(404).json({

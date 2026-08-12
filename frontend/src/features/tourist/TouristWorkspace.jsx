@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../services/supabaseClient'
+
 import TouristDashboard from './TouristDashboard'
 import TouristLayout from './TouristLayout'
 import WasteInformation from './WasteInformation'
@@ -9,6 +10,7 @@ import CarbonCalculator from './CarbonCalculator'
 
 export default function TouristWorkspace() {
   const navigate = useNavigate()
+
   const [page, setPage] = useState('dashboard')
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -30,10 +32,32 @@ export default function TouristWorkspace() {
     }
 
     loadUser()
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session?.user) {
+        navigate('/login', { replace: true })
+        return
+      }
+
+      setUser(session.user)
+      setLoading(false)
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
   }, [navigate])
 
   async function handleLogout() {
-    await supabase.auth.signOut()
+    const { error } = await supabase.auth.signOut()
+
+    if (error) {
+      console.error('Logout failed:', error.message)
+      return
+    }
+
     navigate('/login', { replace: true })
   }
 
@@ -60,7 +84,7 @@ export default function TouristWorkspace() {
           user={user}
         />
       ) : page === 'carbon' ? (
-        <CarbonCalculator />
+        <CarbonCalculator user={user} />
       ) : page === 'waste' ? (
         <WasteInformation />
       ) : page === 'monitoring' ? (
@@ -76,7 +100,7 @@ export default function TouristWorkspace() {
           </h1>
 
           <p className="mt-2 text-slate-500">
-            This screen will be added after the Tourist Dashboard.
+            This screen will be added later.
           </p>
         </section>
       )}
