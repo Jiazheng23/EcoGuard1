@@ -20,7 +20,7 @@ import {
   Train,
   TrendingDown,
 } from 'lucide-react'
-import { supabase } from '../../services/supabaseClient'
+import { createTrip } from '../../services/tripService'
 import MalaysiaMapPicker from './MalaysiaMapPicker'
 
 const modes = [
@@ -129,7 +129,7 @@ export default function CarbonCalculator({ user }) {
     setIsSaving(true)
 
     try {
-      const { error } = await supabase.from('trips').insert({
+      await createTrip({
         tourist_id: user.id,
         starting_location: origin,
         destination,
@@ -145,8 +145,6 @@ export default function CarbonCalculator({ user }) {
         destination_lat: journeyCoordinates.destination.lat,
         destination_lng: journeyCoordinates.destination.lng,
       })
-
-      if (error) throw error
 
       setSaveMessage(
         `Trip saved successfully. You received ${ecoPoints} Eco Points.`,

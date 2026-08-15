@@ -1,0 +1,177 @@
+export const transportLabels = {
+  car: 'Car',
+  motorcycle: 'Motorcycle',
+  bus: 'Bus',
+  mrt: 'MRT / LRT',
+  train: 'ETS Train',
+  walking: 'Walking',
+  bicycle: 'Bicycle',
+  flight: 'Flight',
+}
+
+export const transportColors = {
+  car: '#ef4444',
+  motorcycle: '#f97316',
+  bus: '#f59e0b',
+  mrt: '#22c55e',
+  train: '#16a34a',
+  walking: '#14b8a6',
+  bicycle: '#0ea5e9',
+  flight: '#8b5cf6',
+}
+
+export function numberValue(value) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+export function formatCarbon(value, digits = 1) {
+  return `${numberValue(value).toFixed(digits)} kg CO₂`
+}
+
+export function formatTripDate(value, options = {}) {
+  if (!value) return 'Unknown date'
+
+  return new Intl.DateTimeFormat('en-MY', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    ...options,
+  }).format(new Date(value))
+}
+
+export function getMonthlySeries(trips, monthCount = 7) {
+  const formatter = new Intl.DateTimeFormat('en-MY', { month: 'short' })
+  const now = new Date()
+
+  return Array.from({ length: monthCount }, (_, index) => {
+    const offset = monthCount - index - 1
+    const start = new Date(now.getFullYear(), now.getMonth() - offset, 1)
+    const end = new Date(start.getFullYear(), start.getMonth() + 1, 1)
+    const matching = trips.filter((trip) => {
+      const date = new Date(trip.travelled_at)
+      return date >= start && date < end
+    })
+
+    return {
+      month: formatter.format(start),
+      trips: matching.length,
+      emission: Number(
+        matching
+          .reduce((total, trip) => total + numberValue(trip.total_emission), 0)
+          .toFixed(2),
+      ),
+    }
+  })
+}
+
+export function getDailySeries(trips, dayCount = 7) {
+  const now = new Date()
+  now.setHours(0, 0, 0, 0)
+  const formatter = new Intl.DateTimeFormat('en-MY', { weekday: 'short' })
+
+  return Array.from({ length: dayCount }, (_, index) => {
+    const date = new Date(now)
+    date.setDate(now.getDate() - (dayCount - index - 1))
+    const end = new Date(date)
+    end.setDate(date.getDate() + 1)
+    const matching = trips.filter((trip) => {
+      const tripDate = new Date(trip.travelled_at)
+      return tripDate >= date && tripDate < end
+    })
+
+    return {
+      day: formatter.format(date),
+      trips: matching.length,
+      emission: Number(
+        matching
+          .reduce((total, trip) => total + numberValue(trip.total_emission), 0)
+          .toFixed(2),
+      ),
+    }
+  })
+}
+
+export function getTransportSeries(trips) {
+  const totals = new Map()
+
+  trips.forEach((trip) => {
+    const mode = trip.transport_mode || 'unknown'
+    const current = totals.get(mode) || { trips: 0, emission: 0 }
+    current.trips += 1
+    current.emission += numberValue(trip.total_emission)
+    totals.set(mode, current)
+  })
+
+  return [...totals.entries()]
+    .map(([mode, values]) => ({
+      mode,
+      name: transportLabels[mode] || mode,
+      value: values.trips,
+      trips: values.trips,
+      emission: Number(values.emission.toFixed(2)),
+      color: transportColors[mode] || '#64748b',
+    }))
+    .sort((left, right) => right.trips - left.trips)
+}
+
+export function getDestinationSeries(trips) {
+  const destinations = new Map()
+
+  trips.forEach((trip) => {
+    const name = trip.destination?.trim() || 'Unknown destination'
+    const current = destinations.get(name) || {
+      name,
+      trips: 0,
+      emission: 0,
+      distance: 0,
+      tourists: new Set(),
+      latest: null,
+      lat: null,
+      lng: null,
+    }
+
+    current.trips += 1
+    current.emission += numberValue(trip.total_emission)
+    current.distance += numberValue(trip.distance_km)
+    current.tourists.add(trip.tourist_id)
+    current.lat ??= trip.destination_lat
+    current.lng ??= trip.destination_lng
+
+    if (!current.latest || new Date(trip.travelled_at) > new Date(current.latest)) {
+      current.latest = trip.travelled_at
+    }
+
+    destinations.set(name, current)
+  })
+
+  return [...destinations.values()]
+    .map((destination) => ({
+      ...destination,
+      emission: Number(destination.emission.toFixed(2)),
+      averageEmission: Number((destination.emission / destination.trips).toFixed(2)),
+      averageDistance: Number((destination.distance / destination.trips).toFixed(1)),
+      touristCount: destination.tourists.size,
+    }))
+    .sort((left, right) => right.trips - left.trips)
+}
+
+export function getTripSummary(trips, profiles = []) {
+  const totalEmission = trips.reduce(
+    (total, trip) => total + numberValue(trip.total_emission),
+    0,
+  )
+
+  return {
+    totalTrips: trips.length,
+    totalEmission: Number(totalEmission.toFixed(2)),
+    averageEmission: trips.length
+      ? Number((totalEmission / trips.length).toFixed(2))
+      : 0,
+    touristCount: profiles.filter((profile) => profile.role === 'tourist').length,
+    destinationCount: getDestinationSeries(trips).length,
+    highEmissionTrips: trips.filter(
+      (trip) => numberValue(trip.carbon_emission) > 15,
+    ).length,
+  }
+}

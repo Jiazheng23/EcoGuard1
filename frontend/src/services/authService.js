@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient'
+import { getOwnProfile } from './profileService'
 
 export async function loginUser(email, password) {
   const { data, error } = await supabase.auth.signInWithPassword({
@@ -8,23 +9,25 @@ export async function loginUser(email, password) {
 
   if (error) throw error
 
-  return data
+  const profile = await getOwnProfile(data.user)
+
+  return { ...data, profile }
 }
 
-export async function registerUser({ name, email, password }) {
-  const { data, error } = await supabase.auth.signUp({
-    email: email.trim().toLowerCase(),
-    password,
-    options: {
-      data: {
-        full_name: name.trim(),
-        role: 'tourist',
-      },
-    },
+export async function registerUser({ name, email, password, role, adminCode }) {
+  const response = await fetch('/api/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      password,
+      role,
+      adminCode: role === 'admin' ? adminCode : undefined,
+    }),
   })
-
-  if (error) throw error
-
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(data.error || 'Registration failed.')
   return data
 }
 

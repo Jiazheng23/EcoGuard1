@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   ArrowLeft,
   BarChart3,
@@ -40,7 +40,7 @@ const features = [
 
 export default function AuthPage({ initialMode }) {
   const navigate = useNavigate();
-  const [mode, setMode] = useState(initialMode);
+  const mode = initialMode;
   const [role, setRole] = useState("tourist");
   const [showPassword, setShowPassword] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -51,13 +51,8 @@ export default function AuthPage({ initialMode }) {
     email: "",
     password: "",
     confirmPassword: "",
+    adminCode: "",
   });
-
-  useEffect(() => {
-    setMode(initialMode);
-    setSubmitted(false);
-    setMessage("");
-  }, [initialMode]);
 
   function switchMode(nextMode) {
     const paths = {
@@ -111,10 +106,7 @@ export default function AuthPage({ initialMode }) {
       if (mode === "login") {
         const data = await loginUser(cleanEmail, form.password);
 
-        const accountRole =
-          data.user?.app_metadata?.role ||
-          data.user?.user_metadata?.role ||
-          "tourist";
+        const accountRole = data.profile?.role || "tourist";
 
         if (role !== accountRole) {
           await supabase.auth.signOut();
@@ -138,6 +130,8 @@ export default function AuthPage({ initialMode }) {
           name: form.name.trim(),
           email: cleanEmail,
           password: form.password,
+          role,
+          adminCode: form.adminCode,
         });
         navigate("/login");
       }
@@ -250,6 +244,17 @@ export default function AuthPage({ initialMode }) {
                   name="name"
                   placeholder="Ahmad Rizal"
                   value={form.name}
+                  onChange={updateField}
+                />
+              )}
+              {mode === "register" && role === "admin" && (
+                <Field
+                  label="Administrator registration code"
+                  icon={<ShieldCheck size={17} />}
+                  name="adminCode"
+                  type="password"
+                  placeholder="Code provided by EcoGuard owner"
+                  value={form.adminCode}
                   onChange={updateField}
                 />
               )}

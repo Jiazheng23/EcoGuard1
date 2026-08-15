@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../services/supabaseClient";
+import { getOwnProfile, profileFromUser } from "../../services/profileService";
 
 import TouristDashboard from "./TouristDashboard";
 import TouristLayout from "./TouristLayout";
@@ -13,6 +14,7 @@ export default function TouristWorkspace() {
 
   const [page, setPage] = useState("dashboard");
   const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -28,6 +30,14 @@ export default function TouristWorkspace() {
       }
 
       setUser(loggedInUser);
+
+      try {
+        setProfile(await getOwnProfile(loggedInUser));
+      } catch (profileError) {
+        console.error("Profile loading failed:", profileError.message);
+        setProfile(profileFromUser(loggedInUser));
+      }
+
       setLoading(false);
     }
 
@@ -42,6 +52,9 @@ export default function TouristWorkspace() {
       }
 
       setUser(session.user);
+      getOwnProfile(session.user)
+        .then(setProfile)
+        .catch(() => setProfile(profileFromUser(session.user)));
       setLoading(false);
     });
 
@@ -74,16 +87,21 @@ export default function TouristWorkspace() {
       activePage={page}
       onNavigate={setPage}
       user={user}
+      profile={profile}
       onLogout={handleLogout}
     >
       {page === "dashboard" ? (
-        <TouristDashboard onNavigate={setPage} user={user} />
+        <TouristDashboard onNavigate={setPage} user={user} profile={profile} />
       ) : page === "carbon" ? (
         <CarbonCalculator user={user} />
       ) : page === "monitoring" ? (
         <EcologicalMonitoring onNavigate={setPage} />
       ) : page === "profile" ? (
-        <TouristProfile user={user} />
+        <TouristProfile
+          user={user}
+          profile={profile}
+          onProfileChange={setProfile}
+        />
       ) : (
         <section className="rounded-2xl border border-slate-100 bg-white p-8 shadow-sm">
           <p className="text-sm font-semibold uppercase tracking-widest text-green-600">

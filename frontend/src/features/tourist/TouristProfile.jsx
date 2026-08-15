@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   AlertCircle,
   CalendarDays,
@@ -10,22 +10,22 @@ import {
   UserRound,
 } from 'lucide-react'
 import { supabase } from '../../services/supabaseClient'
+import { updateOwnProfile } from '../../services/profileService'
 
 const card = 'rounded-2xl border border-slate-100 bg-white p-5 shadow-sm'
 
-export default function TouristProfile({ user }) {
-  const [fullName, setFullName] = useState('')
-  const [phone, setPhone] = useState('')
+export default function TouristProfile({ user, profile, onProfileChange }) {
+  const [fullName, setFullName] = useState(
+    profile?.full_name || user?.user_metadata?.full_name || '',
+  )
+  const [phone, setPhone] = useState(
+    profile?.phone || user?.user_metadata?.phone || '',
+  )
   const [isSaving, setIsSaving] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
 
-  useEffect(() => {
-    setFullName(user?.user_metadata?.full_name || '')
-    setPhone(user?.user_metadata?.phone || '')
-  }, [user])
-
-  const role = user?.user_metadata?.role || 'tourist'
+  const role = profile?.role || 'tourist'
 
   const initials = useMemo(() => {
     const name =
@@ -41,12 +41,12 @@ export default function TouristProfile({ user }) {
       .join('')
   }, [fullName, user?.email])
 
-  const createdDate = user?.created_at
+  const createdDate = profile?.created_at || user?.created_at
     ? new Intl.DateTimeFormat('en-MY', {
         day: 'numeric',
         month: 'long',
         year: 'numeric',
-      }).format(new Date(user.created_at))
+      }).format(new Date(profile?.created_at || user.created_at))
     : 'Not available'
 
   async function handleSubmit(event) {
@@ -71,7 +71,13 @@ export default function TouristProfile({ user }) {
     setIsSaving(true)
 
     try {
-      const { error } = await supabase.auth.updateUser({
+      const updatedProfile = await updateOwnProfile(user.id, {
+        fullName: cleanName,
+        phone: cleanPhone,
+        avatarUrl: profile?.avatar_url,
+      })
+
+      const { error: authError } = await supabase.auth.updateUser({
         data: {
           ...user.user_metadata,
           full_name: cleanName,
@@ -79,10 +85,13 @@ export default function TouristProfile({ user }) {
         },
       })
 
-      if (error) throw error
+      if (authError) {
+        console.warn('Auth display metadata was not updated:', authError.message)
+      }
 
       setFullName(cleanName)
       setPhone(cleanPhone)
+      onProfileChange?.(updatedProfile)
       setSuccessMessage('Profile updated successfully.')
     } catch (error) {
       setErrorMessage(

@@ -1,14 +1,12 @@
 import {
   Bell,
   Calculator,
-  FileText,
   LayoutDashboard,
   Leaf,
   LogOut,
   Map,
   Menu,
   Search,
-  Trash2,
   UserRound,
   X,
 } from "lucide-react";
@@ -37,9 +35,12 @@ const navItems = [
   },
 ]
 
-export default function TouristLayout({ activePage, onNavigate, user, onLogout, children }) {
+export default function TouristLayout({ activePage, onNavigate, user, profile, onLogout, children }) {
   const fullName =
-    user?.user_metadata?.full_name || user?.email?.split("@")[0] || "Tourist";
+    profile?.full_name ||
+    user?.user_metadata?.full_name ||
+    user?.email?.split("@")[0] ||
+    "Tourist";
 
   const initials = fullName
     .split(" ")

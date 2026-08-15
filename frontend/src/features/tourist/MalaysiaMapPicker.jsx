@@ -98,15 +98,6 @@ export default function MalaysiaMapPicker({
 
   useEffect(() => {
     if (!origin || !destination) {
-      setRouteCoordinates([])
-
-      callbackRef.current?.({
-        origin,
-        destination,
-        distanceKm: 0,
-        durationMinutes: 0,
-      })
-
       return
     }
 
@@ -167,10 +158,17 @@ export default function MalaysiaMapPicker({
 
     if (selecting === 'origin') {
       setOrigin(location)
+      setRouteCoordinates([])
       setSelecting('destination')
       setMessage(
         'Origin selected. Now select the destination.',
       )
+      callbackRef.current?.({
+        origin: location,
+        destination: null,
+        distanceKm: 0,
+        durationMinutes: 0,
+      })
     } else {
       setDestination(location)
       setMessage('Destination selected.')

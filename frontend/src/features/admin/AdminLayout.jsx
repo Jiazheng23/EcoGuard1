@@ -76,8 +76,9 @@ const pageLabels = {
   profile: 'Profile',
 }
 
-function getAdminDetails(user) {
+function getAdminDetails(user, profile) {
   const name =
+    profile?.full_name ||
     user?.user_metadata?.full_name ||
     user?.user_metadata?.name ||
     user?.email?.split('@')[0] ||
@@ -93,8 +94,8 @@ function getAdminDetails(user) {
   return { name, initials }
 }
 
-function AdminSidebar({ activePage, onNavigate, onLogout, onClose, user }) {
-  const { name, initials } = getAdminDetails(user)
+function AdminSidebar({ activePage, onNavigate, onLogout, onClose, user, profile }) {
+  const { name, initials } = getAdminDetails(user, profile)
 
   function navigateTo(page) {
     onNavigate(page)
@@ -192,16 +193,18 @@ export default function AdminLayout({
   onNavigate,
   onLogout,
   user,
+  profile,
   children,
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const { initials } = getAdminDetails(user)
+  const { initials } = getAdminDetails(user, profile)
 
   const sidebarProps = {
     activePage,
     onNavigate,
     onLogout,
     user,
+    profile,
     onClose: () => setSidebarOpen(false),
   }
 

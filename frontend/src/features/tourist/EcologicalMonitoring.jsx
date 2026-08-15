@@ -7,7 +7,6 @@ import {
   CheckCircle2,
   ChevronDown,
   Clock3,
-  Leaf,
   List,
   Map as MapIcon,
   MapPin,
@@ -23,6 +22,12 @@ import {
   useMap,
 } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
+import {
+  latestMetricsByLocation,
+  listCrowdThresholds,
+  listEcologicalLocations,
+  listLocationMetrics,
+} from '../../services/locationService'
 
 const MALAYSIA_CENTER = [4.2105, 101.9758]
 const MALAYSIA_BOUNDS = [
@@ -201,7 +206,6 @@ const destinations = [
   },
 ]
 
-const types = ['National Park', 'Beach', 'Recreational Forest', 'Eco Attraction']
 const warningLevels = ['Safe', 'Caution', 'High Risk', 'Critical']
 
 const crowdColor = {
@@ -232,6 +236,56 @@ const typeColor = {
   'Eco Attraction': 'bg-violet-50 text-violet-700',
 }
 
+function managedDestination(location, metric, threshold, index) {
+  const capacity = Math.max(1, Number(location.max_capacity || 1))
+  const visitors = Number(metric?.crowd_count || 0)
+  const occupancy = Math.round((visitors / capacity) * 100)
+  const rules = threshold || { caution_percent: 60, warning_percent: 80, critical_percent: 90 }
+  const warning = occupancy >= rules.critical_percent
+    ? 'Critical'
+    : occupancy >= rules.warning_percent
+      ? 'High Risk'
+      : occupancy >= rules.caution_percent
+        ? 'Caution'
+        : 'Safe'
+  const crowd = warning === 'Critical' ? 'Critical' : warning === 'High Risk' ? 'High' : warning === 'Caution' ? 'Moderate' : 'Low'
+  const aqi = Number(metric?.air_quality_index ?? 50)
+  const water = Number(metric?.water_quality_score ?? 80)
+  const environment = aqi <= 50 && water >= 80 ? 'Excellent' : aqi <= 100 && water >= 65 ? 'Good' : aqi <= 150 && water >= 50 ? 'Fair' : 'Poor'
+  const wastePerCapacity = Number(metric?.waste_kg || 0) / capacity
+  const waste = wastePerCapacity > 0.04 ? 'High' : wastePerCapacity > 0.02 ? 'Moderate' : 'Low'
+  const airScore = Math.max(0, Math.min(100, 110 - aqi))
+  const gradients = ['from-green-900 to-green-600', 'from-blue-900 to-blue-600', 'from-cyan-800 to-sky-500', 'from-violet-800 to-purple-500', 'from-emerald-900 to-emerald-600']
+
+  return {
+    id: `managed-${location.id}`,
+    sourceId: location.id,
+    name: location.name,
+    state: location.state,
+    type: location.location_type,
+    lat: Number(location.latitude),
+    lng: Number(location.longitude),
+    crowd,
+    environment,
+    warning,
+    visitors: visitors.toLocaleString(),
+    waste,
+    update: metric?.recorded_at ? new Date(metric.recorded_at).toLocaleString() : 'Awaiting first snapshot',
+    distance: 'Managed map point',
+    hours: location.operating_hours || 'Contact location operator',
+    bestTime: location.best_visit_time || 'Visit during off-peak hours',
+    alternative: location.alternative_location || 'Choose another low-crowd destination',
+    gradient: gradients[index % gradients.length],
+    description: location.description || 'A protected ecological location managed by EcoGuard administrators.',
+    metrics: [
+      ['Air quality', airScore],
+      ['Water quality', Math.round(water)],
+      ['Recycling rate', metric?.waste_kg ? Math.min(100, Math.round((Number(metric.recycled_kg || 0) / Number(metric.waste_kg)) * 100)) : 0],
+      ['Visitor load', Math.min(100, occupancy)],
+    ],
+  }
+}
+
 export default function EcologicalMonitoring({ onNavigate }) {
   const [view, setView] = useState('map')
   const [search, setSearch] = useState('')
@@ -239,12 +293,50 @@ export default function EcologicalMonitoring({ onNavigate }) {
   const [warning, setWarning] = useState('All Warnings')
   const [selectedTypes, setSelectedTypes] = useState([])
   const [selected, setSelected] = useState(null)
+  const [managedLocations, setManagedLocations] = useState([])
+  const [managedThresholds, setManagedThresholds] = useState([])
+  const [managedMetrics, setManagedMetrics] = useState([])
+  const [dataError, setDataError] = useState('')
 
-  const states = ['All States', ...new Set(destinations.map((item) => item.state))]
+  useEffect(() => {
+    let active = true
+    async function loadManagedLocations() {
+      try {
+        const [locationRows, thresholdRows, metricRows] = await Promise.all([
+          listEcologicalLocations({ activeOnly: true }),
+          listCrowdThresholds(),
+          listLocationMetrics(),
+        ])
+        if (!active) return
+        setManagedLocations(locationRows)
+        setManagedThresholds(thresholdRows)
+        setManagedMetrics(metricRows)
+      } catch (loadError) {
+        if (active) setDataError(`${loadError.message || 'Managed locations are unavailable.'} Showing prototype fallback data.`)
+      }
+    }
+    loadManagedLocations()
+    return () => { active = false }
+  }, [])
+
+  const visibleDestinations = useMemo(() => {
+    if (!managedLocations.length) return destinations
+    const latest = latestMetricsByLocation(managedMetrics)
+    const thresholdMap = Object.fromEntries(managedThresholds.map((item) => [String(item.location_id), item]))
+    return managedLocations.map((location, index) => managedDestination(
+      location,
+      latest[String(location.id)],
+      thresholdMap[String(location.id)],
+      index,
+    ))
+  }, [managedLocations, managedMetrics, managedThresholds])
+
+  const states = ['All States', ...new Set(visibleDestinations.map((item) => item.state))]
+  const availableTypes = [...new Set(visibleDestinations.map((item) => item.type))]
 
   const filtered = useMemo(
     () =>
-      destinations.filter((item) => {
+      visibleDestinations.filter((item) => {
         const query = search.toLowerCase()
         const matchesSearch =
           item.name.toLowerCase().includes(query) ||
@@ -255,7 +347,7 @@ export default function EcologicalMonitoring({ onNavigate }) {
 
         return matchesSearch && matchesState && matchesWarning && matchesType
       }),
-    [search, state, warning, selectedTypes],
+    [search, state, warning, selectedTypes, visibleDestinations],
   )
 
   function toggleType(type) {
@@ -348,7 +440,7 @@ export default function EcologicalMonitoring({ onNavigate }) {
           <span className="flex items-center gap-1 text-xs font-medium text-slate-400">
             <SlidersHorizontal size={13} /> Type:
           </span>
-          {types.map((type) => (
+          {availableTypes.map((type) => (
             <button
               type="button"
               key={type}
@@ -374,9 +466,11 @@ export default function EcologicalMonitoring({ onNavigate }) {
         </div>
       </section>
 
+      {dataError && <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700"><AlertTriangle size={17} className="mt-0.5 shrink-0" /><p>{dataError}</p></div>}
+
       <p className="text-xs font-medium text-slate-500">
         Showing <b className="text-slate-700">{filtered.length}</b> of{' '}
-        {destinations.length} destinations
+        {visibleDestinations.length} destinations
       </p>
 
       {view === 'map' && (
@@ -529,7 +623,7 @@ function DestinationCard({ destination, onSelect }) {
       <div
         className={`flex h-24 items-end justify-between bg-gradient-to-br ${destination.gradient} p-3`}
       >
-        <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${typeColor[destination.type]}`}>
+        <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${typeColor[destination.type] || 'bg-emerald-50 text-emerald-700'}`}>
           {destination.type}
         </span>
         <span className="flex items-center gap-1 text-xs text-white/90">
