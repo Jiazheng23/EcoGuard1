@@ -152,7 +152,7 @@ export default function AuthPage({ initialMode }) {
     <main className="auth-page">
       <aside className="auth-showcase">
         <div>
-          <Link className="auth-back auth-back--light" to="/login">
+          <Link className="auth-back auth-back--light" to="/">
             <ArrowLeft size={16} /> Back to Home
           </Link>
           <div className="auth-brand">
@@ -190,7 +190,7 @@ export default function AuthPage({ initialMode }) {
       </aside>
 
       <section className="auth-content">
-        <Link className="auth-back auth-back--mobile" to="/login">
+        <Link className="auth-back auth-back--mobile" to="/">
           <ArrowLeft size={16} /> Back
         </Link>
         <div className="auth-card">
