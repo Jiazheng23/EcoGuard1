@@ -15,8 +15,9 @@ import CrowdThresholds from './CrowdThresholds'
 import EcologicalLocations from './EcologicalLocations'
 import Reports from './Reports'
 import WasteManagement from './WasteManagement'
+import AdminApplications from './AdminApplications'
 
-export default function AdminWorkspace() {
+export default function AdminWorkspace({ requiredRole }) {
   const navigate = useNavigate()
   const [page, setPage] = useState('dashboard')
   const [user, setUser] = useState(null)
@@ -31,26 +32,28 @@ export default function AdminWorkspace() {
   const [dataLoading, setDataLoading] = useState(true)
   const [dataError, setDataError] = useState('')
 
-  const refreshData = useCallback(async () => {
+  const refreshData = useCallback(async (scopeProfile) => {
     setDataLoading(true)
     setDataError('')
 
     try {
+      const isSuper = scopeProfile?.role === 'super_admin'
       const [profileRows, tripRows, locationRows, thresholdRows, metricRows] = await Promise.all([
-        listProfiles(),
-        listAllTrips(),
+        isSuper ? listProfiles() : Promise.resolve(scopeProfile ? [scopeProfile] : []),
+        isSuper ? listAllTrips() : Promise.resolve([]),
         listEcologicalLocations(),
         listCrowdThresholds(),
         listLocationMetrics(),
       ])
+      const assignedLocationId = String(scopeProfile?.location_id || '')
       setProfiles(profileRows)
       setTrips(tripRows)
-      setLocations(locationRows)
-      setThresholds(thresholdRows)
-      setMetrics(metricRows)
+      setLocations(isSuper ? locationRows : locationRows.filter((item) => String(item.id) === assignedLocationId))
+      setThresholds(isSuper ? thresholdRows : thresholdRows.filter((item) => String(item.location_id) === assignedLocationId))
+      setMetrics(isSuper ? metricRows : metricRows.filter((item) => String(item.location_id) === assignedLocationId))
     } catch (error) {
       setDataError(
-        `${error.message || 'Unable to load admin data.'} Check that both SQL setup files in the supabase folder have been applied.`,
+        `${error.message || 'Unable to load admin data.'} Check that supabase/admin_location_scope.sql has been applied.`,
       )
     } finally {
       setDataLoading(false)
@@ -74,15 +77,24 @@ export default function AdminWorkspace() {
         const currentProfile = await getOwnProfile(sessionUser)
         if (!active) return
 
-        if (currentProfile.role !== 'admin') {
+        if (!['super_admin', 'location_admin'].includes(currentProfile.role)) {
           navigate('/tourist/dashboard', { replace: true })
+          return
+        }
+
+        if (currentProfile.role === 'location_admin' && !currentProfile.location_id) {
+          throw new Error('This location administrator has no assigned location.')
+        }
+
+        if (requiredRole && currentProfile.role !== requiredRole) {
+          navigate(currentProfile.role === 'super_admin' ? '/super_admin/dashboard' : '/location_admin/dashboard', { replace: true })
           return
         }
 
         setUser(sessionUser)
         setProfile(currentProfile)
         setLoading(false)
-        await refreshData()
+        await refreshData(currentProfile)
       } catch (error) {
         if (!active) return
         setAccessError(
@@ -104,7 +116,7 @@ export default function AdminWorkspace() {
       active = false
       subscription.unsubscribe()
     }
-  }, [navigate, refreshData])
+  }, [navigate, refreshData, requiredRole])
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -140,8 +152,10 @@ export default function AdminWorkspace() {
     metrics,
     loading: dataLoading,
     error: dataError,
-    onDataChange: refreshData,
+    onDataChange: () => refreshData(profile),
     user,
+    profile,
+    isSuperAdmin: profile.role === 'super_admin',
   }
 
   const pageContent = {
@@ -150,6 +164,7 @@ export default function AdminWorkspace() {
     thresholds: <CrowdThresholds {...sharedProps} />,
     waste: <WasteManagement {...sharedProps} />,
     reports: <Reports {...sharedProps} />,
+    applications: <AdminApplications />,
     profile: <AdminProfile user={user} profile={profile} onProfileChange={handleProfileChange} />,
   }[page]
 

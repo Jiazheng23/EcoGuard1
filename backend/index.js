@@ -10,7 +10,7 @@ app.use(cors({
   origin: 'http://localhost:5173',
 }))
 
-app.use(express.json())
+app.use(express.json({ limit: '7mb' }))
 
 app.get('/api/health', (req, res) => {
   res.json({

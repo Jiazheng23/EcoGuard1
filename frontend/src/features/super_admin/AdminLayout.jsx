@@ -11,6 +11,7 @@ import {
   Shield,
   SlidersHorizontal,
   User,
+  UserCheck,
   X,
 } from 'lucide-react'
 
@@ -32,6 +33,12 @@ const navGroups = [
         icon: MapPin,
         label: 'Ecological Locations',
         page: 'locations',
+      },
+      {
+        icon: UserCheck,
+        label: 'Admin Applications',
+        page: 'applications',
+        superOnly: true,
       },
       {
         icon: SlidersHorizontal,
@@ -74,6 +81,7 @@ const pageLabels = {
   waste: 'Waste Management',
   reports: 'Reports & Environmental Data',
   profile: 'Profile',
+  applications: 'Location Admin Applications',
 }
 
 function getAdminDetails(user, profile) {
@@ -112,7 +120,7 @@ function AdminSidebar({ activePage, onNavigate, onLogout, onClose, user, profile
           <div>
             <p className="font-extrabold leading-none text-slate-900">EcoGuard</p>
             <p className="mt-1 text-[10px] font-bold tracking-wider text-blue-500">
-              ADMIN MODE
+              {profile?.role === 'super_admin' ? 'SUPER ADMIN MODE' : 'LOCATION ADMIN MODE'}
             </p>
           </div>
         </div>
@@ -132,7 +140,7 @@ function AdminSidebar({ activePage, onNavigate, onLogout, onClose, user, profile
               {name}
             </span>
             <span className="block truncate text-xs text-slate-500">
-              Location Administrator
+              {profile?.role === 'super_admin' ? 'Super Administrator' : 'Location Administrator'}
             </span>
           </span>
           <ChevronDown size={14} className="shrink-0 text-slate-400" />
@@ -141,7 +149,7 @@ function AdminSidebar({ activePage, onNavigate, onLogout, onClose, user, profile
 
       <nav className="flex flex-1 flex-col gap-4 overflow-y-auto px-3 py-4">
         {navGroups.map((group) => {
-          const visibleItems = group.items.filter((item) => !item.hidden)
+          const visibleItems = group.items.filter((item) => !item.hidden && (!item.superOnly || profile?.role === 'super_admin'))
 
           return (
             <div key={group.label}>

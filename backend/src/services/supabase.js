@@ -13,4 +13,14 @@ const supabase = createClient(
   }
 )
 
-export { supabase }
+const supabaseAdmin = env.supabaseSecretKey
+  ? createClient(env.supabaseUrl, env.supabaseSecretKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    })
+  : null
+
+export { supabase, supabaseAdmin }

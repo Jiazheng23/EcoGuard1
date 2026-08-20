@@ -12,7 +12,10 @@ export function profileFromUser(user) {
       'EcoGuard User',
     phone: user.user_metadata?.phone || '',
     avatar_url: user.user_metadata?.avatar_url || null,
-    role: user.app_metadata?.role === 'admin' ? 'admin' : 'tourist',
+    role: ['super_admin', 'location_admin', 'pending_location_admin'].includes(user.app_metadata?.role)
+      ? user.app_metadata.role
+      : 'tourist',
+    location_id: user.app_metadata?.location_id || null,
     eco_score: 50,
     total_carbon_saved: 0,
     current_streak: 0,

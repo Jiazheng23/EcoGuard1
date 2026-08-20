@@ -20,7 +20,7 @@ const emptyForm = () => ({
   is_active: true,
 })
 
-export default function EcologicalLocations({ user, locations, loading, error, onDataChange }) {
+export default function EcologicalLocations({ user, isSuperAdmin, locations, loading, error, onDataChange }) {
   const [query, setQuery] = useState('')
   const [stateFilter, setStateFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
@@ -123,9 +123,9 @@ export default function EcologicalLocations({ user, locations, loading, error, o
           <h1 className="text-2xl font-bold text-slate-900">Ecological Locations</h1>
           <p className="mt-1 text-sm text-slate-500">Manage the protected places shown on the Tourist map</p>
         </div>
-        <button type="button" onClick={openCreate} className="inline-flex items-center gap-2 rounded-xl bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-600">
+        {isSuperAdmin && <button type="button" onClick={openCreate} className="inline-flex items-center gap-2 rounded-xl bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-600">
           <Plus size={17} /> Add new location
-        </button>
+        </button>}
       </header>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -162,7 +162,7 @@ export default function EcologicalLocations({ user, locations, loading, error, o
                   <td className="px-5 py-4 font-mono text-xs text-slate-500">{Number(location.latitude).toFixed(4)}, {Number(location.longitude).toFixed(4)}</td>
                   <td className="px-5 py-4 text-slate-600">{Number(location.max_capacity).toLocaleString()}</td>
                   <td className="px-5 py-4"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${location.is_active ? 'bg-green-50 text-green-700' : 'bg-slate-100 text-slate-500'}`}>{location.is_active ? 'Visible' : 'Hidden'}</span></td>
-                  <td className="px-5 py-4"><div className="flex justify-end gap-2"><button type="button" onClick={() => openEdit(location)} aria-label={`Edit ${location.name}`} className="rounded-lg p-2 text-blue-500 hover:bg-blue-50"><Edit3 size={16} /></button><button type="button" onClick={() => setDeleteTarget(location)} aria-label={`Delete ${location.name}`} className="rounded-lg p-2 text-red-500 hover:bg-red-50"><Trash2 size={16} /></button></div></td>
+                  <td className="px-5 py-4"><div className="flex justify-end gap-2"><button type="button" onClick={() => openEdit(location)} aria-label={`Edit ${location.name}`} className="rounded-lg p-2 text-blue-500 hover:bg-blue-50"><Edit3 size={16} /></button>{isSuperAdmin && <button type="button" onClick={() => setDeleteTarget(location)} aria-label={`Delete ${location.name}`} className="rounded-lg p-2 text-red-500 hover:bg-red-50"><Trash2 size={16} /></button>}</div></td>
                 </tr>
               ))}
             </tbody>

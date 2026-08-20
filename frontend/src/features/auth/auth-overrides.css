@@ -1,0 +1,4 @@
+/* Keep the desktop showcase boundary stable between auth modes. */
+.auth-page--register .auth-showcase {
+  width: 420px;
+}

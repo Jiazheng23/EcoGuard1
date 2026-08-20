@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowLeft,
   BarChart3,
@@ -8,17 +8,21 @@ import {
   Leaf,
   LockKeyhole,
   Mail,
+  MapPin,
   ShieldCheck,
   UserRound,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import "./auth.css";
+import "./auth-layout-stability.css";
+import "./auth-overrides.css";
 import { supabase } from "../../services/supabaseClient";
 import {
   loginUser,
   registerUser,
   sendPasswordReset,
 } from "../../services/authService";
+import { listEcologicalLocations } from "../../services/locationService";
 
 const features = [
   {
@@ -51,8 +55,17 @@ export default function AuthPage({ initialMode }) {
     email: "",
     password: "",
     confirmPassword: "",
-    adminCode: "",
+    locationId: "",
   });
+  const [locations, setLocations] = useState([]);
+  const [companyDocument, setCompanyDocument] = useState(null);
+
+  useEffect(() => {
+    if (mode !== "register" || role !== "location_admin" || !supabase) return;
+    listEcologicalLocations({ activeOnly: true })
+      .then(setLocations)
+      .catch(() => setLocations([]));
+  }, [mode, role]);
 
   function switchMode(nextMode) {
     const paths = {
@@ -108,16 +121,12 @@ export default function AuthPage({ initialMode }) {
 
         const accountRole = data.profile?.role || "tourist";
 
-        if (role !== accountRole) {
-          await supabase.auth.signOut();
-
-          throw new Error(
-            `This account is registered as ${accountRole === "admin" ? "a Location Admin" : "a Tourist"}.`,
-          );
-        }
-
-        if (accountRole === "admin") {
-          navigate("/admin/dashboard");
+        if (accountRole === "super_admin") {
+          navigate("/super_admin/dashboard");
+        } else if (accountRole === "location_admin") {
+          navigate("/location_admin/dashboard");
+        } else if (accountRole === "pending_location_admin") {
+          navigate("/location_admin/pending");
         } else {
           navigate("/tourist/dashboard");
         }
@@ -126,12 +135,23 @@ export default function AuthPage({ initialMode }) {
       }
 
       if (mode === "register") {
+        let encodedDocument
+        if (role === "location_admin") {
+          if (!companyDocument) throw new Error("A company document is required.");
+          if (companyDocument.size > 5 * 1024 * 1024) throw new Error("The company document must be 5 MB or smaller.");
+          encodedDocument = {
+            name: companyDocument.name,
+            type: companyDocument.type,
+            base64: await fileToBase64(companyDocument),
+          };
+        }
         await registerUser({
           name: form.name.trim(),
           email: cleanEmail,
           password: form.password,
           role,
-          adminCode: form.adminCode,
+          locationId: form.locationId,
+          companyDocument: encodedDocument,
         });
         navigate("/login");
       }
@@ -149,7 +169,7 @@ export default function AuthPage({ initialMode }) {
   }[mode];
 
   return (
-    <main className="auth-page">
+    <main className={`auth-page auth-page--${mode}`}>
       <aside className="auth-showcase">
         <div>
           <Link className="auth-back auth-back--light" to="/">
@@ -193,13 +213,13 @@ export default function AuthPage({ initialMode }) {
         <Link className="auth-back auth-back--mobile" to="/">
           <ArrowLeft size={16} /> Back
         </Link>
-        <div className="auth-card">
+        <div className={`auth-card auth-card--${mode}`}>
           <header>
             <h1>{heading[0]}</h1>
             <p>{heading[1]}</p>
           </header>
 
-          {mode !== "forgot" && (
+          {mode === "register" && (
             <div className="role-picker">
               <button
                 className={role === "tourist" ? "selected" : ""}
@@ -213,8 +233,8 @@ export default function AuthPage({ initialMode }) {
                 <small>Track your eco impact</small>
               </button>
               <button
-                className={role === "admin" ? "selected" : ""}
-                onClick={() => setRole("admin")}
+                className={role === "location_admin" ? "selected" : ""}
+                onClick={() => setRole("location_admin")}
                 type="button"
               >
                 <span>
@@ -236,7 +256,7 @@ export default function AuthPage({ initialMode }) {
               </button>
             </div>
           ) : (
-            <form onSubmit={handleSubmit}>
+            <form className="auth-form" onSubmit={handleSubmit}>
               {mode === "register" && (
                 <Field
                   label="Full name"
@@ -247,30 +267,37 @@ export default function AuthPage({ initialMode }) {
                   onChange={updateField}
                 />
               )}
-              {mode === "register" && role === "admin" && (
-                <Field
-                  label="Administrator registration code"
-                  icon={<ShieldCheck size={17} />}
-                  name="adminCode"
-                  type="password"
-                  placeholder="Code provided by EcoGuard owner"
-                  value={form.adminCode}
-                  onChange={updateField}
-                />
-              )}
               <Field
                 label="Email address"
                 icon={<Mail size={17} />}
                 name="email"
                 type="email"
-                placeholder={
-                  role === "admin"
-                    ? "location.admin@ecoguard.my"
-                    : "tourist@example.com"
-                }
+                placeholder={role === "location_admin" ? "location.admin@ecoguard.my" : "tourist@example.com"}
                 value={form.email}
                 onChange={updateField}
               />
+              {mode === "register" && role === "location_admin" && (
+                <>
+                <label className="field">
+                  <span>Managed location</span>
+                  <div className="field__input">
+                    <MapPin size={17} />
+                    <select name="locationId" value={form.locationId} onChange={updateField} required>
+                      <option value="">Select one location</option>
+                      {locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
+                    </select>
+                  </div>
+                </label>
+                <label className="field">
+                  <span>Company document</span>
+                  <div className="field__input">
+                    <ShieldCheck size={17} />
+                    <input type="file" accept="application/pdf,image/jpeg,image/png" onChange={(event) => setCompanyDocument(event.target.files?.[0] || null)} required />
+                  </div>
+                  <small>PDF, JPG, or PNG; maximum 5 MB. A super admin will review it.</small>
+                </label>
+                </>
+              )}
               {mode !== "forgot" && (
                 <div className="field">
                   <div className="field__label">
@@ -329,7 +356,7 @@ export default function AuthPage({ initialMode }) {
                 disabled={isSubmitting}
               >
                 {mode === "login"
-                  ? `Sign In as ${role === "admin" ? "Location Admin" : "Tourist"}`
+                  ? "Sign In"
                   : mode === "register"
                     ? isSubmitting
                       ? "Creating account..."
@@ -365,6 +392,15 @@ export default function AuthPage({ initialMode }) {
       </section>
     </main>
   );
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+    reader.onerror = () => reject(new Error('Could not read the company document.'));
+    reader.readAsDataURL(file);
+  });
 }
 
 function Field({

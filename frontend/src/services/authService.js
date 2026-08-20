@@ -14,7 +14,7 @@ export async function loginUser(email, password) {
   return { ...data, profile }
 }
 
-export async function registerUser({ name, email, password, role, adminCode }) {
+export async function registerUser({ name, email, password, role, locationId, companyDocument }) {
   const response = await fetch('/api/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -23,7 +23,8 @@ export async function registerUser({ name, email, password, role, adminCode }) {
       email: email.trim().toLowerCase(),
       password,
       role,
-      adminCode: role === 'admin' ? adminCode : undefined,
+      locationId: role === 'location_admin' ? Number(locationId) : undefined,
+      companyDocument: role === 'location_admin' ? companyDocument : undefined,
     }),
   })
   const data = await response.json().catch(() => ({}))

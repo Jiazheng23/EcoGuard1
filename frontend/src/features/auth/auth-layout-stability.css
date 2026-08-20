@@ -1,0 +1,28 @@
+/* Keep the shared brand panel identical across every authentication mode. */
+.auth-page--register .auth-showcase {
+  width: 420px;
+  padding: 48px;
+}
+
+.auth-page--register .auth-back--light {
+  margin-bottom: 48px;
+}
+
+.auth-page--register .auth-showcase h2 {
+  margin: 36px 0 0;
+  font-size: 2rem;
+  line-height: 1.15;
+}
+
+.auth-page--register .auth-showcase > div > p {
+  margin-top: 16px;
+  line-height: 1.65;
+}
+
+.auth-page--register .auth-features {
+  gap: 12px;
+}
+
+.auth-page--register .auth-feature {
+  padding: 14px;
+}
