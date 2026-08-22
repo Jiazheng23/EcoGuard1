@@ -14,11 +14,12 @@ Supabase Row Level Security (RLS) is the authorization boundary. Routes and hidd
 ## Supabase and administrator setup
 
 1. Back up the affected tables, then run `supabase/admin_location_scope.sql` in Supabase SQL Editor.
-2. Run `supabase/waste_management.sql` to create the waste schedules, immutable collection history, thresholds, export audit data, validation, and location-scoped RLS policies.
-3. Optionally run `supabase/waste_demo_data.sql` to add idempotent, clearly labelled assignment demonstration records for up to three active locations.
-4. Assign a `location_id` to every migrated location administrator returned by the verification query at the end of the administrator-scope script.
-5. Synchronize trusted `auth.users.raw_app_meta_data` using the commented example in the administrator-scope SQL script, then validate the pending constraint. Roles must never be stored in user-editable `user_metadata`.
-6. Add the server-only values below to `.env.local`. Never prefix secret values with `VITE_` or expose them to frontend code.
+2. Run the SQL inside `supabase/profile_details.sql` to add the optional profile gender field. Paste the file contents into SQL Editor, not the file name.
+3. Run `supabase/waste_management.sql` to create the waste schedules, immutable collection history, thresholds, export audit data, validation, and location-scoped RLS policies.
+4. Optionally run `supabase/waste_demo_data.sql` to add idempotent, clearly labelled assignment demonstration records for up to three active locations.
+5. Assign a `location_id` to every migrated location administrator returned by the verification query at the end of the administrator-scope script.
+6. Synchronize trusted `auth.users.raw_app_meta_data` using the commented example in the administrator-scope SQL script, then validate the pending constraint. Roles must never be stored in user-editable `user_metadata`.
+7. Add the server-only values below to `.env.local`. Never prefix secret values with `VITE_` or expose them to frontend code.
 
 ```dotenv
 VITE_SUPABASE_URL=
@@ -28,7 +29,7 @@ MAP_CONTACT_EMAIL=
 PORT=5000
 ```
 
-7. Create the first super administrator in Supabase Auth. Set its `profiles` row to `role = 'super_admin'`, `location_id = null`, and its trusted `app_metadata.role` to `super_admin`. Super-admin public registration is intentionally unavailable.
+8. Create the first super administrator in Supabase Auth. Set its `profiles` row to `role = 'super_admin'`, `location_id = null`, and its trusted `app_metadata.role` to `super_admin`. Super-admin public registration is intentionally unavailable.
 
    For legacy accounts where only `profiles.role` was updated, the protected application endpoint verifies that canonical profile and synchronizes the missing Auth `app_metadata.role`. The browser refreshes its session immediately afterward so RLS sees the updated claim.
 
@@ -159,11 +160,13 @@ EcoGuard1/
 |               |-- EcologicalMonitoring.jsx
 |               |-- MalaysiaMapPicker.jsx
 |               |-- TouristDashboard.jsx
+|               |-- TouristHistory.jsx
 |               |-- TouristLayout.jsx
 |               |-- TouristProfile.jsx
 |               `-- TouristWorkspace.jsx
 `-- supabase/
     |-- admin_location_scope.sql
+    |-- profile_details.sql
     |-- waste_management.sql
     `-- waste_demo_data.sql
 ```

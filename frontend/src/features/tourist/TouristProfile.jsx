@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   AlertCircle,
   CalendarDays,
@@ -11,6 +11,8 @@ import {
 } from 'lucide-react'
 import { supabase } from '../../services/supabaseClient'
 import { updateOwnProfile } from '../../services/profileService'
+import { listOwnTrips } from '../../services/tripService'
+import AchievementBadges from './AchievementBadges'
 
 const card = 'rounded-2xl border border-slate-100 bg-white p-5 shadow-sm'
 
@@ -21,11 +23,38 @@ export default function TouristProfile({ user, profile, onProfileChange }) {
   const [phone, setPhone] = useState(
     profile?.phone || user?.user_metadata?.phone || '',
   )
+  const [gender, setGender] = useState(
+    profile?.gender || user?.user_metadata?.gender || '',
+  )
   const [isSaving, setIsSaving] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
+  const [trips, setTrips] = useState([])
+  const [badgesLoading, setBadgesLoading] = useState(true)
+  const [badgesError, setBadgesError] = useState('')
 
   const role = profile?.role || 'tourist'
+
+  useEffect(() => {
+    let active = true
+
+    async function loadAchievements() {
+      if (!user?.id) return
+      setBadgesLoading(true)
+      setBadgesError('')
+      try {
+        const rows = await listOwnTrips(user.id)
+        if (active) setTrips(rows)
+      } catch (error) {
+        if (active) setBadgesError(error.message || 'Unable to load your achievements.')
+      } finally {
+        if (active) setBadgesLoading(false)
+      }
+    }
+
+    loadAchievements()
+    return () => { active = false }
+  }, [user?.id])
 
   const initials = useMemo(() => {
     const name =
@@ -74,6 +103,7 @@ export default function TouristProfile({ user, profile, onProfileChange }) {
       const updatedProfile = await updateOwnProfile(user.id, {
         fullName: cleanName,
         phone: cleanPhone,
+        gender,
         avatarUrl: profile?.avatar_url,
       })
 
@@ -82,6 +112,7 @@ export default function TouristProfile({ user, profile, onProfileChange }) {
           ...user.user_metadata,
           full_name: cleanName,
           phone: cleanPhone,
+          gender,
         },
       })
 
@@ -122,7 +153,7 @@ export default function TouristProfile({ user, profile, onProfileChange }) {
       </header>
 
       <div className="grid gap-5 lg:grid-cols-[280px_1fr]">
-        <aside className={`${card} h-fit text-center`}>
+        <aside className={`${card} h-full text-center`}>
           <div className="mx-auto grid size-24 place-items-center rounded-full bg-gradient-to-br from-green-400 to-green-700 text-3xl font-bold text-white shadow-lg shadow-green-500/20">
             {initials}
           </div>
@@ -140,14 +171,6 @@ export default function TouristProfile({ user, profile, onProfileChange }) {
             {role}
           </span>
 
-          <div className="mt-5 border-t border-slate-100 pt-4 text-left">
-            <p className="text-xs font-medium text-slate-400">
-              Account ID
-            </p>
-            <p className="mt-1 truncate text-xs text-slate-600" title={user.id}>
-              {user.id}
-            </p>
-          </div>
         </aside>
 
         <form onSubmit={handleSubmit} className={`${card} space-y-5`}>
@@ -156,7 +179,7 @@ export default function TouristProfile({ user, profile, onProfileChange }) {
               Personal Information
             </h2>
             <p className="mt-1 text-xs text-slate-500">
-              Your updated name will also appear on the dashboard and sidebar.
+              Your updated name will also appear on the dashboard and account menu.
             </p>
           </div>
 
@@ -176,27 +199,23 @@ export default function TouristProfile({ user, profile, onProfileChange }) {
             readOnly
           />
 
-          <ProfileField
-            label="Phone Number"
-            icon={Phone}
-            value={phone}
-            onChange={setPhone}
-            placeholder="Example: +60 12-345 6789"
-          />
-
           <div className="grid gap-4 sm:grid-cols-2">
-            <InformationBox
-              label="Account Role"
-              value={role === 'admin' ? 'Location Admin' : 'Tourist'}
-              icon={ShieldCheck}
+            <ProfileField
+              label="Phone Number"
+              icon={Phone}
+              value={phone}
+              onChange={setPhone}
+              placeholder="Example: +60 12-345 6789"
             />
 
-            <InformationBox
-              label="Member Since"
-              value={createdDate}
-              icon={CalendarDays}
-            />
+            <GenderField value={gender} onChange={setGender} />
           </div>
+
+          <InformationBox
+            label="Member Since"
+            value={createdDate}
+            icon={CalendarDays}
+          />
 
           {errorMessage && (
             <div
@@ -230,6 +249,8 @@ export default function TouristProfile({ user, profile, onProfileChange }) {
           </div>
         </form>
       </div>
+
+      <AchievementBadges trips={trips} profile={profile} loading={badgesLoading} error={badgesError} />
     </div>
   )
 }
@@ -287,5 +308,24 @@ function InformationBox({ label, value, icon: Icon }) {
         {value}
       </p>
     </div>
+  )
+}
+
+function GenderField({ value, onChange }) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-xs font-semibold text-slate-500">Gender</span>
+      <span className="relative block">
+        <UserRound className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+        <select value={value} onChange={(event) => onChange(event.target.value)} className="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-8 text-sm text-slate-700 outline-none focus:border-green-500">
+          <option value="">Prefer not to specify</option>
+          <option value="female">Female</option>
+          <option value="male">Male</option>
+          <option value="non_binary">Non-binary</option>
+          <option value="prefer_not_to_say">Prefer not to say</option>
+        </select>
+        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">⌄</span>
+      </span>
+    </label>
   )
 }

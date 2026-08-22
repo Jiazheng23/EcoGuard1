@@ -11,6 +11,7 @@ export function profileFromUser(user) {
       user.email?.split('@')[0] ||
       'EcoGuard User',
     phone: user.user_metadata?.phone || '',
+    gender: user.user_metadata?.gender || '',
     avatar_url: user.user_metadata?.avatar_url || null,
     role: ['super_admin', 'location_admin', 'pending_location_admin'].includes(user.app_metadata?.role)
       ? user.app_metadata.role
@@ -62,6 +63,7 @@ export async function updateOwnProfile(userId, values) {
   const payload = {
     full_name: values.fullName.trim(),
     phone: values.phone?.trim() || null,
+    gender: values.gender || null,
     avatar_url: values.avatarUrl || null,
   }
 
@@ -72,7 +74,12 @@ export async function updateOwnProfile(userId, values) {
     .select('*')
     .single()
 
-  if (error) throw error
+  if (error) {
+    if (error.code === '42703' || /gender/i.test(error.message || '')) {
+      throw new Error('Gender is not available in Supabase yet. Run supabase/profile_details.sql in the SQL Editor, then try again.')
+    }
+    throw error
+  }
   return data
 }
 

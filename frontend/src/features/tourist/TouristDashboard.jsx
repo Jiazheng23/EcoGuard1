@@ -25,6 +25,8 @@ import {
   TrendingDown,
 } from 'lucide-react'
 import { listOwnTrips } from '../../services/tripService'
+import AchievementBadges from './AchievementBadges'
+import { getAchievementBadges } from './achievementBadgeRules'
 import {
   formatCarbon,
   formatTripDate,
@@ -129,22 +131,7 @@ export default function TouristDashboard({ onNavigate, user, profile }) {
     'Tourist'
   const ecoScore = profile?.eco_score ?? 50
   const savedCarbon = numberValue(profile?.total_carbon_saved)
-  const earnedBadges = [
-    trips.length >= 1,
-    savedCarbon >= 1,
-    ecoScore >= 80,
-    numberValue(profile?.current_streak) >= 3,
-    analytics.transport.some((item) => ['walking', 'bicycle'].includes(item.mode)),
-    new Set(trips.map((trip) => trip.destination)).size >= 3,
-  ].filter(Boolean).length
-  const badges = [
-    ['Green Traveler', '🌿', trips.length >= 1],
-    ['Carbon Saver', '💚', savedCarbon >= 1],
-    ['Eco Hero', '🦸', ecoScore >= 80],
-    ['Daily Streak', '🔥', numberValue(profile?.current_streak) >= 3],
-    ['Zero Emission', '♻️', analytics.transport.some((item) => ['walking', 'bicycle'].includes(item.mode))],
-    ['Trail Blazer', '🏞️', new Set(trips.map((trip) => trip.destination)).size >= 3],
-  ]
+  const earnedBadges = getAchievementBadges(trips, profile).filter((badge) => badge.earned).length
   const greeting = new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 18 ? 'Good afternoon' : 'Good evening'
 
   return (
@@ -257,21 +244,7 @@ export default function TouristDashboard({ onNavigate, user, profile }) {
         </ResponsiveContainer>
       </ChartCard>
 
-      <article className={card}>
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="font-bold text-slate-800">Achievement Badges <span className="font-normal text-slate-400">({earnedBadges} of 6 earned)</span></h2>
-          <button onClick={() => onNavigate('achievements')} className="flex items-center gap-1 text-xs font-semibold text-green-600">View all <ArrowRight size={13} /></button>
-        </div>
-        <div className="grid grid-cols-3 gap-3 md:grid-cols-6">
-          {badges.map(([name, icon, earned]) => (
-            <div className={`rounded-xl border p-3 text-center ${earned ? 'border-green-200 bg-green-50' : 'border-slate-100 bg-slate-50 opacity-60'}`} key={name}>
-              <span className="text-xl">{icon}</span>
-              <p className="mt-1 text-xs font-semibold text-slate-700">{name}</p>
-              {earned && <span className="mt-1 inline-block rounded-full bg-green-500 px-1.5 text-[10px] font-bold text-white">✓</span>}
-            </div>
-          ))}
-        </div>
-      </article>
+      <AchievementBadges trips={trips} profile={profile} loading={loading} />
 
       <section className="grid gap-4 lg:grid-cols-2">
         <article className={card}>
