@@ -12,6 +12,7 @@ import {
   MapPin,
   Search,
   SlidersHorizontal,
+  Trash2,
   Users,
 } from 'lucide-react'
 import {
@@ -22,12 +23,7 @@ import {
   useMap,
 } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
-import {
-  latestMetricsByLocation,
-  listCrowdThresholds,
-  listEcologicalLocations,
-  listLocationMetrics,
-} from '../../services/locationService'
+import { listEcologicalLocations, listTouristEnvironmentalIndicators } from '../../services/locationService'
 
 const MALAYSIA_CENTER = [4.2105, 101.9758]
 const MALAYSIA_BOUNDS = [
@@ -213,6 +209,7 @@ const crowdColor = {
   Moderate: 'bg-amber-50 text-amber-700',
   High: 'bg-orange-50 text-orange-700',
   Critical: 'bg-red-50 text-red-700',
+  'Awaiting data': 'bg-slate-100 text-slate-600',
 }
 
 const warningColor = {
@@ -220,6 +217,7 @@ const warningColor = {
   Caution: 'bg-amber-50 text-amber-700',
   'High Risk': 'bg-orange-50 text-orange-700',
   Critical: 'bg-red-50 text-red-700',
+  'Awaiting data': 'bg-slate-100 text-slate-600',
 }
 
 const markerColor = {
@@ -227,6 +225,18 @@ const markerColor = {
   Caution: '#f59e0b',
   'High Risk': '#f97316',
   Critical: '#dc2626',
+  'Awaiting data': '#64748b',
+}
+
+const wasteColor = {
+  Normal: 'bg-green-50 text-green-700',
+  Moderate: 'bg-amber-50 text-amber-700',
+  'High Risk': 'bg-orange-50 text-orange-700',
+  Critical: 'bg-red-50 text-red-700',
+  'Not configured': 'bg-slate-100 text-slate-600',
+  'Awaiting data': 'bg-slate-100 text-slate-600',
+  Low: 'bg-green-50 text-green-700',
+  High: 'bg-orange-50 text-orange-700',
 }
 
 const typeColor = {
@@ -236,25 +246,8 @@ const typeColor = {
   'Eco Attraction': 'bg-violet-50 text-violet-700',
 }
 
-function managedDestination(location, metric, threshold, index) {
-  const capacity = Math.max(1, Number(location.max_capacity || 1))
-  const visitors = Number(metric?.crowd_count || 0)
-  const occupancy = Math.round((visitors / capacity) * 100)
-  const rules = threshold || { caution_percent: 60, warning_percent: 80, critical_percent: 90 }
-  const warning = occupancy >= rules.critical_percent
-    ? 'Critical'
-    : occupancy >= rules.warning_percent
-      ? 'High Risk'
-      : occupancy >= rules.caution_percent
-        ? 'Caution'
-        : 'Safe'
-  const crowd = warning === 'Critical' ? 'Critical' : warning === 'High Risk' ? 'High' : warning === 'Caution' ? 'Moderate' : 'Low'
-  const aqi = Number(metric?.air_quality_index ?? 50)
-  const water = Number(metric?.water_quality_score ?? 80)
-  const environment = aqi <= 50 && water >= 80 ? 'Excellent' : aqi <= 100 && water >= 65 ? 'Good' : aqi <= 150 && water >= 50 ? 'Fair' : 'Poor'
-  const wastePerCapacity = Number(metric?.waste_kg || 0) / capacity
-  const waste = wastePerCapacity > 0.04 ? 'High' : wastePerCapacity > 0.02 ? 'Moderate' : 'Low'
-  const airScore = Math.max(0, Math.min(100, 110 - aqi))
+function managedDestination(location, indicator, index) {
+  const recyclingRate = indicator?.recycling_rate == null ? null : Math.max(0, Math.min(100, Number(indicator.recycling_rate)))
   const gradients = ['from-green-900 to-green-600', 'from-blue-900 to-blue-600', 'from-cyan-800 to-sky-500', 'from-violet-800 to-purple-500', 'from-emerald-900 to-emerald-600']
 
   return {
@@ -265,24 +258,21 @@ function managedDestination(location, metric, threshold, index) {
     type: location.location_type,
     lat: Number(location.latitude),
     lng: Number(location.longitude),
-    crowd,
-    environment,
-    warning,
-    visitors: visitors.toLocaleString(),
-    waste,
-    update: metric?.recorded_at ? new Date(metric.recorded_at).toLocaleString() : 'Awaiting first snapshot',
+    crowd: indicator?.crowd_level || 'Awaiting data',
+    environment: indicator?.environment_condition || 'Awaiting data',
+    warning: indicator?.warning_level || 'Awaiting data',
+    visitors: 'Aggregate only',
+    waste: indicator?.waste_level || 'Awaiting data',
+    update: indicator?.recorded_at ? new Date(indicator.recorded_at).toLocaleString() : 'Awaiting first stored estimate',
+    wasteDataSource: indicator?.data_source === 'simulated' ? 'Simulated stored estimate' : indicator?.data_source === 'stored_estimate' ? 'Stored aggregate estimate' : 'Unavailable',
+    aggregateOnly: true,
     distance: 'Managed map point',
     hours: location.operating_hours || 'Contact location operator',
     bestTime: location.best_visit_time || 'Visit during off-peak hours',
     alternative: location.alternative_location || 'Choose another low-crowd destination',
     gradient: gradients[index % gradients.length],
     description: location.description || 'A protected ecological location managed by EcoGuard administrators.',
-    metrics: [
-      ['Air quality', airScore],
-      ['Water quality', Math.round(water)],
-      ['Recycling rate', metric?.waste_kg ? Math.min(100, Math.round((Number(metric.recycled_kg || 0) / Number(metric.waste_kg)) * 100)) : 0],
-      ['Visitor load', Math.min(100, occupancy)],
-    ],
+    metrics: recyclingRate == null ? [] : [['Estimated recycling rate', Math.round(recyclingRate)]],
   }
 }
 
@@ -294,23 +284,22 @@ export default function EcologicalMonitoring({ onNavigate }) {
   const [selectedTypes, setSelectedTypes] = useState([])
   const [selected, setSelected] = useState(null)
   const [managedLocations, setManagedLocations] = useState([])
-  const [managedThresholds, setManagedThresholds] = useState([])
-  const [managedMetrics, setManagedMetrics] = useState([])
+  const [managedIndicators, setManagedIndicators] = useState([])
   const [dataError, setDataError] = useState('')
 
   useEffect(() => {
     let active = true
     async function loadManagedLocations() {
       try {
-        const [locationRows, thresholdRows, metricRows] = await Promise.all([
+        const [locationsResult, indicatorsResult] = await Promise.allSettled([
           listEcologicalLocations({ activeOnly: true }),
-          listCrowdThresholds(),
-          listLocationMetrics(),
+          listTouristEnvironmentalIndicators(),
         ])
         if (!active) return
-        setManagedLocations(locationRows)
-        setManagedThresholds(thresholdRows)
-        setManagedMetrics(metricRows)
+        if (locationsResult.status === 'rejected') throw locationsResult.reason
+        setManagedLocations(locationsResult.value)
+        if (indicatorsResult.status === 'fulfilled') setManagedIndicators(indicatorsResult.value)
+        else setDataError(`${indicatorsResult.reason?.message || 'Aggregate environmental indicators are unavailable.'} Apply the latest waste_management.sql migration.`)
       } catch (loadError) {
         if (active) setDataError(`${loadError.message || 'Managed locations are unavailable.'} Showing prototype fallback data.`)
       }
@@ -321,15 +310,13 @@ export default function EcologicalMonitoring({ onNavigate }) {
 
   const visibleDestinations = useMemo(() => {
     if (!managedLocations.length) return destinations
-    const latest = latestMetricsByLocation(managedMetrics)
-    const thresholdMap = Object.fromEntries(managedThresholds.map((item) => [String(item.location_id), item]))
+    const indicatorMap = Object.fromEntries(managedIndicators.map((item) => [String(item.location_id), item]))
     return managedLocations.map((location, index) => managedDestination(
       location,
-      latest[String(location.id)],
-      thresholdMap[String(location.id)],
+      indicatorMap[String(location.id)],
       index,
     ))
-  }, [managedLocations, managedMetrics, managedThresholds])
+  }, [managedIndicators, managedLocations])
 
   const states = ['All States', ...new Set(visibleDestinations.map((item) => item.state))]
   const availableTypes = [...new Set(visibleDestinations.map((item) => item.type))]
@@ -388,7 +375,7 @@ export default function EcologicalMonitoring({ onNavigate }) {
           Explore Ecological Destinations
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Monitor environmental conditions, crowd levels and warnings across Malaysia
+          Monitor tourist-safe environmental, crowd, and aggregate waste indicators across Malaysia
         </p>
       </header>
 
@@ -571,7 +558,7 @@ function MapView({ destinations, onSelect }) {
               pathOptions={{
                 color: '#ffffff',
                 weight: 3,
-                fillColor: markerColor[destination.warning],
+                fillColor: markerColor[destination.warning] || markerColor['Awaiting data'],
                 fillOpacity: 1,
               }}
             >
@@ -579,7 +566,9 @@ function MapView({ destinations, onSelect }) {
                 <div className="min-w-40">
                   <b>{destination.name}</b>
                   <p>{destination.state}</p>
+                  {!destination.sourceId && <p>Source: Prototype fallback data</p>}
                   <p>Warning: {destination.warning}</p>
+                  <p>Waste: {destination.waste}{destination.wasteDataSource === 'Simulated stored estimate' ? ' (simulated aggregate)' : ''}</p>
                   <button
                     type="button"
                     onClick={() => onSelect(destination)}
@@ -644,6 +633,12 @@ function DestinationCard({ destination, onSelect }) {
             value={destination.warning}
             color={warningColor[destination.warning]}
           />
+          <Badge
+            icon={Trash2}
+            value={`Waste: ${destination.waste}${destination.wasteDataSource === 'Simulated stored estimate' ? ' - simulated' : ''}`}
+            color={wasteColor[destination.waste] || 'bg-slate-100 text-slate-600'}
+          />
+          {!destination.sourceId && <Badge icon={AlertTriangle} value="Prototype data" color="bg-violet-50 text-violet-700" />}
         </div>
         <div className="mt-3 flex items-center justify-between text-xs">
           <span className="flex items-center gap-1 text-slate-400">
@@ -723,6 +718,7 @@ function DestinationDetails({ destination, onBack, onNavigate }) {
                   <p className="mt-1 text-xs font-bold text-slate-700">{value}%</p>
                 </div>
               ))}
+              {!destination.metrics.length && <p className="col-span-2 rounded-xl bg-slate-50 p-4 text-sm text-slate-400">No aggregate environmental metric is available yet.</p>}
             </div>
           </div>
 
@@ -739,6 +735,20 @@ function DestinationDetails({ destination, onBack, onNavigate }) {
                 <StatusRow label="Last update" value={destination.update} />
               </div>
             </div>
+
+            {destination.aggregateOnly && (
+              <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm leading-6 text-violet-800">
+                <b>Tourist aggregate view</b>
+                <p className="mt-1">Waste source: {destination.wasteDataSource}. Exact quantities, collection schedules, history, staff assignments, and internal notes remain available only to authorized administrators.</p>
+              </div>
+            )}
+
+            {!destination.sourceId && (
+              <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm leading-6 text-violet-800">
+                <b>Prototype fallback data</b>
+                <p className="mt-1">These values are assignment demonstration content shown only when managed Supabase destinations are unavailable.</p>
+              </div>
+            )}
 
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
               <b>Recommended visiting time</b>

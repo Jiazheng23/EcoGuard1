@@ -90,6 +90,13 @@ export async function listLocationMetrics({ limit = 500 } = {}) {
   return data || []
 }
 
+export async function listTouristEnvironmentalIndicators() {
+  if (!supabase) throw new Error('Supabase is not configured.')
+  const { data, error } = await supabase.rpc('get_tourist_environmental_indicators')
+  throwIfError(error)
+  return data || []
+}
+
 export function latestMetricsByLocation(metrics) {
   return (metrics || []).reduce((latest, metric) => {
     const key = String(metric.location_id)

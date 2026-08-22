@@ -14,9 +14,11 @@ Supabase Row Level Security (RLS) is the authorization boundary. Routes and hidd
 ## Supabase and administrator setup
 
 1. Back up the affected tables, then run `supabase/admin_location_scope.sql` in Supabase SQL Editor.
-2. Assign a `location_id` to every migrated location administrator returned by the verification query at the end of the script.
-3. Synchronize trusted `auth.users.raw_app_meta_data` using the commented example in the SQL script, then validate the pending constraint. Roles must never be stored in user-editable `user_metadata`.
-4. Add the server-only values below to `.env.local`. Never prefix them with `VITE_` or expose them to frontend code.
+2. Run `supabase/waste_management.sql` to create the waste schedules, immutable collection history, thresholds, export audit data, validation, and location-scoped RLS policies.
+3. Optionally run `supabase/waste_demo_data.sql` to add idempotent, clearly labelled assignment demonstration records for up to three active locations.
+4. Assign a `location_id` to every migrated location administrator returned by the verification query at the end of the administrator-scope script.
+5. Synchronize trusted `auth.users.raw_app_meta_data` using the commented example in the administrator-scope SQL script, then validate the pending constraint. Roles must never be stored in user-editable `user_metadata`.
+6. Add the server-only values below to `.env.local`. Never prefix secret values with `VITE_` or expose them to frontend code.
 
 ```dotenv
 VITE_SUPABASE_URL=
@@ -26,7 +28,7 @@ MAP_CONTACT_EMAIL=
 PORT=5000
 ```
 
-5. Create the first super administrator in Supabase Auth. Set its `profiles` row to `role = 'super_admin'`, `location_id = null`, and its trusted `app_metadata.role` to `super_admin`. Super-admin public registration is intentionally unavailable.
+7. Create the first super administrator in Supabase Auth. Set its `profiles` row to `role = 'super_admin'`, `location_id = null`, and its trusted `app_metadata.role` to `super_admin`. Super-admin public registration is intentionally unavailable.
 
    For legacy accounts where only `profiles.role` was updated, the protected application endpoint verifies that canonical profile and synchronizes the missing Auth `app_metadata.role`. The browser refreshes its session immediately afterward so RLS sees the updated claim.
 
@@ -57,6 +59,8 @@ Sign-in requires only email and password. The application reads the approved acc
 - Added a super-admin review page and protected backend approve/reject endpoints.
 - Added location selection during registration and role-aware login redirects.
 - Shared the administrator workspace between both roles and removed global create/delete controls for location admins.
+- Added the complete Waste Management workflow: simulated fallback monitoring, thresholds, schedules, immutable collection history, persisted analytics, and audited CSV/PDF reports.
+- Added a security-definer tourist RPC that returns only aggregate environmental and waste status bands, never operational waste records.
 
 ## Current project structure
 
@@ -66,6 +70,8 @@ Generated `.git`, `node_modules`, and `frontend/dist` directories are omitted.
 EcoGuard1/
 |-- .env.local
 |-- README.md
+|-- WASTE_MANAGEMENT_REQUIREMENTS.md
+|-- WASTE_MANAGEMENT_TEST_GUIDE.md
 |-- package.json
 |-- package-lock.json
 |-- backend/
@@ -104,8 +110,13 @@ EcoGuard1/
 |       |   |-- mapService.js
 |       |   |-- profileService.js
 |       |   |-- supabaseClient.js
-|       |   `-- tripService.js
-|       |-- utils/tripAnalytics.js
+|       |   |-- tripService.js
+|       |   `-- wasteService.js
+|       |-- utils/
+|       |   |-- tripAnalytics.js
+|       |   |-- wasteAnalytics.js
+|       |   |-- wasteReport.js
+|       |   `-- wasteValidation.js (with focused `*.test.js` files)
 |       `-- features/
 |           |-- auth/ (AuthPage.jsx, auth.css)
 |           |-- landing/ (LandingPage.jsx, landing.css)
@@ -131,7 +142,18 @@ EcoGuard1/
 |           |   |-- Reports.jsx
 |           |   |-- SystemActivity.jsx
 |           |   |-- WarningManagement.jsx
-|           |   `-- WasteManagement.jsx
+|           |   |-- WasteManagement.jsx
+|           |   `-- waste/
+|           |       |-- WasteOverview.jsx
+|           |       |-- WasteSimulator.jsx
+|           |       |-- WasteThresholdSettings.jsx
+|           |       |-- WasteScheduleForm.jsx
+|           |       |-- WasteScheduleManager.jsx
+|           |       |-- WasteCollectionForm.jsx
+|           |       |-- WasteCollectionFilters.jsx
+|           |       |-- WasteCollectionHistory.jsx
+|           |       |-- WasteAnalytics.jsx
+|           |       `-- WasteReportExport.jsx
 |           `-- tourist/
 |               |-- CarbonCalculator.jsx
 |               |-- EcologicalMonitoring.jsx
@@ -141,7 +163,9 @@ EcoGuard1/
 |               |-- TouristProfile.jsx
 |               `-- TouristWorkspace.jsx
 `-- supabase/
-    `-- admin_location_scope.sql
+    |-- admin_location_scope.sql
+    |-- waste_management.sql
+    `-- waste_demo_data.sql
 ```
 
 ## Verification
@@ -151,6 +175,9 @@ After applying the SQL, test separate super-admin, location-admin, and tourist a
 ```powershell
 npm run build --prefix frontend
 npm run lint --prefix frontend
+npm run test --prefix frontend
 node --check backend/index.js
 node --check backend/src/controllers/authController.js
 ```
+
+See `WASTE_MANAGEMENT_TEST_GUIDE.md` for the complete administrator, tourist, export, and RLS demonstration walkthrough.
