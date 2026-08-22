@@ -8,6 +8,8 @@ import TouristLayout from "./TouristLayout";
 import EcologicalMonitoring from "./EcologicalMonitoring";
 import CarbonCalculator from "./CarbonCalculator";
 import TouristProfile from "./TouristProfile";
+import TripHistory from "./TripHistory";
+import AchievementBadges from "./AchievementBadges";
 
 export default function TouristWorkspace() {
   const navigate = useNavigate();
@@ -94,6 +96,10 @@ export default function TouristWorkspace() {
         <TouristDashboard onNavigate={setPage} user={user} profile={profile} />
       ) : page === "carbon" ? (
         <CarbonCalculator user={user} />
+      ) : page === "history" ? (
+        <TripHistory onNavigate={setPage} user={user} />
+      ) : page === "achievements" ? (
+        <AchievementBadges onNavigate={setPage} user={user} profile={profile} />
       ) : page === "monitoring" ? (
         <EcologicalMonitoring onNavigate={setPage} />
       ) : page === "profile" ? (

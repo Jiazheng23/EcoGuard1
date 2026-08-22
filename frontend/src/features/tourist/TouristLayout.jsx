@@ -1,6 +1,8 @@
 import {
   Bell,
+  Award,
   Calculator,
+  Clock3,
   LayoutDashboard,
   Leaf,
   LogOut,
@@ -22,6 +24,16 @@ const navItems = [
     id: 'carbon',
     label: 'Carbon Calculator',
     icon: Calculator,
+  },
+  {
+    id: 'history',
+    label: 'Trip History',
+    icon: Clock3,
+  },
+  {
+    id: 'achievements',
+    label: 'Achievement Badges',
+    icon: Award,
   },
   {
     id: 'monitoring',

@@ -258,7 +258,10 @@ export default function TouristDashboard({ onNavigate, user, profile }) {
       </ChartCard>
 
       <article className={card}>
-        <h2 className="mb-4 font-bold text-slate-800">Achievement Badges <span className="font-normal text-slate-400">({earnedBadges} of 6 earned)</span></h2>
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="font-bold text-slate-800">Achievement Badges <span className="font-normal text-slate-400">({earnedBadges} of 6 earned)</span></h2>
+          <button onClick={() => onNavigate('achievements')} className="flex items-center gap-1 text-xs font-semibold text-green-600">View all <ArrowRight size={13} /></button>
+        </div>
         <div className="grid grid-cols-3 gap-3 md:grid-cols-6">
           {badges.map(([name, icon, earned]) => (
             <div className={`rounded-xl border p-3 text-center ${earned ? 'border-green-200 bg-green-50' : 'border-slate-100 bg-slate-50 opacity-60'}`} key={name}>
@@ -274,7 +277,10 @@ export default function TouristDashboard({ onNavigate, user, profile }) {
         <article className={card}>
           <div className="mb-4 flex justify-between">
             <h2 className="font-bold text-slate-800">Recent Trips</h2>
-            <button onClick={() => onNavigate('carbon')} className="flex items-center gap-1 text-xs font-semibold text-green-600">Add trip <ArrowRight size={13} /></button>
+            <div className="flex items-center gap-3">
+              <button onClick={() => onNavigate('history')} className="flex items-center gap-1 text-xs font-semibold text-slate-500">View history <ArrowRight size={13} /></button>
+              <button onClick={() => onNavigate('carbon')} className="flex items-center gap-1 text-xs font-semibold text-green-600">Add trip <ArrowRight size={13} /></button>
+            </div>
           </div>
           <div className="space-y-3">
             {trips.slice(0, 4).map((trip) => {
