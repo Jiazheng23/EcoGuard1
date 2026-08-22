@@ -1,10 +1,12 @@
-import { Bell, Calculator, LayoutDashboard, Leaf, Map, Menu, X } from 'lucide-react'
+import { Award, Bell, Calculator, Clock3, LayoutDashboard, Leaf, Map, Menu, X } from 'lucide-react'
 import { useState } from 'react'
 import AccountMenu from '../../components/AccountMenu'
 
 const navItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'carbon', label: 'Carbon Calculator', icon: Calculator },
+  { id: 'history', label: 'Trip History', icon: Clock3 },
+  { id: 'achievements', label: 'Achievement Badges', icon: Award },
   { id: 'monitoring', label: 'Eco Monitoring', icon: Map },
 ]
 
