@@ -16,7 +16,7 @@ const themes = {
   },
 }
 
-export default function AccountMenu({ name, email, roleLabel, initials, accent = 'blue', onProfile, onHistory, onLogout }) {
+export default function AccountMenu({ name, email, roleLabel, initials, avatarUrl, accent = 'blue', onProfile, onHistory, onLogout }) {
   const [open, setOpen] = useState(false)
   const containerRef = useRef(null)
   const theme = themes[accent] || themes.blue
@@ -54,7 +54,7 @@ export default function AccountMenu({ name, email, roleLabel, initials, accent =
   return (
     <div className="relative" ref={containerRef}>
       <button type="button" aria-label="Open account menu" aria-expanded={open} onClick={() => setOpen((current) => !current)} className={`flex items-center gap-1 rounded-full border bg-white p-1 pr-2 transition ${theme.button}`}>
-        <span className={`grid size-8 place-items-center rounded-full bg-gradient-to-br text-xs font-bold text-white ${theme.avatar}`}>{initials}</span>
+        <Avatar avatarUrl={avatarUrl} initials={initials} className="size-8 text-xs" theme={theme} />
         <ChevronDown size={14} className={`text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
@@ -62,7 +62,7 @@ export default function AccountMenu({ name, email, roleLabel, initials, accent =
         <div className="absolute right-0 top-[calc(100%+10px)] z-50 w-[min(18rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-xl" role="menu">
           <div className="border-b border-slate-100 p-4">
             <div className="flex items-center gap-3">
-              <span className={`grid size-11 shrink-0 place-items-center rounded-full bg-gradient-to-br text-sm font-bold text-white ${theme.avatar}`}>{initials}</span>
+              <Avatar avatarUrl={avatarUrl} initials={initials} className="size-11 shrink-0 text-sm" theme={theme} />
               <div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-800">{name}</p><p className="truncate text-xs text-slate-400">{email}</p></div>
             </div>
             <span className={`mt-3 inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${theme.badge}`}>{roleLabel}</span>
@@ -77,4 +77,8 @@ export default function AccountMenu({ name, email, roleLabel, initials, accent =
       )}
     </div>
   )
+}
+
+function Avatar({ avatarUrl, initials, className, theme }) {
+  return <span className={`grid overflow-hidden place-items-center rounded-full bg-gradient-to-br font-bold text-white ${theme.avatar} ${className}`}>{avatarUrl ? <img src={avatarUrl} alt="" className="size-full object-cover" /> : initials}</span>
 }

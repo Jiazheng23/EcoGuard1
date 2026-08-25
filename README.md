@@ -13,7 +13,7 @@ Supabase Row Level Security (RLS) is the authorization boundary. Routes and hidd
 
 ## Supabase and administrator setup
 
-1. Back up the affected tables, then run `supabase/admin_location_scope.sql` in Supabase SQL Editor.
+1. Back up the affected tables, then run `supabase/admin_location_scope.sql` in Supabase SQL Editor. If that setup was already applied before profile-picture support was added, run only `supabase/profile_avatar_storage.sql`.
 2. Run the SQL inside `supabase/profile_details.sql` to add the optional profile gender field. Paste the file contents into SQL Editor, not the file name.
 3. Run `supabase/waste_management.sql` to create the waste schedules, immutable collection history, thresholds, export audit data, validation, and location-scoped RLS policies.
 4. Optionally run `supabase/waste_demo_data.sql` to add idempotent, clearly labelled assignment demonstration records for up to three active locations.
@@ -57,6 +57,7 @@ Sign-in requires only email and password. The application reads the approved acc
 - Prevented the location-admin workspace from requesting global profiles or trips and added assigned-location filtering as defense in depth.
 - Reserved location creation/deletion and global profile access for super admins.
 - Added private company-document upload and a pending application record during location-admin registration.
+- Added user-owned profile-picture uploads through the public `profile-avatars` Storage bucket; `profiles.avatar_url` stores the display URL.
 - Added a super-admin review page and protected backend approve/reject endpoints.
 - Added location selection during registration and role-aware login redirects.
 - Shared the administrator workspace between both roles and removed global create/delete controls for location admins.

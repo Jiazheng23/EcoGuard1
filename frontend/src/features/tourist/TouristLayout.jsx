@@ -70,7 +70,7 @@ export default function TouristLayout({ activePage, onNavigate, user, profile, o
           <button type="button" aria-label="Open tourist navigation" className="rounded-lg p-2 text-slate-500 hover:bg-slate-50 lg:hidden" onClick={() => setSidebarOpen(true)}><Menu size={20} /></button>
           <p className="min-w-0 flex-1 truncate text-sm"><span className="text-slate-400">Tourist / </span><strong className="text-slate-700">{pageLabel}</strong></p>
           <button type="button" aria-label="Notifications" className="relative rounded-lg p-2 text-slate-400 hover:bg-slate-50"><Bell size={17} /><span className="absolute right-1 top-1 size-2 rounded-full bg-red-500 ring-2 ring-white" /></button>
-          <AccountMenu name={name} email={user?.email} roleLabel="Tourist" initials={initials} accent="green" onProfile={() => onNavigate('profile')} onHistory={() => onNavigate('history')} onLogout={onLogout} />
+          <AccountMenu name={name} email={user?.email} roleLabel="Tourist" initials={initials} avatarUrl={profile?.avatar_url} accent="green" onProfile={() => onNavigate('profile')} onHistory={() => onNavigate('history')} onLogout={onLogout} />
         </header>
         <main className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
       </div>

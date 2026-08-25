@@ -13,6 +13,7 @@ import { supabase } from '../../services/supabaseClient'
 import { updateOwnProfile } from '../../services/profileService'
 import { listOwnTrips } from '../../services/tripService'
 import AchievementBadges from './AchievementBadges'
+import ProfileAvatarUploader from '../profile/ProfileAvatarUploader'
 
 const card = 'rounded-2xl border border-slate-100 bg-white p-5 shadow-sm'
 
@@ -154,9 +155,7 @@ export default function TouristProfile({ user, profile, onProfileChange }) {
 
       <div className="grid gap-5 lg:grid-cols-[280px_1fr]">
         <aside className={`${card} h-full text-center`}>
-          <div className="mx-auto grid size-24 place-items-center rounded-full bg-gradient-to-br from-green-400 to-green-700 text-3xl font-bold text-white shadow-lg shadow-green-500/20">
-            {initials}
-          </div>
+          <ProfileAvatarUploader userId={user.id} profile={profile} initials={initials} onProfileChange={onProfileChange} onError={setErrorMessage} onSuccess={setSuccessMessage} />
 
           <h2 className="mt-4 text-xl font-bold text-slate-800">
             {fullName || 'Tourist'}

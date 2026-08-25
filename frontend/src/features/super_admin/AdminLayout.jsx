@@ -98,7 +98,7 @@ export default function AdminLayout({ activePage, onNavigate, onLogout, user, pr
           <button type="button" aria-label="Open administrator navigation" className="rounded-lg p-2 text-slate-500 hover:bg-slate-50 lg:hidden" onClick={() => setSidebarOpen(true)}><Menu size={20} /></button>
           <p className="min-w-0 flex-1 truncate text-sm"><span className="text-slate-400">{profile?.role === 'super_admin' ? 'Super Admin' : 'Local Admin'} / </span><strong className="text-slate-700">{pageLabels[activePage] || 'Dashboard'}</strong></p>
           <button type="button" aria-label="Notifications" className="relative rounded-lg p-2 text-slate-400 hover:bg-slate-50"><Bell size={17} /><span className="absolute right-0.5 top-0.5 grid min-w-4 place-items-center rounded-full bg-red-500 px-1 text-[9px] font-bold leading-4 text-white">5</span></button>
-          <AccountMenu name={name} email={user?.email} roleLabel={roleLabel} initials={initials} accent="blue" onProfile={() => onNavigate('profile')} onLogout={onLogout} />
+          <AccountMenu name={name} email={user?.email} roleLabel={roleLabel} initials={initials} avatarUrl={profile?.avatar_url} accent="blue" onProfile={() => onNavigate('profile')} onLogout={onLogout} />
         </header>
         <main className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
       </div>

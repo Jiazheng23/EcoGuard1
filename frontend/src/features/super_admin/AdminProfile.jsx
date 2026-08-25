@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { AlertCircle, CalendarDays, CheckCircle2, Mail, Phone, Save, ShieldCheck, UserRound } from 'lucide-react'
 import { supabase } from '../../services/supabaseClient'
 import { updateOwnProfile } from '../../services/profileService'
+import ProfileAvatarUploader from '../profile/ProfileAvatarUploader'
 
 const card = 'rounded-2xl border border-slate-100 bg-white p-5 shadow-sm'
 
@@ -46,7 +47,7 @@ export default function AdminProfile({ user, profile, onProfileChange }) {
       <header><h1 className="text-2xl font-bold text-slate-900">Administrator Profile</h1><p className="mt-1 text-sm text-slate-500">Your profile is shared with the same Supabase profiles model used by tourists</p></header>
       <div className="grid gap-5 lg:grid-cols-[280px_1fr]">
         <aside className={`${card} h-full text-center`}>
-          <div className="mx-auto grid size-24 place-items-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-3xl font-bold text-white shadow-lg shadow-blue-500/20">{initials}</div>
+          <ProfileAvatarUploader userId={user.id} profile={profile} initials={initials} accent="blue" onProfileChange={onProfileChange} onError={setError} onSuccess={setMessage} />
           <h2 className="mt-4 text-xl font-bold text-slate-800">{fullName || 'Administrator'}</h2>
           <p className="mt-1 break-all text-sm text-slate-500">{user?.email}</p>
           <span className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700"><ShieldCheck size={13} />{roleLabel}</span>
