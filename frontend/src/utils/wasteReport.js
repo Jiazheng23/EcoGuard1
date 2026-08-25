@@ -164,7 +164,7 @@ function drawTrendChart(commands, series, x, y, width, height) {
   text(commands, 'Orange: total collected   Green: recycled portion', x, y + height + 4, 7, 'F1', [0.4, 0.45, 0.52])
 }
 
-function encodePdf(pageStreams) {
+export function encodePdf(pageStreams) {
   const objects = []
   objects[1] = '<< /Type /Catalog /Pages 2 0 R >>'
   objects[3] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'
@@ -195,7 +195,7 @@ function encodePdf(pageStreams) {
   return new TextEncoder().encode(output)
 }
 
-function text(commands, value, x, y, size = 9, font = 'F1', color = [0.12, 0.16, 0.22]) {
+export function text(commands, value, x, y, size = 9, font = 'F1', color = [0.12, 0.16, 0.22]) {
   commands.push(`${color.join(' ')} rg BT /${font} ${size} Tf ${x} ${y} Td (${pdfText(value)}) Tj ET`)
 }
 
@@ -215,7 +215,7 @@ function wrapText(commands, value, x, y, width, size, lineHeight, color) {
   lines.forEach((lineText, index) => text(commands, lineText, x, y - index * lineHeight, size, 'F1', color))
 }
 
-function fillRect(commands, x, y, width, height, color) {
+export function fillRect(commands, x, y, width, height, color) {
   commands.push(`${color.join(' ')} rg ${x} ${y} ${width} ${height} re f`)
 }
 

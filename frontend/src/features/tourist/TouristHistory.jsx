@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
-import { AlertCircle, CalendarDays, History, Leaf, MapPin, RefreshCw, Search } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { AlertCircle, CalendarDays, ChevronDown, Download, History, Leaf, MapPin, RefreshCw, Search } from 'lucide-react'
 import { listOwnTrips } from '../../services/tripService'
 import { formatCarbon, formatTripDate, numberValue, transportLabels } from '../../utils/tripAnalytics'
+import { downloadTripHistoryCsv, downloadTripHistoryPdf } from '../../utils/tripReport'
 
 const card = 'rounded-2xl border border-slate-100 bg-white shadow-sm'
 
@@ -9,8 +10,10 @@ export default function TouristHistory({ user }) {
   const [trips, setTrips] = useState([])
   const [query, setQuery] = useState('')
   const [mode, setMode] = useState('all')
+  const [exportMenuOpen, setExportMenuOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const exportMenuRef = useRef(null)
 
   useEffect(() => {
     let active = true
@@ -31,6 +34,21 @@ export default function TouristHistory({ user }) {
     return () => { active = false }
   }, [user?.id])
 
+  useEffect(() => {
+    function closeExportMenu(event) {
+      if (event.type === 'keydown' && event.key !== 'Escape') return
+      if (event.type === 'pointerdown' && exportMenuRef.current?.contains(event.target)) return
+      setExportMenuOpen(false)
+    }
+
+    document.addEventListener('pointerdown', closeExportMenu)
+    document.addEventListener('keydown', closeExportMenu)
+    return () => {
+      document.removeEventListener('pointerdown', closeExportMenu)
+      document.removeEventListener('keydown', closeExportMenu)
+    }
+  }, [])
+
   async function loadHistory() {
     if (!user?.id) return
     setLoading(true)
@@ -42,6 +60,13 @@ export default function TouristHistory({ user }) {
     } finally {
       setLoading(false)
     }
+  }
+
+  function downloadHistory(format) {
+    if (!trips.length) return
+    setExportMenuOpen(false)
+    if (format === 'pdf') downloadTripHistoryPdf(trips)
+    else downloadTripHistoryCsv(trips)
   }
 
   const modes = useMemo(
@@ -72,9 +97,22 @@ export default function TouristHistory({ user }) {
           <h1 className="text-2xl font-bold text-slate-900">Trip History</h1>
           <p className="mt-1 text-sm text-slate-500">Review the journeys saved from your carbon calculator.</p>
         </div>
-        <button type="button" onClick={loadHistory} disabled={loading} className="inline-flex items-center justify-center gap-2 self-start rounded-xl border border-green-100 bg-white px-4 py-2.5 text-sm font-semibold text-green-700 transition hover:bg-green-50 disabled:opacity-50">
-          <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />Refresh
-        </button>
+        <div className="flex flex-wrap gap-2 self-start">
+          <div ref={exportMenuRef} className="relative">
+            <button type="button" onClick={() => setExportMenuOpen((open) => !open)} disabled={loading || !trips.length} title={!loading && !trips.length ? 'No trip history to download' : 'Choose a report format'} aria-haspopup="menu" aria-expanded={exportMenuOpen} className="inline-flex items-center justify-center gap-2 rounded-xl bg-green-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50">
+              <Download size={15} />Download <ChevronDown size={15} className={`transition-transform ${exportMenuOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {exportMenuOpen && (
+              <div role="menu" className="absolute right-0 z-20 mt-2 min-w-44 overflow-hidden rounded-xl border border-slate-100 bg-white p-1.5 shadow-lg">
+                <button type="button" role="menuitem" onClick={() => downloadHistory('pdf')} className="block w-full rounded-lg px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:bg-green-50 hover:text-green-700">Download PDF</button>
+                <button type="button" role="menuitem" onClick={() => downloadHistory('csv')} className="block w-full rounded-lg px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:bg-green-50 hover:text-green-700">Download CSV</button>
+              </div>
+            )}
+          </div>
+          <button type="button" onClick={loadHistory} disabled={loading} className="inline-flex items-center justify-center gap-2 rounded-xl border border-green-100 bg-white px-4 py-2.5 text-sm font-semibold text-green-700 transition hover:bg-green-50 disabled:opacity-50">
+            <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />Refresh
+          </button>
+        </div>
       </header>
 
       <section className="grid gap-4 sm:grid-cols-3">
