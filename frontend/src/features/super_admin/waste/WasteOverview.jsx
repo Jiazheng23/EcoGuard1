@@ -14,7 +14,7 @@ export default function WasteOverview({ location, baseline, threshold, schedules
       <section className="grid gap-4 md:grid-cols-3">
         <OverviewCard icon={CalendarClock} label="Next collection" value={loading ? 'Loading…' : nextSchedule ? formatDate(nextSchedule.scheduled_for) : 'Not scheduled'} detail={nextSchedule?.assigned_team || 'No upcoming collection window'} color="#3b82f6" />
         <OverviewCard icon={ClipboardCheck} label="Collection records" value={loading ? 'Loading…' : collections.length} detail={latestCollection ? `Latest ${formatDate(latestCollection.collected_at)}` : 'No persisted collection history'} color="#22c55e" />
-        <OverviewCard icon={Database} label="Latest saved reading" value={loading ? 'Loading…' : baseline ? `${Number(baseline.waste_kg || 0).toFixed(2)} kg` : 'No snapshot'} detail={baseline ? `Simulated · ${formatDate(baseline.recorded_at)}` : 'Save a simulated snapshot below'} color="#f97316" />
+        <OverviewCard icon={Database} label="Latest saved reading" value={loading ? 'Loading…' : baseline ? `${Number(baseline.waste_kg || 0).toFixed(2)} kg` : 'No snapshot'} detail={baseline ? `Sensor reading · ${formatDate(baseline.recorded_at)}` : 'Save a sensor reading below'} color="#f97316" />
       </section>
 
       <WasteSimulator key={`${location.id}-${baseline?.id || 'new'}`} location={location} baseline={baseline} threshold={threshold} onDataChange={onDataChange} />

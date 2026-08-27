@@ -158,15 +158,28 @@ export default function AdminWorkspace({ requiredRole }) {
     isSuperAdmin: profile.role === 'super_admin',
   }
 
-  const pageContent = {
+  const wasteSections = {
+    waste: 'overview',
+    'waste-overview': 'overview',
+    'waste-schedules': 'schedules',
+    'waste-history': 'history',
+    'waste-analytics': 'analytics',
+  }
+  const wasteSection = wasteSections[page]
+  const pageContent = wasteSection ? (
+    <WasteManagement
+      {...sharedProps}
+      section={wasteSection}
+      onSectionChange={(nextSection) => setPage(`waste-${nextSection}`)}
+    />
+  ) : ({
     dashboard: <AdminDashboard {...sharedProps} onNavigate={setPage} />,
     locations: <EcologicalLocations {...sharedProps} />,
     thresholds: <CrowdThresholds {...sharedProps} />,
-    waste: <WasteManagement {...sharedProps} />,
     reports: <Reports {...sharedProps} />,
     applications: <AdminApplications />,
     profile: <AdminProfile user={user} profile={profile} onProfileChange={handleProfileChange} />,
-  }[page]
+  }[page])
 
   return (
     <AdminLayout activePage={page} onNavigate={setPage} onLogout={handleLogout} user={user} profile={profile}>

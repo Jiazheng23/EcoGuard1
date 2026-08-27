@@ -264,7 +264,7 @@ function managedDestination(location, indicator, index) {
     visitors: indicator?.visitor_count == null ? 'Awaiting data' : Number(indicator.visitor_count).toLocaleString(),
     waste: indicator?.waste_level || 'Awaiting data',
     update: indicator?.recorded_at ? new Date(indicator.recorded_at).toLocaleString() : 'Awaiting first stored estimate',
-    wasteDataSource: indicator?.data_source === 'simulated' ? 'Simulated stored estimate' : indicator?.data_source === 'stored_estimate' ? 'Stored aggregate estimate' : 'Unavailable',
+    wasteDataSource: indicator?.data_source === 'simulated' ? 'Automated sensor estimate' : indicator?.data_source === 'stored_estimate' ? 'Stored aggregate estimate' : 'Unavailable',
     aggregateOnly: true,
     distance: 'Managed map point',
     hours: location.operating_hours || 'Contact location operator',
@@ -577,7 +577,7 @@ function MapView({ destinations, onSelect }) {
                   <p>{destination.state}</p>
                   {!destination.sourceId && <p>Source: Prototype fallback data</p>}
                   <p>Warning: {destination.warning}</p>
-                  <p>Waste: {destination.waste}{destination.wasteDataSource === 'Simulated stored estimate' ? ' (simulated aggregate)' : ''}</p>
+                  <p>Waste: {destination.waste}{destination.wasteDataSource === 'Automated sensor estimate' ? ' (sensor aggregate)' : ''}</p>
                   <button
                     type="button"
                     onClick={() => onSelect(destination)}
@@ -644,7 +644,7 @@ function DestinationCard({ destination, onSelect }) {
           />
           <Badge
             icon={Trash2}
-            value={`Waste: ${destination.waste}${destination.wasteDataSource === 'Simulated stored estimate' ? ' - simulated' : ''}`}
+            value={`Waste: ${destination.waste}${destination.wasteDataSource === 'Automated sensor estimate' ? ' - sensor' : ''}`}
             color={wasteColor[destination.waste] || 'bg-slate-100 text-slate-600'}
           />
           {!destination.sourceId && <Badge icon={AlertTriangle} value="Prototype data" color="bg-violet-50 text-violet-700" />}

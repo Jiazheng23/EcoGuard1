@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import {
   BarChart2,
+  ChevronDown,
+  ChevronRight,
   LayoutDashboard,
   MapPin,
   Menu,
@@ -18,7 +20,17 @@ const navItems = [
   { icon: MapPin, label: 'Locations', page: 'locations' },
   { icon: UserCheck, label: 'Applications', page: 'applications', superOnly: true },
   { icon: SlidersHorizontal, label: 'Thresholds', page: 'thresholds' },
-  { icon: Recycle, label: 'Waste', page: 'waste' },
+  {
+    icon: Recycle,
+    label: 'Waste',
+    page: 'waste',
+    children: [
+      { label: 'Overview', page: 'waste-overview' },
+      { label: 'Collection Schedules', page: 'waste-schedules' },
+      { label: 'Collection History', page: 'waste-history' },
+      { label: 'Analytics & Reports', page: 'waste-analytics' },
+    ],
+  },
   { icon: BarChart2, label: 'Reports', page: 'reports' },
 ]
 
@@ -27,6 +39,10 @@ const pageLabels = {
   locations: 'Ecological Locations',
   thresholds: 'Crowd Thresholds',
   waste: 'Waste Management',
+  'waste-overview': 'Waste / Overview',
+  'waste-schedules': 'Waste / Collection Schedules',
+  'waste-history': 'Waste / Collection History',
+  'waste-analytics': 'Waste / Analytics & Reports',
   reports: 'Reports & Environmental Data',
   profile: 'Profile',
   applications: 'Location Admin Applications',
@@ -39,6 +55,7 @@ function getAdminDetails(user, profile) {
 }
 
 function AdminSidebar({ activePage, onNavigate, onClose, profile }) {
+  const [wasteOpen, setWasteOpen] = useState(() => activePage.startsWith('waste'))
   const visibleItems = navItems.filter((item) => !item.superOnly || profile?.role === 'super_admin')
 
   function navigateTo(page) {
@@ -54,8 +71,45 @@ function AdminSidebar({ activePage, onNavigate, onClose, profile }) {
       </button>
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-5" aria-label="Administrator navigation">
-        {visibleItems.map(({ icon: Icon, label, page }) => {
-          const active = activePage === page
+        {visibleItems.map(({ icon: Icon, label, page, children }) => {
+          const active = activePage === page || (children && activePage.startsWith(`${page}-`))
+
+          if (children) {
+            const expanded = wasteOpen
+            return (
+              <div key={page}>
+                <button
+                  type="button"
+                  onClick={() => setWasteOpen((current) => !current)}
+                  aria-expanded={expanded}
+                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-colors ${active ? 'bg-blue-50 font-semibold text-blue-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}
+                >
+                  <Icon size={17} className="shrink-0" />
+                  <span className="flex-1">{label}</span>
+                  {expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+                </button>
+                {expanded && (
+                  <div className="ml-5 mt-1 space-y-1 border-l border-slate-200 pl-3">
+                    {children.map((child) => {
+                      const childActive = activePage === child.page || (activePage === page && child.page === `${page}-overview`)
+                      return (
+                        <button
+                          key={child.page}
+                          type="button"
+                          onClick={() => navigateTo(child.page)}
+                          aria-current={childActive ? 'page' : undefined}
+                          className={`w-full rounded-lg px-3 py-2 text-left text-xs transition-colors ${childActive ? 'bg-blue-50 font-semibold text-blue-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}
+                        >
+                          {child.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )
+          }
+
           return (
             <button key={page} type="button" onClick={() => navigateTo(page)} aria-current={active ? 'page' : undefined} className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-colors ${active ? 'bg-blue-50 font-semibold text-blue-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}>
               <Icon size={17} className="shrink-0" />{label}

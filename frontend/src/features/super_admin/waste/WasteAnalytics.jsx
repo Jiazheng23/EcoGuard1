@@ -43,7 +43,7 @@ export default function WasteAnalytics({ location, collections, filters, onFilte
 
   return (
     <div className="flex flex-col gap-6">
-      <header><h2 className="font-bold text-slate-800">Persisted waste analytics</h2><p className="mt-1 text-xs text-slate-400">Calculated only from saved collection records for {location?.name || 'the selected location'}; temporary simulator drift is excluded.</p></header>
+      <header><h2 className="font-bold text-slate-800">Persisted waste analytics</h2><p className="mt-1 text-xs text-slate-400">Calculated from saved collection records for {location?.name || 'the selected location'}.</p></header>
 
       <section className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
         <div className="mb-3"><h3 className="text-sm font-bold text-slate-700">Analytics and report filters</h3><p className="mt-0.5 text-xs text-slate-400">These filters stay synchronized with Collection History.</p></div>
@@ -109,7 +109,7 @@ export default function WasteAnalytics({ location, collections, filters, onFilte
             <Statistic label="Average per successful collection" value={`${summary.averageKg.toFixed(2)} kg`} />
             <Statistic label="Peak collection period" value={summary.peakPeriod || 'Not available'} detail={summary.peakPeriod ? `${summary.peakKg.toFixed(2)} kg collected` : 'No persisted quantity'} />
             <Statistic label="Completed / partial" value={`${summary.completedCount} / ${summary.partialCount}`} />
-            <Statistic label="Manual / simulated records" value={`${summary.manualCount} / ${summary.simulatedCount}`} detail="Simulated records are explicitly labelled" />
+            <Statistic label="Manual / sensor records" value={`${summary.manualCount} / ${summary.simulatedCount}`} detail="Automated sensor records are tracked separately" />
           </div>
         </article>
       </section>

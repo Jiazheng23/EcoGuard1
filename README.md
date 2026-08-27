@@ -49,6 +49,25 @@ Dashboard routes are `/tourist/dashboard`, `/location_admin/dashboard`, and `/su
 
 Sign-in requires only email and password. The application reads the approved account role and routes the user automatically; role selection appears only during registration.
 
+## Password recovery for every role
+
+Tourists, pending location administrators, approved location administrators, and super administrators use the same self-service recovery flow:
+
+1. Select **Forgot password?** on `/login` and submit the account email.
+2. Open the Supabase recovery email.
+3. The link returns to `/reset-password`, where EcoGuard verifies the recovery session.
+4. Enter a password containing at least 8 characters, uppercase, lowercase, and a number.
+5. After the password is updated, existing sessions are globally signed out and the user signs in again. Role and location assignments are unchanged.
+
+In **Supabase Dashboard > Authentication > URL Configuration**, add these redirect URLs:
+
+```text
+http://localhost:5173/reset-password
+https://YOUR-PRODUCTION-DOMAIN/reset-password
+```
+
+Keep the production URL aligned with the domain that hosts the Vite frontend. The reset-request success message intentionally does not reveal whether an email is registered.
+
 ## Changes made
 
 - Replaced legacy `admin` handling with `super_admin` and `location_admin`.

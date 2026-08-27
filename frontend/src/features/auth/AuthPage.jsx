@@ -16,13 +16,19 @@ import { Link, useNavigate } from "react-router-dom";
 import "./auth.css";
 import "./auth-layout-stability.css";
 import "./auth-overrides.css";
-import { supabase } from "../../services/supabaseClient";
+import { hadPasswordRecoveryRedirect, supabase } from "../../services/supabaseClient";
 import {
   loginUser,
   registerUser,
   sendPasswordReset,
+  updateRecoveredPassword,
 } from "../../services/authService";
 import { listEcologicalLocations } from "../../services/locationService";
+import {
+  hasPasswordRecoveryEvidence,
+  passwordRecoveryError,
+  validateNewPassword,
+} from "../../utils/passwordValidation";
 
 const features = [
   {
@@ -50,6 +56,14 @@ export default function AuthPage({ initialMode }) {
   const [submitted, setSubmitted] = useState(false);
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [recoveryStatus, setRecoveryStatus] = useState(
+    initialMode === "reset" ? supabase ? "checking" : "invalid" : "not_applicable",
+  );
+  const [recoveryMessage, setRecoveryMessage] = useState(
+    initialMode === "reset" && !supabase
+      ? "Supabase is not configured, so this reset link cannot be verified."
+      : "",
+  );
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -67,11 +81,58 @@ export default function AuthPage({ initialMode }) {
       .catch(() => setLocations([]));
   }, [mode, role]);
 
+  useEffect(() => {
+    if (mode !== "reset") return undefined;
+    if (!supabase) return undefined;
+
+    let active = true;
+    let recoveryEventSeen = false;
+    const linkError = passwordRecoveryError(window.location.href);
+    const hasRecoveryLink = hadPasswordRecoveryRedirect || hasPasswordRecoveryEvidence(window.location.href);
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!active || event !== "PASSWORD_RECOVERY") return;
+      recoveryEventSeen = true;
+      if (session) {
+        setRecoveryStatus("ready");
+        setRecoveryMessage("");
+      }
+    });
+
+    if (linkError) {
+      Promise.resolve().then(() => {
+        if (!active) return;
+        setRecoveryStatus("invalid");
+        setRecoveryMessage(linkError);
+      });
+    } else {
+      supabase.auth.initialize().then(async ({ error: initializationError }) => {
+        if (!active) return;
+        const { data, error } = await supabase.auth.getSession();
+        if (!active) return;
+        if (initializationError || error || !data.session || (!hasRecoveryLink && !recoveryEventSeen)) {
+          setRecoveryStatus("invalid");
+          setRecoveryMessage(initializationError?.message || "This password reset link is invalid, expired, or has already been used.");
+          return;
+        }
+        setRecoveryStatus("ready");
+        setRecoveryMessage("");
+      });
+    }
+
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
+  }, [mode]);
+
   function switchMode(nextMode) {
     const paths = {
       login: "/login",
       register: "/register",
       forgot: "/forgot-password",
+      reset: "/reset-password",
     };
     navigate(paths[nextMode]);
   }
@@ -104,6 +165,18 @@ export default function AuthPage({ initialMode }) {
       return;
     }
 
+    if (mode === "reset") {
+      if (recoveryStatus !== "ready") {
+        setMessage("Open a valid password reset link from your email before choosing a new password.");
+        return;
+      }
+      const passwordError = validateNewPassword(form.password, form.confirmPassword);
+      if (passwordError) {
+        setMessage(passwordError);
+        return;
+      }
+    }
+
     setMessage("");
     setIsSubmitting(true);
 
@@ -112,6 +185,12 @@ export default function AuthPage({ initialMode }) {
     try {
       if (mode === "forgot") {
         await sendPasswordReset(cleanEmail);
+        setSubmitted(true);
+        return;
+      }
+
+      if (mode === "reset") {
+        await updateRecoveredPassword(form.password);
         setSubmitted(true);
         return;
       }
@@ -166,6 +245,7 @@ export default function AuthPage({ initialMode }) {
     login: ["Welcome back", "Sign in to your EcoGuard account"],
     register: ["Create account", "Start your sustainable journey today"],
     forgot: ["Reset password", "Enter your email and we'll send a reset link"],
+    reset: ["Create new password", "Choose a secure password for your EcoGuard account"],
   }[mode];
 
   return (
@@ -246,11 +326,26 @@ export default function AuthPage({ initialMode }) {
             </div>
           )}
 
-          {submitted ? (
+          {mode === "reset" && recoveryStatus === "checking" ? (
+            <div className="auth-recovery-state">
+              <span className="auth-recovery-spinner" aria-hidden="true" />
+              <strong>Verifying reset link</strong>
+              <p>Please wait while EcoGuard verifies your recovery session.</p>
+            </div>
+          ) : mode === "reset" && recoveryStatus === "invalid" ? (
+            <div className="auth-recovery-state auth-recovery-state--error" role="alert">
+              <LockKeyhole size={42} />
+              <strong>Reset link unavailable</strong>
+              <p>{recoveryMessage}</p>
+              <button type="button" onClick={() => switchMode("forgot")}>
+                Request a New Reset Link
+              </button>
+            </div>
+          ) : submitted ? (
             <div className="auth-success">
               <CheckCircle2 size={48} />
-              <strong>Reset link sent!</strong>
-              <p>Check your email for instructions to reset your password.</p>
+              <strong>{mode === "reset" ? "Password updated!" : "Reset request received!"}</strong>
+              <p>{mode === "reset" ? "Your old sessions have been signed out. Sign in again with your new password." : "If an EcoGuard account exists for that email, a password reset link will arrive shortly."}</p>
               <button type="button" onClick={() => switchMode("login")}>
                 Back to Sign In
               </button>
@@ -267,15 +362,18 @@ export default function AuthPage({ initialMode }) {
                   onChange={updateField}
                 />
               )}
-              <Field
-                label="Email address"
-                icon={<Mail size={17} />}
-                name="email"
-                type="email"
-                placeholder={role === "location_admin" ? "location.admin@ecoguard.my" : "tourist@example.com"}
-                value={form.email}
-                onChange={updateField}
-              />
+              {mode !== "reset" && (
+                <Field
+                  label="Email address"
+                  icon={<Mail size={17} />}
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  placeholder={role === "location_admin" ? "location.admin@ecoguard.my" : "tourist@example.com"}
+                  value={form.email}
+                  onChange={updateField}
+                />
+              )}
               {mode === "register" && role === "location_admin" && (
                 <>
                 <label className="field">
@@ -301,7 +399,7 @@ export default function AuthPage({ initialMode }) {
               {mode !== "forgot" && (
                 <div className="field">
                   <div className="field__label">
-                    <label htmlFor="password">Password</label>
+                    <label htmlFor="password">{mode === "reset" ? "New password" : "Password"}</label>
                     {mode === "login" && (
                       <button
                         type="button"
@@ -320,6 +418,8 @@ export default function AuthPage({ initialMode }) {
                       placeholder="••••••••"
                       value={form.password}
                       onChange={updateField}
+                      minLength={mode === "reset" ? 8 : undefined}
+                      autoComplete={mode === "login" ? "current-password" : "new-password"}
                       required
                     />
                     <button
@@ -334,17 +434,20 @@ export default function AuthPage({ initialMode }) {
                   </div>
                 </div>
               )}
-              {mode === "register" && (
+              {(mode === "register" || mode === "reset") && (
                 <Field
-                  label="Confirm password"
+                  label={mode === "reset" ? "Confirm new password" : "Confirm password"}
                   icon={<LockKeyhole size={17} />}
                   name="confirmPassword"
                   type="password"
+                  minLength={mode === "reset" ? 8 : undefined}
+                  autoComplete="new-password"
                   placeholder="••••••••"
                   value={form.confirmPassword}
                   onChange={updateField}
                 />
               )}
+              {mode === "reset" && <p className="password-requirements">Use at least 8 characters with uppercase, lowercase, and a number.</p>}
               {message && (
                 <p className="form-message" role="alert">
                   {message}
@@ -361,7 +464,13 @@ export default function AuthPage({ initialMode }) {
                     ? isSubmitting
                       ? "Creating account..."
                       : "Create Account"
-                    : "Send Reset Link"}
+                    : mode === "forgot"
+                      ? isSubmitting
+                        ? "Sending Reset Link..."
+                        : "Send Reset Link"
+                      : isSubmitting
+                        ? "Updating Password..."
+                        : "Update Password"}
               </button>
             </form>
           )}
@@ -411,6 +520,8 @@ function Field({
   placeholder,
   value,
   onChange,
+  minLength,
+  autoComplete,
 }) {
   return (
     <div className="field">
@@ -424,6 +535,8 @@ function Field({
           placeholder={placeholder}
           value={value}
           onChange={onChange}
+          minLength={minLength}
+          autoComplete={autoComplete}
           required
         />
       </div>

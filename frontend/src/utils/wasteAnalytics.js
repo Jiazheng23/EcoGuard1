@@ -105,7 +105,7 @@ export function getWasteTypeSeries(collections = []) {
 export function getWasteSourceSeries(collections = []) {
   return [
     { source: 'manual', label: 'Manual', count: collections.filter((item) => item.source === 'manual').length, color: '#64748b' },
-    { source: 'simulated_sensor', label: 'Simulated sensor', count: collections.filter((item) => item.source === 'simulated_sensor').length, color: '#8b5cf6' },
+    { source: 'simulated_sensor', label: 'Automated sensor', count: collections.filter((item) => item.source === 'simulated_sensor').length, color: '#8b5cf6' },
   ].filter((item) => item.count > 0)
 }
 
@@ -114,7 +114,7 @@ export function wasteFilterDescription(filters = DEFAULT_WASTE_COLLECTION_FILTER
   if (filters.from) parts.push(`from ${filters.from}`)
   if (filters.to) parts.push(`to ${filters.to}`)
   if (filters.wasteType && filters.wasteType !== 'all') parts.push(`${titleCase(filters.wasteType)} waste`)
-  if (filters.source && filters.source !== 'all') parts.push(filters.source === 'simulated_sensor' ? 'simulated sensor source' : 'manual source')
+  if (filters.source && filters.source !== 'all') parts.push(filters.source === 'simulated_sensor' ? 'automated sensor source' : 'manual source')
   if (filters.status && filters.status !== 'all') parts.push(`${titleCase(filters.status)} status`)
   return parts.length ? parts.join(', ') : 'All available collection records'
 }

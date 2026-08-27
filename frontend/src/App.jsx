@@ -14,6 +14,7 @@ export default function App() {
         <Route path="/login" element={<AuthPage initialMode="login" />} />
         <Route path="/register" element={<AuthPage initialMode="register" />} />
         <Route path="/forgot-password" element={<AuthPage initialMode="forgot" />} />
+        <Route path="/reset-password" element={<AuthPage initialMode="reset" />} />
         <Route path="/tourist/dashboard" element={<TouristWorkspace />} />
         <Route path="/super_admin/dashboard" element={<AdminWorkspace />} />
         <Route path="/location_admin/dashboard" element={<LocationAdminWorkspace />} />

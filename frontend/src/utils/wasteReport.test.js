@@ -12,14 +12,14 @@ const record = {
   waste_type: 'mixed',
   status: 'completed',
   source: 'simulated_sensor',
-  notes: 'Labelled, simulated "bin" record',
+  notes: 'Labelled automated sensor record',
 }
 
-test('CSV includes filtered detail fields and an explicit simulated-data label', () => {
+test('CSV includes filtered detail fields and an explicit sensor-source label', () => {
   const csv = buildWasteCsv([record], { locationName: 'Taman Test' })
-  assert.match(csv, /SIMULATED SENSOR DATA/)
+  assert.match(csv, /AUTOMATED SENSOR/)
   assert.match(csv, /Schedule #8/)
-  assert.match(csv, /"Labelled, simulated ""bin"" record"/)
+  assert.match(csv, /"Labelled automated sensor record"/)
   assert.equal(csv.split('\r\n').length, 2)
 })
 
@@ -31,7 +31,7 @@ test('PDF generator creates a complete PDF document with disclosure and history'
   })
   const content = new TextDecoder().decode(bytes)
   assert.equal(content.startsWith('%PDF-1.4'), true)
-  assert.match(content, /SIMULATED DATA DISCLOSURE/)
+  assert.match(content, /SENSOR DATA SOURCE/)
   assert.match(content, /EcoGuard Waste Collection History/)
   assert.equal(content.endsWith('%%EOF'), true)
 })

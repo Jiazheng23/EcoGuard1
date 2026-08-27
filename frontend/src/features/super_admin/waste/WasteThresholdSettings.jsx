@@ -51,7 +51,7 @@ export default function WasteThresholdSettings({ location, threshold, onSaved })
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="flex items-center gap-2 font-bold text-slate-800"><SlidersHorizontal size={18} className="text-amber-500" />Waste alert thresholds</h2>
-          <p className="mt-1 text-xs text-slate-400">Configure the kilogram boundaries used to label simulated readings for {location.name}.</p>
+          <p className="mt-1 text-xs text-slate-400">Configure the kilogram boundaries used to label sensor readings for {location.name}.</p>
         </div>
         {!threshold && <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700"><AlertTriangle size={13} />Unsaved defaults</span>}
       </div>

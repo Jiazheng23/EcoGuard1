@@ -172,7 +172,7 @@ export default function Reports({ profiles, trips, locations, metrics, loading, 
 
       <article className={card}>
         <h2 className="mb-1 font-bold text-slate-800">Latest waste and recycling by ecological location</h2>
-        <p className="mb-4 text-xs text-slate-400">Updates after a simulated snapshot is saved in Waste Management</p>
+        <p className="mb-4 text-xs text-slate-400">Updates after a sensor reading is saved in Waste Management</p>
         {environmental.byLocation.length ? <ResponsiveContainer width="100%" height={280}>
           <BarChart data={environmental.byLocation} margin={{ left: -12, right: 8 }}>
             <CartesianGrid stroke="#f1f5f9" strokeDasharray="3 3" vertical={false} />

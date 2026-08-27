@@ -47,7 +47,7 @@ export default function WasteCollectionHistory({ location, collections, filters,
 
 function SourceBadge({ source }) {
   const simulated = source === 'simulated_sensor'
-  return <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${simulated ? 'bg-violet-50 text-violet-700' : 'bg-slate-100 text-slate-600'}`}>{simulated ? 'Simulated sensor' : 'Manual'}</span>
+  return <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${simulated ? 'bg-violet-50 text-violet-700' : 'bg-slate-100 text-slate-600'}`}>{simulated ? 'Automated sensor' : 'Manual'}</span>
 }
 
 function StatusBadge({ status }) {

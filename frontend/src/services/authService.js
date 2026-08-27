@@ -36,11 +36,23 @@ export async function sendPasswordReset(email) {
   const { data, error } = await supabase.auth.resetPasswordForEmail(
     email.trim().toLowerCase(),
     {
-      redirectTo: `${window.location.origin}/login`,
+      redirectTo: `${window.location.origin}/reset-password`,
     },
   )
 
   if (error) throw error
+
+  return data
+}
+
+export async function updateRecoveredPassword(password) {
+  const { data, error } = await supabase.auth.updateUser({ password })
+  if (error) throw error
+
+  const { error: signOutError } = await supabase.auth.signOut({ scope: 'global' })
+  if (signOutError) {
+    await supabase.auth.signOut({ scope: 'local' })
+  }
 
   return data
 }
