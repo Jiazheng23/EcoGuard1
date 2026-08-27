@@ -2,7 +2,7 @@ import { CalendarClock, ClipboardCheck, Database } from 'lucide-react'
 import WasteSimulator from './WasteSimulator'
 import WasteThresholdSettings from './WasteThresholdSettings'
 
-export default function WasteOverview({ location, baseline, threshold, schedules, collections, loading, onDataChange, onThresholdSaved }) {
+export default function WasteOverview({ location, baseline, threshold, schedules, collections, loading, onMetricCreated, onThresholdSaved }) {
   const nextSchedule = [...schedules]
     .filter((item) => item.status === 'scheduled' && new Date(item.scheduled_for) > new Date())
     .sort((left, right) => new Date(left.scheduled_for) - new Date(right.scheduled_for))[0]
@@ -17,7 +17,7 @@ export default function WasteOverview({ location, baseline, threshold, schedules
         <OverviewCard icon={Database} label="Latest saved reading" value={loading ? 'Loading…' : baseline ? `${Number(baseline.waste_kg || 0).toFixed(2)} kg` : 'No snapshot'} detail={baseline ? `Sensor reading · ${formatDate(baseline.recorded_at)}` : 'Save a sensor reading below'} color="#f97316" />
       </section>
 
-      <WasteSimulator key={`${location.id}-${baseline?.id || 'new'}`} location={location} baseline={baseline} threshold={threshold} onDataChange={onDataChange} />
+      <WasteSimulator key={location.id} location={location} baseline={baseline} threshold={threshold} onMetricCreated={onMetricCreated} />
       <WasteThresholdSettings key={`${location.id}-${threshold?.updated_at || 'defaults'}`} location={location} threshold={threshold} onSaved={onThresholdSaved} />
     </div>
   )

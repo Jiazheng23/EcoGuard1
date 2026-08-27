@@ -1,35 +1,68 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Activity, AlertCircle, CloudOff, CloudSun, Database, Power, Recycle, Save, ThermometerSun, Trash2, Users, Waves } from 'lucide-react'
 import { createLocationMetric, createSimulatedMetric } from '../../../services/locationService'
 import { wasteLevelFor } from '../../../utils/wasteValidation'
 
-export default function WasteSimulator({ location, baseline, threshold, onDataChange }) {
+const SENSOR_UPDATE_INTERVAL_MS = 10000
+
+export default function WasteSimulator({ location, baseline, threshold, onMetricCreated }) {
   const [metric, setMetric] = useState(() => createSimulatedMetric(location, baseline))
   const [history, setHistory] = useState(() => [Number(baseline?.waste_kg || metric.waste_kg)])
   const [sensorOnline, setSensorOnline] = useState(true)
-  const [lastSimulatedAt, setLastSimulatedAt] = useState(() => new Date())
+  const [lastSavedAt, setLastSavedAt] = useState(() => baseline?.recorded_at ? new Date(baseline.recorded_at) : null)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
+  const metricRef = useRef(metric)
+  const persistenceInFlight = useRef(false)
+
+  const persistMetric = useCallback(async (reading, showSuccess = false) => {
+    if (persistenceInFlight.current) return null
+    persistenceInFlight.current = true
+    setSaving(true)
+    try {
+      const savedMetric = await createLocationMetric(reading)
+      onMetricCreated?.(savedMetric)
+      setLastSavedAt(new Date(savedMetric.recorded_at || Date.now()))
+      setMessage(showSuccess ? 'Sensor reading saved successfully.' : 'Latest sensor reading saved automatically.')
+      return savedMetric
+    } catch (saveError) {
+      setMessage(`Unable to save the sensor reading. ${saveError.message || 'Please try again.'}`)
+      return null
+    } finally {
+      persistenceInFlight.current = false
+      setSaving(false)
+    }
+  }, [onMetricCreated])
 
   useEffect(() => {
     if (!sensorOnline) return undefined
 
-    const timer = window.setInterval(() => {
-      setMetric((current) => {
-        const next = createSimulatedMetric(location, current)
-        setHistory((items) => [...items.slice(-17), next.waste_kg])
-        setLastSimulatedAt(new Date())
-        return next
-      })
-    }, 3500)
-    return () => window.clearInterval(timer)
-  }, [location, sensorOnline])
+    let active = true
+    let timer
+
+    async function updateSensor() {
+      const next = createSimulatedMetric(location, metricRef.current)
+      if (!active) return
+      metricRef.current = next
+      setMetric(next)
+      setHistory((items) => [...items.slice(-17), next.waste_kg])
+      await persistMetric(next)
+      if (active) timer = window.setTimeout(updateSensor, SENSOR_UPDATE_INTERVAL_MS)
+    }
+
+    timer = window.setTimeout(updateSensor, SENSOR_UPDATE_INTERVAL_MS)
+    return () => {
+      active = false
+      window.clearTimeout(timer)
+    }
+  }, [location, persistMetric, sensorOnline])
 
   function toggleSensor() {
     setMessage('')
     if (sensorOnline) {
       if (baseline) {
         const storedMetric = metricFromStoredReading(location, baseline)
+        metricRef.current = storedMetric
         setMetric(storedMetric)
         setHistory([storedMetric.waste_kg])
       }
@@ -38,25 +71,16 @@ export default function WasteSimulator({ location, baseline, threshold, onDataCh
     }
 
     const next = createSimulatedMetric(location, baseline || metric)
+    metricRef.current = next
     setMetric(next)
     setHistory((items) => [...items.slice(-17), next.waste_kg])
-    setLastSimulatedAt(new Date())
     setSensorOnline(true)
   }
 
   async function saveSnapshot() {
     if (!sensorOnline) return
-    setSaving(true)
     setMessage('')
-    try {
-      await createLocationMetric(metric)
-      await onDataChange?.()
-      setMessage('Sensor reading saved and is now available to shared environmental views.')
-    } catch (saveError) {
-      setMessage(saveError.message || 'Unable to save the sensor reading.')
-    } finally {
-      setSaving(false)
-    }
+    await persistMetric(metricRef.current, true)
   }
 
   const fallbackUnavailable = !sensorOnline && !baseline
@@ -82,7 +106,7 @@ export default function WasteSimulator({ location, baseline, threshold, onDataCh
               </div>
               <p className="mt-1 text-xs text-slate-500">
                 {sensorOnline
-                  ? `Updates every 3.5 seconds. Last sensor update: ${formatDate(lastSimulatedAt)}`
+                  ? `Updates every 10 seconds and saves automatically. Last saved: ${formatDate(lastSavedAt)}`
                   : baseline
                     ? `Showing latest stored fallback from ${formatDate(baseline.recorded_at)}.`
                     : 'No stored fallback is available for this location.'}
@@ -115,11 +139,11 @@ export default function WasteSimulator({ location, baseline, threshold, onDataCh
 
           <section className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
             <article className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-              <div className="flex items-start justify-between"><div><h2 className="font-bold text-slate-800">{sensorOnline ? 'Live waste trend' : 'Stored fallback reading'}</h2><p className="mt-1 text-xs text-slate-400">{sensorOnline ? 'Live sensor feed; persisted analytics use collection records.' : 'The trend is paused while the sensor is offline.'}</p></div><Trash2 size={20} className="text-orange-500" /></div>
+              <div><h2 className="font-bold text-slate-800">{sensorOnline ? 'Live waste trend' : 'Stored fallback reading'}</h2><p className="mt-1 text-xs text-slate-400">{sensorOnline ? 'Live sensor feed; each reading is stored automatically.' : 'The trend is paused while the sensor is offline.'}</p></div>
               <MiniChart values={history} />
               <div className="mt-2 flex justify-between text-xs text-slate-400"><span>{sensorOnline ? 'Earlier' : 'Stored snapshot'}</span><span>Latest {metric.waste_kg.toFixed(2)} kg</span></div>
             </article>
-            <article className="rounded-2xl bg-gradient-to-br from-teal-600 to-blue-600 p-6 text-white shadow-lg shadow-blue-600/15"><Waves size={27} /><h2 className="mt-4 text-xl font-bold">{sensorOnline ? 'Environmental sensor snapshot' : 'Stored environmental fallback'}</h2><div className="mt-5 space-y-3"><Reading icon={Waves} label="Water quality" value={`${metric.water_quality_score.toFixed(1)} / 100`} /><Reading icon={ThermometerSun} label="Temperature" value={metric.temperature_c == null ? 'Not available' : `${metric.temperature_c.toFixed(1)} C`} /><Reading icon={Users} label="Location capacity" value={capacity.toLocaleString()} /></div><p className="mt-5 text-xs leading-5 text-white/70">{sensorOnline ? 'Saving creates a timestamped reading from the automated sensor feed.' : 'Read-only fallback; restore the sensor to generate or save readings.'}</p></article>
+            <article className="rounded-2xl bg-gradient-to-br from-teal-600 to-blue-600 p-6 text-white shadow-lg shadow-blue-600/15"><Waves size={27} /><h2 className="mt-4 text-xl font-bold">{sensorOnline ? 'Environmental sensor snapshot' : 'Stored environmental fallback'}</h2><div className="mt-5 space-y-3"><Reading icon={Waves} label="Water quality" value={`${metric.water_quality_score.toFixed(1)} / 100`} /><Reading icon={ThermometerSun} label="Temperature" value={metric.temperature_c == null ? 'Not available' : `${metric.temperature_c.toFixed(1)} C`} /><Reading icon={Users} label="Location capacity" value={capacity.toLocaleString()} /></div><p className="mt-5 text-xs leading-5 text-white/70">{sensorOnline ? 'Readings are timestamped and saved automatically from the sensor feed.' : 'Read-only fallback; restore the sensor to generate or save readings.'}</p></article>
           </section>
         </>
       )}

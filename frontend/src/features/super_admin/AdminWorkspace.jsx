@@ -128,6 +128,13 @@ export default function AdminWorkspace({ requiredRole }) {
     setProfiles((current) => current.map((item) => item.id === updatedProfile.id ? updatedProfile : item))
   }
 
+  const handleMetricCreated = useCallback((createdMetric) => {
+    setMetrics((current) => [
+      createdMetric,
+      ...current.filter((item) => String(item.id) !== String(createdMetric.id)),
+    ].slice(0, 500))
+  }, [])
+
   if (loading) {
     return <main className="grid min-h-screen place-items-center bg-slate-50"><p className="text-sm font-medium text-slate-500">Loading administrator workspace...</p></main>
   }
@@ -153,6 +160,7 @@ export default function AdminWorkspace({ requiredRole }) {
     loading: dataLoading,
     error: dataError,
     onDataChange: () => refreshData(profile),
+    onMetricCreated: handleMetricCreated,
     user,
     profile,
     isSuperAdmin: profile.role === 'super_admin',
