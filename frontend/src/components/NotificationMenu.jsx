@@ -1,0 +1,88 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Bell, CheckCheck } from 'lucide-react'
+
+const roleNotifications = {
+  tourist: [
+    { id: 'eco-status', title: 'Ecological status updates', detail: 'Review current crowd, warning, and environmental conditions.', page: 'monitoring' },
+    { id: 'plan-trip', title: 'Plan a lower-carbon journey', detail: 'Calculate a route and review the recommended transport mode.', page: 'carbon' },
+  ],
+  location_admin: [
+    { id: 'thresholds', title: 'Review crowd thresholds', detail: 'Confirm warning levels and automatic-alert settings for your location.', page: 'thresholds' },
+    { id: 'waste', title: 'Waste records require regular updates', detail: 'Review collections, schedules, and the latest stored estimate.', page: 'waste' },
+    { id: 'reports', title: 'Location reports are available', detail: 'Open your scoped environmental and waste reports.', page: 'reports' },
+  ],
+  super_admin: [
+    { id: 'applications', title: 'Review administrator applications', detail: 'Check pending location-administrator access requests.', page: 'applications' },
+    { id: 'locations', title: 'Monitor ecological locations', detail: 'Review managed destinations and their latest snapshots.', page: 'locations' },
+    { id: 'reports', title: 'System reports are available', detail: 'Review trip and environmental information across locations.', page: 'reports' },
+  ],
+}
+
+export default function NotificationMenu({ role = 'tourist', userId, onNavigate, accent = 'green' }) {
+  const [open, setOpen] = useState(false)
+  const storageKey = `ecoguard-notifications-read:${userId || role}`
+  const [readIds, setReadIds] = useState(() => readStoredIds(storageKey))
+  const containerRef = useRef(null)
+  const notifications = useMemo(() => roleNotifications[role] || roleNotifications.tourist, [role])
+  const unreadCount = notifications.filter((item) => !readIds.includes(item.id)).length
+  const accentClasses = accent === 'blue' ? 'hover:bg-blue-50 hover:text-blue-700' : 'hover:bg-green-50 hover:text-green-700'
+
+  useEffect(() => {
+    if (!open) return undefined
+    function closeMenu(event) {
+      if (event.type === 'keydown' && event.key !== 'Escape') return
+      if (event.type === 'pointerdown' && containerRef.current?.contains(event.target)) return
+      setOpen(false)
+    }
+    document.addEventListener('pointerdown', closeMenu)
+    document.addEventListener('keydown', closeMenu)
+    return () => {
+      document.removeEventListener('pointerdown', closeMenu)
+      document.removeEventListener('keydown', closeMenu)
+    }
+  }, [open])
+
+  function storeReadIds(nextIds) {
+    setReadIds(nextIds)
+    window.localStorage.setItem(storageKey, JSON.stringify(nextIds))
+  }
+
+  function openNotification(item) {
+    if (!readIds.includes(item.id)) storeReadIds([...readIds, item.id])
+    setOpen(false)
+    onNavigate?.(item.page)
+  }
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button type="button" onClick={() => setOpen((current) => !current)} aria-label="Notifications" aria-haspopup="menu" aria-expanded={open} className="relative rounded-lg p-2 text-slate-400 hover:bg-slate-50 hover:text-slate-600">
+        <Bell size={17} />
+        {unreadCount > 0 && <span className="absolute right-0 top-0 grid min-w-4 place-items-center rounded-full bg-red-500 px-1 text-[9px] font-bold leading-4 text-white">{unreadCount}</span>}
+      </button>
+
+      {open && (
+        <section role="menu" className="absolute right-0 z-50 mt-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-xl">
+          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+            <div><h2 className="text-sm font-bold text-slate-800">Notifications</h2><p className="text-xs text-slate-400">{unreadCount ? `${unreadCount} unread` : 'You are all caught up'}</p></div>
+            <button type="button" disabled={!unreadCount} onClick={() => storeReadIds(notifications.map((item) => item.id))} className="inline-flex items-center gap-1 text-xs font-semibold text-slate-500 disabled:opacity-40"><CheckCheck size={14} /> Mark all read</button>
+          </div>
+          <div className="max-h-80 overflow-y-auto p-2">
+            {notifications.map((item) => {
+              const unread = !readIds.includes(item.id)
+              return <button key={item.id} type="button" role="menuitem" onClick={() => openNotification(item)} className={`flex w-full gap-3 rounded-xl p-3 text-left transition ${accentClasses}`}><span className={`mt-1 size-2 shrink-0 rounded-full ${unread ? 'bg-red-500' : 'bg-slate-200'}`} /><span><b className="block text-sm text-slate-700">{item.title}</b><span className="mt-1 block text-xs leading-5 text-slate-500">{item.detail}</span></span></button>
+            })}
+          </div>
+        </section>
+      )}
+    </div>
+  )
+}
+
+function readStoredIds(storageKey) {
+  try {
+    const value = JSON.parse(window.localStorage.getItem(storageKey) || '[]')
+    return Array.isArray(value) ? value : []
+  } catch {
+    return []
+  }
+}

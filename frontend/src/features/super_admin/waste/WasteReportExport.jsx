@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { CheckCircle2, Download, FileSpreadsheet, LoaderCircle } from 'lucide-react'
+import { CheckCircle2 } from 'lucide-react'
+import DownloadMenu from '../../../components/DownloadMenu'
 import { recordWasteReportExport } from '../../../services/wasteService'
 import { buildWasteCsv, buildWastePdfBytes, downloadWasteReport, wasteReportFilename } from '../../../utils/wasteReport'
 import { wasteFilterDescription } from '../../../utils/wasteAnalytics'
@@ -56,10 +57,14 @@ export default function WasteReportExport({ location, collections, filters, summ
     <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div><h3 className="font-bold text-slate-800">Waste history reports</h3><p className="mt-1 max-w-2xl text-xs leading-5 text-slate-400">Both formats use the active collection filters. PDF includes summary statistics, trend bars, source disclosure, and detailed history; CSV contains the detailed filtered rows.</p></div>
-        <div className="flex gap-2">
-          <button type="button" onClick={() => exportReport('csv')} disabled={!collections.length || Boolean(exporting)} className="inline-flex items-center gap-2 rounded-xl border border-green-200 px-4 py-2.5 text-sm font-semibold text-green-700 disabled:cursor-not-allowed disabled:opacity-40">{exporting === 'csv' ? <LoaderCircle size={16} className="animate-spin" /> : <FileSpreadsheet size={16} />}CSV</button>
-          <button type="button" onClick={() => exportReport('pdf')} disabled={!collections.length || Boolean(exporting)} className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">{exporting === 'pdf' ? <LoaderCircle size={16} className="animate-spin" /> : <Download size={16} />}PDF</button>
-        </div>
+        <DownloadMenu
+          disabled={!collections.length}
+          loading={Boolean(exporting)}
+          items={[
+            { label: 'Download PDF', onClick: () => exportReport('pdf') },
+            { label: 'Download CSV', onClick: () => exportReport('csv') },
+          ]}
+        />
       </div>
 
       <div className="mt-4 rounded-xl bg-slate-50 p-3 text-xs text-slate-500"><b className="text-slate-700">Report scope:</b> {wasteFilterDescription(filters)} - {collections.length} matching record{collections.length === 1 ? '' : 's'}.</div>

@@ -23,7 +23,7 @@ import {
   useMap,
 } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
-import { listEcologicalLocations, listTouristEnvironmentalIndicators } from '../../services/locationService'
+import { listEcologicalLocations, listTouristEnvironmentalIndicators, subscribeToEnvironmentalIndicators } from '../../services/locationService'
 
 const MALAYSIA_CENTER = [4.2105, 101.9758]
 const MALAYSIA_BOUNDS = [
@@ -261,7 +261,7 @@ function managedDestination(location, indicator, index) {
     crowd: indicator?.crowd_level || 'Awaiting data',
     environment: indicator?.environment_condition || 'Awaiting data',
     warning: indicator?.warning_level || 'Awaiting data',
-    visitors: 'Aggregate only',
+    visitors: indicator?.visitor_count == null ? 'Awaiting data' : Number(indicator.visitor_count).toLocaleString(),
     waste: indicator?.waste_level || 'Awaiting data',
     update: indicator?.recorded_at ? new Date(indicator.recorded_at).toLocaleString() : 'Awaiting first stored estimate',
     wasteDataSource: indicator?.data_source === 'simulated' ? 'Simulated stored estimate' : indicator?.data_source === 'stored_estimate' ? 'Stored aggregate estimate' : 'Unavailable',
@@ -298,14 +298,23 @@ export default function EcologicalMonitoring({ onNavigate }) {
         if (!active) return
         if (locationsResult.status === 'rejected') throw locationsResult.reason
         setManagedLocations(locationsResult.value)
-        if (indicatorsResult.status === 'fulfilled') setManagedIndicators(indicatorsResult.value)
-        else setDataError(`${indicatorsResult.reason?.message || 'Aggregate environmental indicators are unavailable.'} Apply the latest waste_management.sql migration.`)
+        if (indicatorsResult.status === 'fulfilled') {
+          setManagedIndicators(indicatorsResult.value)
+          setDataError('')
+        }
+        else setDataError(`${indicatorsResult.reason?.message || 'Aggregate environmental indicators are unavailable.'} Apply the latest ecological monitoring migration.`)
       } catch (loadError) {
         if (active) setDataError(`${loadError.message || 'Managed locations are unavailable.'} Showing prototype fallback data.`)
       }
     }
     loadManagedLocations()
-    return () => { active = false }
+    const unsubscribe = subscribeToEnvironmentalIndicators(loadManagedLocations)
+    const refreshTimer = window.setInterval(loadManagedLocations, 60_000)
+    return () => {
+      active = false
+      unsubscribe()
+      window.clearInterval(refreshTimer)
+    }
   }, [])
 
   const visibleDestinations = useMemo(() => {
@@ -758,7 +767,7 @@ function DestinationDetails({ destination, onBack, onNavigate }) {
             <button
               type="button"
               disabled={restricted}
-              onClick={() => onNavigate('carbon')}
+              onClick={() => onNavigate('carbon', { destination })}
               className="w-full rounded-xl bg-green-500 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               {restricted ? 'Travel Not Recommended' : 'Calculate Trip to Here'}

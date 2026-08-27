@@ -18,6 +18,14 @@ export default function TouristWorkspace() {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [calculatorDestination, setCalculatorDestination] = useState(null);
+
+  function handleNavigate(nextPage, options = {}) {
+    if (nextPage === "carbon") {
+      setCalculatorDestination(options.destination || null);
+    }
+    setPage(nextPage);
+  }
 
   useEffect(() => {
     async function loadUser() {
@@ -87,21 +95,21 @@ export default function TouristWorkspace() {
   return (
     <TouristLayout
       activePage={page}
-      onNavigate={setPage}
+      onNavigate={handleNavigate}
       user={user}
       profile={profile}
       onLogout={handleLogout}
     >
       {page === "dashboard" ? (
-        <TouristDashboard onNavigate={setPage} user={user} profile={profile} />
+        <TouristDashboard onNavigate={handleNavigate} user={user} profile={profile} />
       ) : page === "carbon" ? (
-        <CarbonCalculator user={user} />
+        <CarbonCalculator user={user} initialDestination={calculatorDestination} />
       ) : page === "history" ? (
         <TouristHistory user={user} />
       ) : page === "achievements" ? (
         <TouristAchievements user={user} profile={profile} />
       ) : page === "monitoring" ? (
-        <EcologicalMonitoring onNavigate={setPage} />
+        <EcologicalMonitoring onNavigate={handleNavigate} />
       ) : page === "profile" ? (
         <TouristProfile
           user={user}

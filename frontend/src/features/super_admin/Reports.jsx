@@ -12,7 +12,10 @@ import {
   YAxis,
 } from 'recharts'
 import { BarChart3, CloudSun, Download, Leaf, Recycle, Route, Search, Sparkles, Waves } from 'lucide-react'
+import ReportDownloadDialog from '../../components/ReportDownloadDialog'
 import { latestMetricsByLocation } from '../../services/locationService'
+import { adminReportFilename, buildAdminTripPdfBytes, buildEnvironmentalPdfBytes } from '../../utils/adminReport'
+import { downloadWasteReport } from '../../utils/wasteReport'
 import {
   getDestinationSeries,
   getMonthlySeries,
@@ -27,6 +30,8 @@ export default function Reports({ profiles, trips, locations, metrics, loading, 
   const [locationFilter, setLocationFilter] = useState('all')
   const [dateRange, setDateRange] = useState('30')
   const [filterReferenceTime] = useState(() => Date.now())
+  const [downloadDialogOpen, setDownloadDialogOpen] = useState(false)
+  const [downloadMessage, setDownloadMessage] = useState('')
   const selectedLocation = locations.find((location) => String(location.id) === locationFilter)
   const startTimestamp = dateRange === 'all'
     ? null
@@ -105,14 +110,37 @@ export default function Reports({ profiles, trips, locations, metrics, loading, 
     URL.revokeObjectURL(url)
   }
 
+  function downloadReport(type, format) {
+    const generatedAt = new Date()
+    const scope = `${selectedLocation?.name || 'All accessible locations'}; ${dateRange === 'all' ? 'all dates' : `last ${dateRange} days`}`
+    if (format === 'csv') {
+      if (type === 'environment') exportEnvironmentalCsv()
+      else exportCsv()
+    } else {
+      const bytes = type === 'environment'
+        ? buildEnvironmentalPdfBytes(filteredMetrics, filteredLocations, { generatedAt, scope })
+        : buildAdminTripPdfBytes(filteredTrips, { generatedAt, scope })
+      downloadWasteReport(bytes, 'application/pdf', adminReportFilename(type, 'pdf', generatedAt))
+    }
+    setDownloadMessage(`${type === 'environment' ? 'Environmental' : 'Trip'} report downloaded as ${format.toUpperCase()}.`)
+  }
+
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div><h1 className="text-2xl font-bold text-slate-900">Reports & Environmental Data</h1><p className="mt-1 text-sm text-slate-500">Shared Supabase analytics from trips and saved environmental snapshots</p></div>
-        <div className="flex flex-wrap gap-2"><button type="button" onClick={exportEnvironmentalCsv} disabled={!filteredMetrics.length} className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-600 disabled:opacity-50"><Download size={16} /> Environment CSV</button><button type="button" onClick={exportCsv} disabled={!filteredTrips.length} className="inline-flex items-center gap-2 rounded-xl bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-50"><Download size={16} /> Trips CSV</button></div>
+        <button type="button" onClick={() => { setDownloadMessage(''); setDownloadDialogOpen(true) }} disabled={!filteredMetrics.length && !filteredTrips.length} className="inline-flex items-center justify-center gap-2 rounded-xl bg-green-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"><Download size={15} />Download</button>
       </header>
 
       {error && <div className="rounded-xl bg-red-50 p-3 text-sm text-red-600">{error}</div>}
+      {downloadMessage && <div role="status" className="rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-700">{downloadMessage}</div>}
+
+      <ReportDownloadDialog
+        open={downloadDialogOpen}
+        onClose={() => setDownloadDialogOpen(false)}
+        counts={{ environment: filteredMetrics.length, trips: filteredTrips.length }}
+        onDownload={downloadReport}
+      />
 
       <section className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
         <div className="grid gap-3 md:grid-cols-[1fr_220px_170px_auto]">

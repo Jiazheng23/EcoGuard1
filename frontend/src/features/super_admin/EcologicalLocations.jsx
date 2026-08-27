@@ -5,6 +5,15 @@ import {
   deleteEcologicalLocation,
   updateEcologicalLocation,
 } from '../../services/locationService'
+import WestMalaysiaLocationPicker from './WestMalaysiaLocationPicker'
+import { isWestMalaysiaCoordinate } from '../../utils/westMalaysia'
+
+const locationTypes = ['Cultural Site', 'World Heritage Site', 'National Park', 'Tourist attractions', 'Geopark', 'Marine Park', 'Highland Reserve']
+const timeOptions = Array.from({ length: 48 }, (_, index) => {
+  const hours = String(Math.floor(index / 2)).padStart(2, '0')
+  const minutes = index % 2 ? '30' : '00'
+  return `${hours}:${minutes}`
+})
 
 const emptyForm = () => ({
   name: '',
@@ -16,7 +25,11 @@ const emptyForm = () => ({
   max_capacity: 500,
   operating_hours: '',
   best_visit_time: '',
-  alternative_location: '',
+  operating_start: '08:00',
+  operating_end: '18:00',
+  visit_start: '09:00',
+  visit_end: '16:00',
+  location_confirmed: false,
   is_active: true,
 })
 
@@ -62,6 +75,8 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
   }
 
   function openEdit(location) {
+    const operatingRange = parseTimeRange(location.operating_hours, '08:00', '18:00')
+    const visitRange = parseTimeRange(location.best_visit_time, '09:00', '16:00')
     setEditing(location.id)
     setForm({
       name: location.name,
@@ -73,7 +88,11 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
       max_capacity: location.max_capacity,
       operating_hours: location.operating_hours || '',
       best_visit_time: location.best_visit_time || '',
-      alternative_location: location.alternative_location || '',
+      operating_start: operatingRange.start,
+      operating_end: operatingRange.end,
+      visit_start: visitRange.start,
+      visit_end: visitRange.end,
+      location_confirmed: true,
       is_active: location.is_active,
     })
     setMessage('')
@@ -86,11 +105,24 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
 
   async function saveLocation(event) {
     event.preventDefault()
+    if (!form.location_confirmed || !isWestMalaysiaCoordinate(form.latitude, form.longitude) || !form.state) {
+      setMessage('Search for and confirm a valid destination within West Malaysia before saving.')
+      return
+    }
+    if (form.operating_start >= form.operating_end || form.visit_start >= form.visit_end) {
+      setMessage('Each end time must be later than its start time.')
+      return
+    }
     setSaving(true)
     setMessage('')
     try {
-      if (editing === 'new') await createEcologicalLocation(user.id, form)
-      else await updateEcologicalLocation(editing, form)
+      const values = {
+        ...form,
+        operating_hours: `${form.operating_start} - ${form.operating_end}`,
+        best_visit_time: `${form.visit_start} - ${form.visit_end}`,
+      }
+      if (editing === 'new') await createEcologicalLocation(user.id, values)
+      else await updateEcologicalLocation(editing, values)
       await onDataChange()
       setEditing(null)
       setMessage('Location saved to Supabase. Tourist map data is now updated.')
@@ -175,20 +207,20 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
         <div className="fixed inset-0 z-[1000] grid place-items-center overflow-y-auto bg-slate-950/45 p-4" role="presentation">
           <form onSubmit={saveLocation} className="my-6 w-full max-w-3xl rounded-2xl bg-white p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4"><div><h2 className="text-lg font-bold text-slate-900">{editing === 'new' ? 'Add ecological location' : 'Edit ecological location'}</h2><p className="mt-1 text-sm text-slate-500">This information is shared with the Tourist map.</p></div><button type="button" onClick={() => setEditing(null)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={19} /></button></div>
+            <div className="mt-5">
+              <WestMalaysiaLocationPicker latitude={form.latitude} longitude={form.longitude} state={form.state} onConfirmationChange={(confirmed) => setForm((current) => ({ ...current, location_confirmed: confirmed }))} onChange={(location) => setForm((current) => ({ ...current, latitude: location.lat, longitude: location.lng, state: location.state, location_confirmed: true }))} />
+            </div>
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              <Input label="Location name" name="name" value={form.name} onChange={updateField} />
-              <Input label="State" name="state" value={form.state} onChange={updateField} />
-              <Input label="Location type" name="location_type" value={form.location_type} onChange={updateField} />
+              <Input label="Location display name" name="name" value={form.name} onChange={updateField} placeholder="Example: KLCC Park" />
+              <label><span className="mb-1.5 block text-xs font-semibold text-slate-600">State</span><input readOnly required value={form.state} placeholder="Filled automatically after destination confirmation" className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-600 outline-none" /></label>
+              <label><span className="mb-1.5 block text-xs font-semibold text-slate-600">Location type</span><select required name="location_type" value={form.location_type} onChange={updateField} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500">{locationTypes.map((type) => <option key={type}>{type}</option>)}</select></label>
               <Input label="Maximum capacity" name="max_capacity" type="number" min="1" value={form.max_capacity} onChange={updateField} />
-              <Input label="Latitude" name="latitude" type="number" min="-90" max="90" step="any" value={form.latitude} onChange={updateField} />
-              <Input label="Longitude" name="longitude" type="number" min="-180" max="180" step="any" value={form.longitude} onChange={updateField} />
-              <Input label="Operating hours" name="operating_hours" value={form.operating_hours} onChange={updateField} required={false} />
-              <Input label="Best visit time" name="best_visit_time" value={form.best_visit_time} onChange={updateField} required={false} />
-              <Input label="Alternative location" name="alternative_location" value={form.alternative_location} onChange={updateField} required={false} />
+              <TimeRangeField label="Operating hours" startName="operating_start" endName="operating_end" start={form.operating_start} end={form.operating_end} onChange={updateField} />
+              <TimeRangeField label="Best visit time" startName="visit_start" endName="visit_end" start={form.visit_start} end={form.visit_end} onChange={updateField} />
               <label className="flex items-end"><span className="flex h-[42px] w-full items-center gap-3 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-700"><input name="is_active" type="checkbox" checked={form.is_active} onChange={updateField} className="size-4 accent-blue-500" /> Display on Tourist map</span></label>
               <label className="sm:col-span-2"><span className="mb-1.5 block text-xs font-semibold text-slate-600">Description</span><textarea name="description" value={form.description} onChange={updateField} rows="3" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-500" /></label>
             </div>
-            <div className="mt-6 flex justify-end gap-3"><button type="button" onClick={() => setEditing(null)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600">Cancel</button><button type="submit" disabled={saving} className="rounded-xl bg-blue-500 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60">{saving ? 'Saving...' : 'Save location'}</button></div>
+            <div className="mt-6 flex justify-end gap-3"><button type="button" onClick={() => setEditing(null)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600">Cancel</button><button type="submit" disabled={saving || !form.location_confirmed} className="rounded-xl bg-blue-500 px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60">{saving ? 'Saving...' : 'Save location'}</button></div>
           </form>
         </div>
       )}
@@ -202,6 +234,23 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
 
 function Input({ label, required = true, ...props }) {
   return <label><span className="mb-1.5 block text-xs font-semibold text-slate-600">{label}</span><input required={required} {...props} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-500" /></label>
+}
+
+function TimeRangeField({ label, startName, endName, start, end, onChange }) {
+  return <fieldset><legend className="mb-1.5 text-xs font-semibold text-slate-600">{label}</legend><div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2"><label><span className="sr-only">{label} start time</span><select name={startName} value={start} onChange={onChange} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500">{timeOptions.map((time) => <option key={time} value={time}>{formatTimeLabel(time)}</option>)}</select></label><span className="text-xs font-semibold text-slate-400">to</span><label><span className="sr-only">{label} end time</span><select name={endName} value={end} onChange={onChange} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500">{timeOptions.map((time) => <option key={time} value={time}>{formatTimeLabel(time)}</option>)}</select></label></div></fieldset>
+}
+
+function formatTimeLabel(value) {
+  const [hours, minutes] = value.split(':').map(Number)
+  const period = hours >= 12 ? 'PM' : 'AM'
+  const displayHours = hours % 12 || 12
+  return `${displayHours}:${String(minutes).padStart(2, '0')} ${period}`
+}
+
+function parseTimeRange(value, fallbackStart, fallbackEnd) {
+  const match = String(value || '').match(/(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})/)
+  if (!match || !timeOptions.includes(match[1]) || !timeOptions.includes(match[2])) return { start: fallbackStart, end: fallbackEnd }
+  return { start: match[1], end: match[2] }
 }
 
 function Stat({ label, value, icon: Icon, color, loading }) {

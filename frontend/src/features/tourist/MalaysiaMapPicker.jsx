@@ -74,12 +74,14 @@ function FitJourney({
 
 export default function MalaysiaMapPicker({
   onJourneyChange,
+  initialDestination = null,
+  lockDestination = false,
 }) {
   const callbackRef = useRef(onJourneyChange)
 
   const [selecting, setSelecting] = useState('origin')
   const [origin, setOrigin] = useState(null)
-  const [destination, setDestination] = useState(null)
+  const [destination, setDestination] = useState(initialDestination)
   const [routeCoordinates, setRouteCoordinates] =
     useState([])
 
@@ -88,7 +90,9 @@ export default function MalaysiaMapPicker({
   const [searching, setSearching] = useState(false)
   const [routeLoading, setRouteLoading] = useState(false)
   const [message, setMessage] = useState(
-    'Select Origin, then search or click the map.',
+    initialDestination
+      ? 'Destination is ready. Select your origin to calculate the route.'
+      : 'Select Origin, then search or click the map.',
   )
   const [error, setError] = useState('')
 
@@ -159,13 +163,13 @@ export default function MalaysiaMapPicker({
     if (selecting === 'origin') {
       setOrigin(location)
       setRouteCoordinates([])
-      setSelecting('destination')
-      setMessage(
-        'Origin selected. Now select the destination.',
-      )
+      setSelecting(lockDestination ? 'origin' : 'destination')
+      setMessage(lockDestination
+        ? 'Origin selected. Calculating the route to your chosen destination.'
+        : 'Origin selected. Now select the destination.')
       callbackRef.current?.({
         origin: location,
-        destination: null,
+        destination: lockDestination ? destination : null,
         distanceKm: 0,
         durationMinutes: 0,
       })
@@ -224,18 +228,20 @@ export default function MalaysiaMapPicker({
   function resetJourney() {
     setSelecting('origin')
     setOrigin(null)
-    setDestination(null)
+    setDestination(initialDestination)
     setRouteCoordinates([])
     setQuery('')
     setSearchResults([])
     setError('')
     setMessage(
-      'Select Origin, then search or click the map.',
+      initialDestination
+        ? 'Destination is ready. Select your origin to calculate the route.'
+        : 'Select Origin, then search or click the map.',
     )
 
     callbackRef.current?.({
       origin: null,
-      destination: null,
+      destination: initialDestination,
       distanceKm: 0,
       durationMinutes: 0,
     })
@@ -267,6 +273,7 @@ export default function MalaysiaMapPicker({
       <div className="mb-4 grid gap-3 sm:grid-cols-2">
         <button
           type="button"
+          disabled={lockDestination}
           onClick={() => {
             setSelecting('origin')
             setMessage('Select the starting location.')
@@ -300,7 +307,7 @@ export default function MalaysiaMapPicker({
             selecting === 'destination'
               ? 'border-orange-500 bg-orange-50'
               : 'border-slate-100 bg-slate-50'
-          }`}
+          } ${lockDestination ? 'cursor-not-allowed opacity-80' : ''}`}
         >
           <span className="flex items-center gap-2 text-sm font-semibold">
             <MapPin
@@ -311,7 +318,7 @@ export default function MalaysiaMapPicker({
           </span>
 
           <span className="mt-1 block truncate text-xs text-slate-500">
-            {destination?.name || 'Not selected'}
+            {destination?.name || 'Not selected'}{lockDestination ? ' (selected from Eco Monitoring)' : ''}
           </span>
         </button>
       </div>

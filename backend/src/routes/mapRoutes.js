@@ -144,6 +144,7 @@ router.get('/search', async (req, res) => {
         lat: Number(item.lat),
         lng: Number(item.lon),
         type: item.type,
+        state: item.address?.state || item.address?.territory || item.address?.region || '',
       }))
 
     return res.json({ locations })

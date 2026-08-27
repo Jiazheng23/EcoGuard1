@@ -97,6 +97,21 @@ export async function listTouristEnvironmentalIndicators() {
   return data || []
 }
 
+export function subscribeToEnvironmentalIndicators(onChange) {
+  if (!supabase) return () => {}
+
+  const channel = supabase
+    .channel('tourist-environmental-indicators')
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'location_metrics' },
+      () => onChange?.(),
+    )
+    .subscribe()
+
+  return () => { void supabase.removeChannel(channel) }
+}
+
 export function latestMetricsByLocation(metrics) {
   return (metrics || []).reduce((latest, metric) => {
     const key = String(metric.location_id)
