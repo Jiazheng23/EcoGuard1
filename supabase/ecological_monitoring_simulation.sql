@@ -24,7 +24,7 @@ begin
     auto_alerts,
     updated_by
   ) values (
-    new.id, 60, 80, 90, true, auth.uid()
+    new.id, 60, 80, 90, true, coalesce(auth.uid(), new.created_by)
   ) on conflict (location_id) do nothing;
 
   insert into public.waste_thresholds (
@@ -38,7 +38,7 @@ begin
     round((greatest(new.max_capacity, 1) * 0.025)::numeric, 2),
     round((greatest(new.max_capacity, 1) * 0.050)::numeric, 2),
     round((greatest(new.max_capacity, 1) * 0.075)::numeric, 2),
-    auth.uid()
+    coalesce(auth.uid(), new.created_by)
   ) on conflict (location_id) do nothing;
 
   insert into public.location_metrics (

@@ -33,7 +33,7 @@ PORT=5000
 
    For legacy accounts where only `profiles.role` was updated, the protected application endpoint verifies that canonical profile and synchronizes the missing Auth `app_metadata.role`. The browser refreshes its session immediately afterward so RLS sees the updated claim.
 
-Location administrators choose one active location and upload a PDF, JPG, or PNG company document (maximum 5 MB). Registration creates only a pending application. A super admin reviews the private document from **Admin Applications**; approval writes the trusted `location_admin` role and assigned location. Super admins cannot be created through public registration.
+Location administrators first register with only their full name, email, and password. They are then sent to a protected onboarding page where they can search for a place through OpenStreetMap, paste and resolve an address, or choose an existing unassigned location, before uploading a PDF, JPG, or PNG company document (maximum 5 MB). A super admin reviews the private document and requested location from **Admin Applications**; approval writes the trusted `location_admin` role and assigned location. Super admins cannot be created through public registration.
 
 ## Run locally
 

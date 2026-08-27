@@ -8,7 +8,6 @@ import {
   Leaf,
   LockKeyhole,
   Mail,
-  MapPin,
   ShieldCheck,
   UserRound,
 } from "lucide-react";
@@ -23,7 +22,6 @@ import {
   sendPasswordReset,
   updateRecoveredPassword,
 } from "../../services/authService";
-import { listEcologicalLocations } from "../../services/locationService";
 import {
   hasPasswordRecoveryEvidence,
   passwordRecoveryError,
@@ -69,17 +67,7 @@ export default function AuthPage({ initialMode }) {
     email: "",
     password: "",
     confirmPassword: "",
-    locationId: "",
   });
-  const [locations, setLocations] = useState([]);
-  const [companyDocument, setCompanyDocument] = useState(null);
-
-  useEffect(() => {
-    if (mode !== "register" || role !== "location_admin" || !supabase) return;
-    listEcologicalLocations({ activeOnly: true })
-      .then(setLocations)
-      .catch(() => setLocations([]));
-  }, [mode, role]);
 
   useEffect(() => {
     if (mode !== "reset") return undefined;
@@ -205,7 +193,7 @@ export default function AuthPage({ initialMode }) {
         } else if (accountRole === "location_admin") {
           navigate("/location_admin/dashboard");
         } else if (accountRole === "pending_location_admin") {
-          navigate("/location_admin/pending");
+          navigate("/location_admin/application");
         } else {
           navigate("/tourist/dashboard");
         }
@@ -214,24 +202,17 @@ export default function AuthPage({ initialMode }) {
       }
 
       if (mode === "register") {
-        let encodedDocument
-        if (role === "location_admin") {
-          if (!companyDocument) throw new Error("A company document is required.");
-          if (companyDocument.size > 5 * 1024 * 1024) throw new Error("The company document must be 5 MB or smaller.");
-          encodedDocument = {
-            name: companyDocument.name,
-            type: companyDocument.type,
-            base64: await fileToBase64(companyDocument),
-          };
-        }
         await registerUser({
           name: form.name.trim(),
           email: cleanEmail,
           password: form.password,
           role,
-          locationId: form.locationId,
-          companyDocument: encodedDocument,
         });
+        if (role === 'location_admin') {
+          await loginUser(cleanEmail, form.password)
+          navigate('/location_admin/application')
+          return
+        }
         navigate("/login");
       }
     } catch (error) {
@@ -374,28 +355,6 @@ export default function AuthPage({ initialMode }) {
                   onChange={updateField}
                 />
               )}
-              {mode === "register" && role === "location_admin" && (
-                <>
-                <label className="field">
-                  <span>Managed location</span>
-                  <div className="field__input">
-                    <MapPin size={17} />
-                    <select name="locationId" value={form.locationId} onChange={updateField} required>
-                      <option value="">Select one location</option>
-                      {locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
-                    </select>
-                  </div>
-                </label>
-                <label className="field">
-                  <span>Company document</span>
-                  <div className="field__input">
-                    <ShieldCheck size={17} />
-                    <input type="file" accept="application/pdf,image/jpeg,image/png" onChange={(event) => setCompanyDocument(event.target.files?.[0] || null)} required />
-                  </div>
-                  <small>PDF, JPG, or PNG; maximum 5 MB. A super admin will review it.</small>
-                </label>
-                </>
-              )}
               {mode !== "forgot" && (
                 <div className="field">
                   <div className="field__label">
@@ -501,15 +460,6 @@ export default function AuthPage({ initialMode }) {
       </section>
     </main>
   );
-}
-
-function fileToBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
-    reader.onerror = () => reject(new Error('Could not read the company document.'));
-    reader.readAsDataURL(file);
-  });
 }
 
 function Field({

@@ -61,6 +61,8 @@ export default function AdminApplications() {
       const searchableValues = [
         item.profiles?.full_name,
         item.ecological_locations?.name,
+        item.requested_location_name,
+        item.requested_location_address,
         item.company_document_name,
         item.status,
       ]
@@ -137,7 +139,7 @@ export default function AdminApplications() {
                     <td className="px-5 py-4">
                       <p className="font-semibold text-slate-800">{item.profiles?.full_name || 'Unnamed applicant'}</p>
                     </td>
-                    <td className="px-5 py-4 text-slate-600">{item.ecological_locations?.name || item.requested_location_id}</td>
+                    <td className="px-5 py-4 text-slate-600"><p className="font-medium">{item.ecological_locations?.name || item.requested_location_name || item.requested_location_id}</p>{item.requested_location_address && <p className="mt-1 max-w-xs text-xs text-slate-400">{item.requested_location_address}</p>}</td>
                     <td className="px-5 py-4">
                       {item.documentUrl ? (
                         <a href={item.documentUrl} target="_blank" rel="noreferrer" className="inline-flex max-w-56 items-center gap-1.5 text-blue-600 hover:text-blue-700">
