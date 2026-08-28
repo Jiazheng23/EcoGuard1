@@ -75,11 +75,11 @@ export default function Reports({ profiles, trips, locations, metrics, loading, 
         water: Number(metric.water_quality_score || 0),
       }
     })
-    const snapshotCount = filteredMetrics.length
+    const readingCount = filteredMetrics.length
     const averageAqi = byLocation.length ? byLocation.reduce((sum, item) => sum + item.aqi, 0) / byLocation.length : 0
     const averageWater = byLocation.length ? byLocation.reduce((sum, item) => sum + item.water, 0) / byLocation.length : 0
     const totalWaste = byLocation.reduce((sum, item) => sum + item.waste, 0)
-    return { byLocation, snapshotCount, averageAqi, averageWater, totalWaste }
+    return { byLocation, readingCount, averageAqi, averageWater, totalWaste }
   }, [filteredLocations, filteredMetrics])
 
   function exportCsv() {
@@ -128,7 +128,7 @@ export default function Reports({ profiles, trips, locations, metrics, loading, 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <div><h1 className="text-2xl font-bold text-slate-900">Reports & Environmental Data</h1><p className="mt-1 text-sm text-slate-500">Shared Supabase analytics from trips and saved environmental snapshots</p></div>
+        <div><h1 className="text-2xl font-bold text-slate-900">Reports & Environmental Data</h1><p className="mt-1 text-sm text-slate-500">Shared Supabase analytics from trips and current environmental readings</p></div>
         <button type="button" onClick={() => { setDownloadMessage(''); setDownloadDialogOpen(true) }} disabled={!filteredMetrics.length && !filteredTrips.length} className="inline-flex items-center justify-center gap-2 rounded-xl bg-green-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"><Download size={15} />Download</button>
       </header>
 
@@ -149,7 +149,7 @@ export default function Reports({ profiles, trips, locations, metrics, loading, 
           <select value={dateRange} onChange={(event) => setDateRange(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-600 outline-none focus:border-blue-500"><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="all">All time</option></select>
           {(query || locationFilter !== 'all' || dateRange !== '30') && <button type="button" onClick={() => { setQuery(''); setLocationFilter('all'); setDateRange('30') }} className="rounded-xl px-3 py-2.5 text-sm font-semibold text-blue-600 hover:bg-blue-50">Reset</button>}
         </div>
-        <div className="mt-2 flex flex-wrap justify-end gap-3 text-xs text-slate-400"><span>{filteredTrips.length} trips</span><span>{filteredMetrics.length} environmental snapshots</span><span>{filteredLocations.length} locations</span></div>
+        <div className="mt-2 flex flex-wrap justify-end gap-3 text-xs text-slate-400"><span>{filteredTrips.length} trips</span><span>{filteredMetrics.length} environmental readings</span><span>{filteredLocations.length} locations</span></div>
       </section>
 
       <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -163,7 +163,7 @@ export default function Reports({ profiles, trips, locations, metrics, loading, 
 
       <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {[
-          ['Saved Snapshots', environmental.snapshotCount, Recycle, '#22c55e'],
+          ['Current Readings', environmental.readingCount, Recycle, '#22c55e'],
           ['Latest Waste', `${environmental.totalWaste.toFixed(1)} kg`, Leaf, '#f97316'],
           ['Average AQI', environmental.averageAqi.toFixed(0), CloudSun, '#8b5cf6'],
           ['Water Quality', `${environmental.averageWater.toFixed(0)} / 100`, Waves, '#0ea5e9'],
@@ -172,7 +172,7 @@ export default function Reports({ profiles, trips, locations, metrics, loading, 
 
       <article className={card}>
         <h2 className="mb-1 font-bold text-slate-800">Latest waste and recycling by ecological location</h2>
-        <p className="mb-4 text-xs text-slate-400">Updates after a sensor reading is saved in Waste Management</p>
+        <p className="mb-4 text-xs text-slate-400">Updates whenever the current reading changes on the Sensors page</p>
         {environmental.byLocation.length ? <ResponsiveContainer width="100%" height={280}>
           <BarChart data={environmental.byLocation} margin={{ left: -12, right: 8 }}>
             <CartesianGrid stroke="#f1f5f9" strokeDasharray="3 3" vertical={false} />

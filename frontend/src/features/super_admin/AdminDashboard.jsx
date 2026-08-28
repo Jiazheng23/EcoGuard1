@@ -11,14 +11,19 @@ import {
   YAxis,
 } from 'recharts'
 import {
+  Activity,
   AlertCircle,
   AlertTriangle,
   CheckCircle,
+  CloudSun,
   MapPin,
+  RadioTower,
   Route,
+  Trash2,
   TrendingDown,
   Users,
 } from 'lucide-react'
+import { latestMetricsByLocation } from '../../services/locationService'
 import {
   formatCarbon,
   formatTripDate,
@@ -35,7 +40,7 @@ const tooltipStyle = {
   fontSize: '0.75rem',
 }
 
-export default function AdminDashboard({ onNavigate, profiles, trips, loading, error }) {
+export default function AdminDashboard({ onNavigate, profiles, trips, locations = [], metrics = [], loading, error }) {
   const data = useMemo(() => {
     const summary = getTripSummary(trips, profiles)
     const monthly = getMonthlySeries(trips)
@@ -48,11 +53,38 @@ export default function AdminDashboard({ onNavigate, profiles, trips, loading, e
     return { summary, monthly, destinations, highCarbonTrips }
   }, [profiles, trips])
 
+  const environmental = useMemo(() => {
+    const latest = latestMetricsByLocation(metrics)
+    const readings = locations.map((location) => latest[String(location.id)]).filter(Boolean)
+    const totalCrowd = readings.reduce((sum, reading) => sum + numberValue(reading.crowd_count), 0)
+    const totalWaste = readings.reduce((sum, reading) => sum + numberValue(reading.waste_kg), 0)
+    const totalRecycled = readings.reduce((sum, reading) => sum + numberValue(reading.recycled_kg), 0)
+    const averageAirQuality = readings.length
+      ? readings.reduce((sum, reading) => sum + numberValue(reading.air_quality_index), 0) / readings.length
+      : 0
+    const averageWaterQuality = readings.length
+      ? readings.reduce((sum, reading) => sum + numberValue(reading.water_quality_score), 0) / readings.length
+      : 0
+    const latestUpdate = readings.reduce((newest, reading) => {
+      const timestamp = new Date(reading.recorded_at).getTime()
+      return Number.isFinite(timestamp) ? Math.max(newest, timestamp) : newest
+    }, 0)
+
+    return { readings, totalCrowd, totalWaste, totalRecycled, averageAirQuality, averageWaterQuality, latestUpdate }
+  }, [locations, metrics])
+
   const kpis = [
     { label: 'Total Tourists', value: data.summary.touristCount, delta: `${profiles.length} total profiles`, color: '#3b82f6', icon: Users, page: 'reports' },
     { label: 'Recorded Destinations', value: data.summary.destinationCount, delta: `${data.summary.totalTrips} saved trips`, color: '#22c55e', icon: MapPin, page: 'locations' },
     { label: 'High Carbon Trips', value: data.summary.highEmissionTrips, delta: 'Above 15 kg per passenger', color: '#ef4444', icon: AlertTriangle, page: 'thresholds' },
     { label: 'Avg Carbon/Trip', value: `${data.summary.averageEmission.toFixed(1)} kg`, delta: `${data.summary.totalEmission.toFixed(1)} kg total`, color: '#8b5cf6', icon: TrendingDown, page: 'reports' },
+  ]
+
+  const environmentalKpis = [
+    { label: 'Locations Monitored', value: `${environmental.readings.length}/${locations.length}`, delta: 'Backend sensor coverage', color: '#0ea5e9', icon: RadioTower, page: 'sensors' },
+    { label: 'Current Visitors', value: Math.round(environmental.totalCrowd).toLocaleString(), delta: 'Across latest readings', color: '#2563eb', icon: Activity, page: 'reports' },
+    { label: 'Detected Waste', value: `${environmental.totalWaste.toFixed(1)} kg`, delta: `${environmental.totalRecycled.toFixed(1)} kg recyclable`, color: '#f97316', icon: Trash2, page: 'reports' },
+    { label: 'Average Air Quality', value: Math.round(environmental.averageAirQuality), delta: `${environmental.averageWaterQuality.toFixed(1)}/100 water quality`, color: '#8b5cf6', icon: CloudSun, page: 'reports' },
   ]
 
   const lowImpact = trips.filter((trip) => numberValue(trip.carbon_emission) <= 5).length
@@ -84,6 +116,28 @@ export default function AdminDashboard({ onNavigate, profiles, trips, loading, e
             <span className="text-xs text-slate-400">{delta}</span>
           </button>
         ))}
+      </section>
+
+      <section aria-labelledby="environmental-overview-heading">
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <h2 id="environmental-overview-heading" className="font-bold text-slate-900">Environmental Monitoring</h2>
+            <p className="mt-0.5 text-xs text-slate-400">Integrated with the tourist and trip overview</p>
+          </div>
+          <span className="text-xs font-medium text-slate-400">Backend sensors · every 5 minutes{environmental.latestUpdate ? ` · Updated ${formatMetricDate(environmental.latestUpdate)}` : ''}</span>
+        </div>
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {environmentalKpis.map(({ label, value, delta, color, icon: Icon, page }) => (
+            <button key={label} type="button" onClick={() => onNavigate(page)} className="flex flex-col gap-2 rounded-2xl border border-slate-100 bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-slate-500">{label}</span>
+                <span className="grid size-8 place-items-center rounded-lg" style={{ backgroundColor: `${color}15` }}><Icon size={16} style={{ color }} /></span>
+              </div>
+              <strong className="text-2xl leading-none" style={{ color }}>{loading ? '—' : value}</strong>
+              <span className="text-xs text-slate-400">{delta}</span>
+            </button>
+          ))}
+        </div>
       </section>
 
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -162,4 +216,8 @@ function ChartCard({ className = '', children }) {
 
 function DataError({ message }) {
   return <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-600" role="alert"><AlertCircle className="mt-0.5 shrink-0" size={17} /><p>{message}</p></div>
+}
+
+function formatMetricDate(timestamp) {
+  return new Intl.DateTimeFormat('en-MY', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(timestamp))
 }

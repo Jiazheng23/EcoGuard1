@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   MapPin,
   Menu,
+  RadioTower,
   Recycle,
   Shield,
   SlidersHorizontal,
@@ -19,6 +20,7 @@ const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', page: 'dashboard' },
   { icon: MapPin, label: 'Locations', page: 'locations' },
   { icon: UserCheck, label: 'Applications', page: 'applications', superOnly: true },
+  { icon: RadioTower, label: 'Sensors', page: 'sensors' },
   { icon: SlidersHorizontal, label: 'Thresholds', page: 'thresholds' },
   {
     icon: Recycle,
@@ -37,6 +39,7 @@ const navItems = [
 const pageLabels = {
   dashboard: 'Dashboard',
   locations: 'Ecological Locations',
+  sensors: 'Sensor Monitoring',
   thresholds: 'Crowd Thresholds',
   waste: 'Waste Management',
   'waste-overview': 'Waste / Overview',

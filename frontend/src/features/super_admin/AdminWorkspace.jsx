@@ -7,6 +7,7 @@ import {
   listCrowdThresholds,
   listEcologicalLocations,
   listLocationMetrics,
+  subscribeToEnvironmentalIndicators,
 } from '../../services/locationService'
 import AdminDashboard from './AdminDashboard'
 import AdminLayout from './AdminLayout'
@@ -16,6 +17,7 @@ import EcologicalLocations from './EcologicalLocations'
 import Reports from './Reports'
 import WasteManagement from './WasteManagement'
 import AdminApplications from './AdminApplications'
+import SensorManagement from './SensorManagement'
 
 export default function AdminWorkspace({ requiredRole }) {
   const navigate = useNavigate()
@@ -135,6 +137,17 @@ export default function AdminWorkspace({ requiredRole }) {
     ].slice(0, 500))
   }, [])
 
+  useEffect(() => {
+    if (!profile) return undefined
+
+    return subscribeToEnvironmentalIndicators((updatedMetric) => {
+      if (!updatedMetric?.id) return
+      const canReadLocation = profile.role === 'super_admin'
+        || String(updatedMetric.location_id) === String(profile.location_id)
+      if (canReadLocation) handleMetricCreated(updatedMetric)
+    })
+  }, [handleMetricCreated, profile])
+
   if (loading) {
     return <main className="grid min-h-screen place-items-center bg-slate-50"><p className="text-sm font-medium text-slate-500">Loading administrator workspace...</p></main>
   }
@@ -183,6 +196,7 @@ export default function AdminWorkspace({ requiredRole }) {
   ) : ({
     dashboard: <AdminDashboard {...sharedProps} onNavigate={setPage} />,
     locations: <EcologicalLocations {...sharedProps} />,
+    sensors: <SensorManagement {...sharedProps} />,
     thresholds: <CrowdThresholds {...sharedProps} />,
     reports: <Reports {...sharedProps} />,
     applications: <AdminApplications />,

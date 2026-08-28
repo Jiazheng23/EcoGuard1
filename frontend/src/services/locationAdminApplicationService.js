@@ -1,24 +1,11 @@
-import { supabase } from './supabaseClient'
-
-async function authorizedRequest(path, options = {}) {
-  const { data } = await supabase.auth.getSession()
-  const token = data.session?.access_token
-  if (!token) throw new Error('Authentication is required.')
-  const response = await fetch(path, {
-    ...options,
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...options.headers },
-  })
-  const payload = await response.json().catch(() => ({}))
-  if (!response.ok) throw new Error(payload.error || 'Application request failed.')
-  return payload
-}
+import { authenticatedRequest } from './authenticatedRequest'
 
 export function getApplicationSetup() {
-  return authorizedRequest('/api/location-admin/unassigned-locations')
+  return authenticatedRequest('/api/location-admin/unassigned-locations')
 }
 
 export function submitLocationAdminApplication(values) {
-  return authorizedRequest('/api/location-admin/application', {
+  return authenticatedRequest('/api/location-admin/application', {
     method: 'POST',
     body: JSON.stringify(values),
   })

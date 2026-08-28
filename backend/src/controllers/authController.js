@@ -22,64 +22,83 @@ function requireAdminClient(res) {
   return false
 }
 
-async function requireSuperAdmin(req, res) {
-  if (!requireAdminClient(res)) return null
+function respondToAdminClientError(res, error) {
+  console.error('Privileged Supabase request failed:', error?.message || 'Unknown Supabase error')
+  res.status(503).json({
+    error: 'Privileged Supabase access is unavailable. Check SUPABASE_SECRET_KEY and restart the backend.',
+  })
+}
+
+async function requireAuthenticatedUser(req, res) {
   const token = req.headers.authorization?.replace(/^Bearer\s+/i, '')
   if (!token) {
     res.status(401).json({ error: 'Authentication is required.' })
     return null
   }
-  const { data, error } = await supabaseAdmin.auth.getUser(token)
+
+  // Verify the caller with the public Auth client. The privileged client is
+  // reserved for the database and Auth Admin operations below, so a backend
+  // key configuration issue is not misreported as an expired user session.
+  const { data, error } = await supabase.auth.getUser(token)
   if (error || !data.user) {
     res.status(401).json({ error: 'The login session is invalid or expired.' })
     return null
   }
 
+  return data.user
+}
+
+async function requireSuperAdmin(req, res) {
+  if (!requireAdminClient(res)) return null
+  const user = await requireAuthenticatedUser(req, res)
+  if (!user) return null
+
   const { data: profile, error: profileError } = await supabaseAdmin
     .from('profiles')
     .select('role')
-    .eq('id', data.user.id)
+    .eq('id', user.id)
     .maybeSingle()
 
-  if (profileError || profile?.role !== 'super_admin') {
+  if (profileError) {
+    respondToAdminClientError(res, profileError)
+    return null
+  }
+  if (profile?.role !== 'super_admin') {
     res.status(403).json({ error: 'Super administrator access is required.' })
     return null
   }
 
   // Profiles are the canonical role record. Keep the trusted Auth claim in sync
   // so subsequent RLS checks receive the same authorization after token refresh.
-  if (data.user.app_metadata?.role !== 'super_admin') {
+  if (user.app_metadata?.role !== 'super_admin') {
     const { error: syncError } = await supabaseAdmin.auth.admin.updateUserById(
-      data.user.id,
-      { app_metadata: { ...data.user.app_metadata, role: 'super_admin' } },
+      user.id,
+      { app_metadata: { ...user.app_metadata, role: 'super_admin' } },
     )
     if (syncError) {
-      res.status(500).json({ error: 'The super administrator Auth role could not be synchronized.' })
+      respondToAdminClientError(res, syncError)
       return null
     }
+    req.authRoleSynchronized = true
   }
-  return data.user
+  return user
 }
 
 async function requirePendingLocationAdmin(req, res) {
   if (!requireAdminClient(res)) return null
-  const token = req.headers.authorization?.replace(/^Bearer\s+/i, '')
-  if (!token) {
-    res.status(401).json({ error: 'Authentication is required.' })
-    return null
-  }
-  const { data, error } = await supabaseAdmin.auth.getUser(token)
-  if (error || !data.user) {
-    res.status(401).json({ error: 'The login session is invalid or expired.' })
-    return null
-  }
+  const user = await requireAuthenticatedUser(req, res)
+  if (!user) return null
   const { data: profile, error: profileError } = await supabaseAdmin
-    .from('profiles').select('role').eq('id', data.user.id).maybeSingle()
-  if (profileError || profile?.role !== 'pending_location_admin') {
+    .from('profiles').select('role').eq('id', user.id).maybeSingle()
+  if (profileError) {
+    respondToAdminClientError(res, profileError)
+    return null
+  }
+  if (profile?.role !== 'pending_location_admin') {
     res.status(403).json({ error: 'A pending location administrator account is required.' })
     return null
   }
-  return data.user
+  return user
 }
 
 export async function register(req, res) {
@@ -125,6 +144,10 @@ export async function register(req, res) {
     const { data, error } = await authRequest
 
     if (error) {
+      if (requestedRole === 'location_admin' && /unregistered|invalid api key/i.test(error.message || '')) {
+        respondToAdminClientError(res, error)
+        return
+      }
       return res.status(400).json({
         error: error.message,
       })
@@ -269,7 +292,11 @@ export async function listAdminApplications(req, res) {
       .from('company-documents').createSignedUrl(item.company_document_path, 600)
     return { ...item, documentUrl: signed?.signedUrl || null }
   }))
-  return res.json({ applications })
+  res.set('Cache-Control', 'private, no-store')
+  return res.json({
+    applications,
+    authRoleSynchronized: Boolean(req.authRoleSynchronized),
+  })
 }
 
 export async function decideAdminApplication(req, res) {

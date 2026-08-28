@@ -90,6 +90,33 @@ export async function listLocationMetrics({ limit = 500 } = {}) {
   return data || []
 }
 
+export async function listLocationSensorControls() {
+  const { data, error } = await supabase
+    .from('location_sensor_controls')
+    .select('*')
+    .order('location_id', { ascending: true })
+
+  throwIfError(error)
+  return data || []
+}
+
+export async function saveLocationSensorControl(userId, locationId, isEnabled) {
+  const payload = {
+    location_id: Number(locationId),
+    is_enabled: Boolean(isEnabled),
+    updated_at: new Date().toISOString(),
+    updated_by: userId,
+  }
+  const { data, error } = await supabase
+    .from('location_sensor_controls')
+    .upsert(payload, { onConflict: 'location_id' })
+    .select()
+    .single()
+
+  throwIfError(error)
+  return data
+}
+
 export async function listTouristEnvironmentalIndicators() {
   if (!supabase) throw new Error('Supabase is not configured.')
   const { data, error } = await supabase.rpc('get_tourist_environmental_indicators')
@@ -105,7 +132,12 @@ export function subscribeToEnvironmentalIndicators(onChange) {
     .on(
       'postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'location_metrics' },
-      () => onChange?.(),
+      (payload) => onChange?.(payload.new),
+    )
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'location_metrics' },
+      (payload) => onChange?.(payload.new),
     )
     .subscribe()
 
@@ -120,8 +152,8 @@ export function latestMetricsByLocation(metrics) {
   }, {})
 }
 
-export async function createLocationMetric(values) {
-  const payload = {
+function normalizeMetric(values) {
+  return {
     location_id: Number(values.location_id),
     crowd_count: Math.max(0, Math.round(Number(values.crowd_count) || 0)),
     waste_kg: Math.max(0, Number(values.waste_kg) || 0),
@@ -132,7 +164,42 @@ export async function createLocationMetric(values) {
       ? null
       : Number(values.temperature_c),
     source: values.source || 'simulated',
+    recorded_at: new Date().toISOString(),
   }
+}
+
+export async function saveCurrentLocationMetric(values) {
+  const payload = {
+    ...normalizeMetric(values),
+  }
+
+  let metricId = values.id ? Number(values.id) : null
+  if (!metricId) {
+    const { data: latest, error: lookupError } = await supabase
+      .from('location_metrics')
+      .select('id')
+      .eq('location_id', payload.location_id)
+      .order('recorded_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    throwIfError(lookupError)
+    metricId = latest?.id || null
+  }
+
+  if (metricId) {
+    const { data, error } = await supabase
+      .from('location_metrics')
+      .update(payload)
+      .eq('id', metricId)
+      .eq('location_id', payload.location_id)
+      .select()
+      .single()
+
+    throwIfError(error)
+    return data
+  }
+
   const { data, error } = await supabase
     .from('location_metrics')
     .insert(payload)
@@ -162,6 +229,7 @@ export function createSimulatedMetric(location, previous) {
   const recycled = drift(baseline.recycled_kg, 0.22, 0, waste, 2)
 
   return {
+    id: previous?.id,
     location_id: location.id,
     crowd_count: drift(baseline.crowd_count, Math.max(2, Number(location.max_capacity) * 0.012), 0, Number(location.max_capacity)),
     waste_kg: waste,

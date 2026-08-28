@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Activity, AlertCircle, CloudOff, CloudSun, Database, Power, Recycle, Save, ThermometerSun, Trash2, Users, Waves } from 'lucide-react'
-import { createLocationMetric, createSimulatedMetric } from '../../../services/locationService'
+import { createSimulatedMetric, saveCurrentLocationMetric } from '../../../services/locationService'
 import { wasteLevelFor } from '../../../utils/wasteValidation'
 
-const SENSOR_UPDATE_INTERVAL_MS = 10000
+const SENSOR_UPDATE_INTERVAL_MS = 5 * 60 * 1000
 
 export default function WasteSimulator({ location, baseline, threshold, onMetricCreated }) {
   const [metric, setMetric] = useState(() => createSimulatedMetric(location, baseline))
@@ -20,13 +20,16 @@ export default function WasteSimulator({ location, baseline, threshold, onMetric
     persistenceInFlight.current = true
     setSaving(true)
     try {
-      const savedMetric = await createLocationMetric(reading)
+      const savedMetric = await saveCurrentLocationMetric(reading)
+      const currentMetric = { ...reading, ...savedMetric }
+      metricRef.current = currentMetric
+      setMetric(currentMetric)
       onMetricCreated?.(savedMetric)
       setLastSavedAt(new Date(savedMetric.recorded_at || Date.now()))
-      setMessage(showSuccess ? 'Sensor reading saved successfully.' : 'Latest sensor reading saved automatically.')
+      setMessage(showSuccess ? 'Current sensor reading updated successfully.' : 'Current sensor row updated automatically.')
       return savedMetric
     } catch (saveError) {
-      setMessage(`Unable to save the sensor reading. ${saveError.message || 'Please try again.'}`)
+      setMessage(`Unable to update the sensor reading. ${saveError.message || 'Please try again.'}`)
       return null
     } finally {
       persistenceInFlight.current = false
@@ -106,7 +109,7 @@ export default function WasteSimulator({ location, baseline, threshold, onMetric
               </div>
               <p className="mt-1 text-xs text-slate-500">
                 {sensorOnline
-                  ? `Updates every 10 seconds and saves automatically. Last saved: ${formatDate(lastSavedAt)}`
+                  ? `Updates the same Supabase row every 5 minutes. Last update: ${formatDate(lastSavedAt)}`
                   : baseline
                     ? `Showing latest stored fallback from ${formatDate(baseline.recorded_at)}.`
                     : 'No stored fallback is available for this location.'}
@@ -115,7 +118,7 @@ export default function WasteSimulator({ location, baseline, threshold, onMetric
           </div>
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={toggleSensor} className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold ${sensorOnline ? 'border-amber-200 bg-white text-amber-700' : 'border-green-200 bg-white text-green-700'}`}><Power size={16} />{sensorOnline ? 'Set sensor offline' : 'Restore sensor'}</button>
-            <button type="button" onClick={saveSnapshot} disabled={saving || !sensorOnline} title={!sensorOnline ? 'Restore the sensor before saving.' : undefined} className="inline-flex items-center gap-2 rounded-xl bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-50"><Save size={16} />{saving ? 'Saving...' : 'Save sensor reading'}</button>
+            <button type="button" onClick={saveSnapshot} disabled={saving || !sensorOnline} title={!sensorOnline ? 'Restore the sensor before updating.' : undefined} className="inline-flex items-center gap-2 rounded-xl bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-50"><Save size={16} />{saving ? 'Updating...' : 'Update current reading'}</button>
           </div>
         </div>
       </section>
@@ -126,7 +129,7 @@ export default function WasteSimulator({ location, baseline, threshold, onMetric
         <section className="rounded-2xl border border-dashed border-amber-300 bg-white p-10 text-center">
           <Database className="mx-auto text-amber-500" size={28} />
           <h2 className="mt-3 font-bold text-slate-800">Stored fallback unavailable</h2>
-          <p className="mx-auto mt-1 max-w-lg text-sm leading-6 text-slate-500">No fallback reading has been stored for this sensor. Restore the sensor and save a reading before using offline mode.</p>
+          <p className="mx-auto mt-1 max-w-lg text-sm leading-6 text-slate-500">No fallback reading has been stored for this sensor. Restore the sensor and update a reading before using offline mode.</p>
         </section>
       ) : (
         <>
@@ -139,11 +142,11 @@ export default function WasteSimulator({ location, baseline, threshold, onMetric
 
           <section className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
             <article className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-              <div><h2 className="font-bold text-slate-800">{sensorOnline ? 'Live waste trend' : 'Stored fallback reading'}</h2><p className="mt-1 text-xs text-slate-400">{sensorOnline ? 'Live sensor feed; each reading is stored automatically.' : 'The trend is paused while the sensor is offline.'}</p></div>
+              <div><h2 className="font-bold text-slate-800">{sensorOnline ? 'Live waste trend' : 'Stored fallback reading'}</h2><p className="mt-1 text-xs text-slate-400">{sensorOnline ? 'Live sensor feed; each reading updates the current database row.' : 'The trend is paused while the sensor is offline.'}</p></div>
               <MiniChart values={history} />
               <div className="mt-2 flex justify-between text-xs text-slate-400"><span>{sensorOnline ? 'Earlier' : 'Stored snapshot'}</span><span>Latest {metric.waste_kg.toFixed(2)} kg</span></div>
             </article>
-            <article className="rounded-2xl bg-gradient-to-br from-teal-600 to-blue-600 p-6 text-white shadow-lg shadow-blue-600/15"><Waves size={27} /><h2 className="mt-4 text-xl font-bold">{sensorOnline ? 'Environmental sensor snapshot' : 'Stored environmental fallback'}</h2><div className="mt-5 space-y-3"><Reading icon={Waves} label="Water quality" value={`${metric.water_quality_score.toFixed(1)} / 100`} /><Reading icon={ThermometerSun} label="Temperature" value={metric.temperature_c == null ? 'Not available' : `${metric.temperature_c.toFixed(1)} C`} /><Reading icon={Users} label="Location capacity" value={capacity.toLocaleString()} /></div><p className="mt-5 text-xs leading-5 text-white/70">{sensorOnline ? 'Readings are timestamped and saved automatically from the sensor feed.' : 'Read-only fallback; restore the sensor to generate or save readings.'}</p></article>
+            <article className="rounded-2xl bg-gradient-to-br from-teal-600 to-blue-600 p-6 text-white shadow-lg shadow-blue-600/15"><Waves size={27} /><h2 className="mt-4 text-xl font-bold">{sensorOnline ? 'Environmental sensor snapshot' : 'Stored environmental fallback'}</h2><div className="mt-5 space-y-3"><Reading icon={Waves} label="Water quality" value={`${metric.water_quality_score.toFixed(1)} / 100`} /><Reading icon={ThermometerSun} label="Temperature" value={metric.temperature_c == null ? 'Not available' : `${metric.temperature_c.toFixed(1)} C`} /><Reading icon={Users} label="Location capacity" value={capacity.toLocaleString()} /></div><p className="mt-5 text-xs leading-5 text-white/70">{sensorOnline ? 'Readings update one current row and refresh its timestamp.' : 'Read-only fallback; restore the sensor to generate or update readings.'}</p></article>
           </section>
         </>
       )}
@@ -153,6 +156,7 @@ export default function WasteSimulator({ location, baseline, threshold, onMetric
 
 function metricFromStoredReading(location, baseline) {
   return {
+    id: baseline.id,
     location_id: location.id,
     crowd_count: Number(baseline.crowd_count || 0),
     waste_kg: Number(baseline.waste_kg || 0),

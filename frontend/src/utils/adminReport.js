@@ -19,7 +19,7 @@ export function buildEnvironmentalPdfBytes(metrics = [], locations = [], { gener
   const averageWater = metrics.length ? metrics.reduce((sum, row) => sum + numberValue(row.water_quality_score), 0) / metrics.length : 0
   const totalWaste = metrics.reduce((sum, row) => sum + numberValue(row.waste_kg), 0)
   const pages = [summaryPage('EcoGuard Environmental Report', scope, generatedAt, [
-    ['Saved snapshots', metrics.length],
+    ['Current readings', metrics.length],
     ['Total estimated waste', `${totalWaste.toFixed(2)} kg`],
     ['Average AQI', averageAqi.toFixed(1)],
     ['Average water quality', `${averageWater.toFixed(1)} / 100`],

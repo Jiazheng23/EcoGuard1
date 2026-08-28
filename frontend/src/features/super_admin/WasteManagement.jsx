@@ -14,7 +14,7 @@ import WasteCollectionHistory from './waste/WasteCollectionHistory'
 import WasteOverview from './waste/WasteOverview'
 import WasteScheduleManager from './waste/WasteScheduleManager'
 
-export default function WasteManagement({ locations, metrics, loading, error, onDataChange, onMetricCreated, isSuperAdmin, profile, section = 'overview', onSectionChange }) {
+export default function WasteManagement({ locations, metrics, loading, error, onDataChange, isSuperAdmin, profile, section = 'overview', onSectionChange }) {
   const [selectedId, setSelectedId] = useState('')
   const [schedules, setSchedules] = useState([])
   const [collections, setCollections] = useState([])
@@ -118,7 +118,6 @@ export default function WasteManagement({ locations, metrics, loading, error, on
         schedules={selectedSchedules}
         collections={selectedCollections}
         loading={loading || wasteLoading}
-        onMetricCreated={onMetricCreated}
         onThresholdSaved={refreshWasteData}
       />
     ) : null,
