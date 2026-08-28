@@ -148,7 +148,7 @@ export default function AdminLayout({ activePage, onNavigate, onLogout, user, pr
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center gap-4 border-b border-slate-100 bg-white px-4 md:px-6">
+        <header className="relative z-[1100] flex h-14 shrink-0 items-center gap-4 border-b border-slate-100 bg-white px-4 md:px-6">
           <button type="button" aria-label="Open administrator navigation" className="rounded-lg p-2 text-slate-500 hover:bg-slate-50 lg:hidden" onClick={() => setSidebarOpen(true)}><Menu size={20} /></button>
           <p className="min-w-0 flex-1 truncate text-sm"><span className="text-slate-400">{profile?.role === 'super_admin' ? 'Super Admin' : 'Local Admin'} / </span><strong className="text-slate-700">{pageLabels[activePage] || 'Dashboard'}</strong></p>
           <NotificationMenu role={profile?.role} userId={user?.id} onNavigate={onNavigate} accent="blue" />

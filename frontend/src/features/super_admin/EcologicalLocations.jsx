@@ -6,7 +6,7 @@ import {
   updateEcologicalLocation,
 } from '../../services/locationService'
 import WestMalaysiaLocationPicker from './WestMalaysiaLocationPicker'
-import { isWestMalaysiaCoordinate } from '../../utils/westMalaysia'
+import { isWestMalaysiaCoordinate, isWestMalaysiaLocation } from '../../utils/westMalaysia'
 
 const locationTypes = ['Cultural Site', 'World Heritage Site', 'National Park', 'Tourist attractions', 'Geopark', 'Marine Park', 'Highland Reserve']
 const timeOptions = Array.from({ length: 48 }, (_, index) => {
@@ -44,9 +44,14 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
 
+  const westMalaysiaLocations = useMemo(
+    () => locations.filter(isWestMalaysiaLocation),
+    [locations],
+  )
+
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase()
-    return locations.filter((item) => {
+    return westMalaysiaLocations.filter((item) => {
       const matchesQuery = !needle || [item.name, item.state, item.location_type]
         .some((value) => value?.toLowerCase().includes(needle))
       const matchesState = stateFilter === 'all' || item.state === stateFilter
@@ -55,10 +60,10 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
         || (statusFilter === 'visible' ? item.is_active : !item.is_active)
       return matchesQuery && matchesState && matchesType && matchesStatus
     })
-  }, [locations, query, stateFilter, statusFilter, typeFilter])
+  }, [query, stateFilter, statusFilter, typeFilter, westMalaysiaLocations])
 
-  const states = [...new Set(locations.map((item) => item.state))].sort()
-  const types = [...new Set(locations.map((item) => item.location_type))].sort()
+  const states = [...new Set(westMalaysiaLocations.map((item) => item.state))].sort()
+  const types = [...new Set(westMalaysiaLocations.map((item) => item.location_type))].sort()
   const filtersActive = query || stateFilter !== 'all' || typeFilter !== 'all' || statusFilter !== 'all'
 
   function clearFilters() {
@@ -161,10 +166,10 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
       </header>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Stat label="Managed locations" value={locations.length} icon={MapPin} color="#3b82f6" loading={loading} />
-        <Stat label="Active on map" value={locations.filter((item) => item.is_active).length} icon={Leaf} color="#22c55e" loading={loading} />
-        <Stat label="Malaysian states" value={new Set(locations.map((item) => item.state)).size} icon={MapPin} color="#8b5cf6" loading={loading} />
-        <Stat label="Total capacity" value={locations.reduce((sum, item) => sum + Number(item.max_capacity || 0), 0).toLocaleString()} icon={Leaf} color="#14b8a6" loading={loading} />
+        <Stat label="Managed locations" value={westMalaysiaLocations.length} icon={MapPin} color="#3b82f6" loading={loading} />
+        <Stat label="Active on map" value={westMalaysiaLocations.filter((item) => item.is_active).length} icon={Leaf} color="#22c55e" loading={loading} />
+        <Stat label="West Malaysia states" value={new Set(westMalaysiaLocations.map((item) => item.state)).size} icon={MapPin} color="#8b5cf6" loading={loading} />
+        <Stat label="Total capacity" value={westMalaysiaLocations.reduce((sum, item) => sum + Number(item.max_capacity || 0), 0).toLocaleString()} icon={Leaf} color="#14b8a6" loading={loading} />
       </div>
 
       {(error || message) && <Notice message={error || message} error={Boolean(error) || /unable|error/i.test(message)} />}
@@ -180,7 +185,7 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
             <FilterSelect label="All types" value={typeFilter} onChange={setTypeFilter} options={types} />
             <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 outline-none focus:border-blue-500"><option value="all">All map statuses</option><option value="visible">Visible on map</option><option value="hidden">Hidden from map</option></select>
             {filtersActive && <button type="button" onClick={clearFilters} className="rounded-xl px-3 py-2 text-xs font-semibold text-blue-600 hover:bg-blue-50">Clear filters</button>}
-            <span className="ml-auto self-center text-xs text-slate-400">Showing {filtered.length} of {locations.length}</span>
+            <span className="ml-auto self-center text-xs text-slate-400">Showing {filtered.length} of {westMalaysiaLocations.length}</span>
           </div>
         </div>
         <div className="overflow-x-auto">

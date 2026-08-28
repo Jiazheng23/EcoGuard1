@@ -24,11 +24,12 @@ import {
 } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import { listEcologicalLocations, listTouristEnvironmentalIndicators, subscribeToEnvironmentalIndicators } from '../../services/locationService'
+import { isWestMalaysiaLocation } from '../../utils/westMalaysia'
 
-const MALAYSIA_CENTER = [4.2105, 101.9758]
-const MALAYSIA_BOUNDS = [
+const WEST_MALAYSIA_CENTER = [4.2105, 101.9758]
+const WEST_MALAYSIA_BOUNDS = [
   [0.8, 99.5],
-  [7.6, 119.5],
+  [7.6, 104.8],
 ]
 
 const destinations = [
@@ -318,13 +319,15 @@ export default function EcologicalMonitoring({ onNavigate }) {
   }, [])
 
   const visibleDestinations = useMemo(() => {
-    if (!managedLocations.length) return destinations
+    if (!managedLocations.length) return destinations.filter(isWestMalaysiaLocation)
     const indicatorMap = Object.fromEntries(managedIndicators.map((item) => [String(item.location_id), item]))
-    return managedLocations.map((location, index) => managedDestination(
-      location,
-      indicatorMap[String(location.id)],
-      index,
-    ))
+    return managedLocations
+      .filter(isWestMalaysiaLocation)
+      .map((location, index) => managedDestination(
+        location,
+        indicatorMap[String(location.id)],
+        index,
+      ))
   }, [managedIndicators, managedLocations])
 
   const states = ['All States', ...new Set(visibleDestinations.map((item) => item.state))]
@@ -544,10 +547,10 @@ function MapView({ destinations, onSelect }) {
     <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
       <div className="h-96">
         <MapContainer
-          center={MALAYSIA_CENTER}
+          center={WEST_MALAYSIA_CENTER}
           zoom={5}
           minZoom={5}
-          maxBounds={MALAYSIA_BOUNDS}
+          maxBounds={WEST_MALAYSIA_BOUNDS}
           maxBoundsViscosity={1}
           scrollWheelZoom
           className="h-full w-full"

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Bell, CheckCheck } from 'lucide-react'
+import { listEarlyWarningNotifications, markEarlyWarningsRead, subscribeToEarlyWarnings } from '../services/notificationService'
 
 const roleNotifications = {
   tourist: [
@@ -22,9 +23,21 @@ export default function NotificationMenu({ role = 'tourist', userId, onNavigate,
   const [open, setOpen] = useState(false)
   const storageKey = `ecoguard-notifications-read:${userId || role}`
   const [readIds, setReadIds] = useState(() => readStoredIds(storageKey))
+  const [earlyWarnings, setEarlyWarnings] = useState([])
   const containerRef = useRef(null)
-  const notifications = useMemo(() => roleNotifications[role] || roleNotifications.tourist, [role])
-  const unreadCount = notifications.filter((item) => !readIds.includes(item.id)).length
+  const notifications = useMemo(() => [
+    ...earlyWarnings.map((alert) => ({
+      id: `alert-${alert.id}`,
+      alertId: alert.id,
+      title: alert.title,
+      detail: alert.detail,
+      page: role === 'tourist' ? 'monitoring' : alert.category === 'waste' ? 'waste' : 'thresholds',
+      read: alert.read,
+      severity: alert.severity,
+    })),
+    ...(roleNotifications[role] || roleNotifications.tourist),
+  ], [earlyWarnings, role])
+  const unreadCount = notifications.filter((item) => item.alertId ? !item.read : !readIds.includes(item.id)).length
   const accentClasses = accent === 'blue' ? 'hover:bg-blue-50 hover:text-blue-700' : 'hover:bg-green-50 hover:text-green-700'
 
   useEffect(() => {
@@ -42,15 +55,39 @@ export default function NotificationMenu({ role = 'tourist', userId, onNavigate,
     }
   }, [open])
 
+  useEffect(() => {
+    if (!userId) return undefined
+    let active = true
+    const load = () => listEarlyWarningNotifications(userId)
+      .then((items) => { if (active) setEarlyWarnings(items) })
+      .catch(() => { if (active) setEarlyWarnings([]) })
+    load()
+    const unsubscribe = subscribeToEarlyWarnings(load)
+    return () => {
+      active = false
+      unsubscribe()
+    }
+  }, [userId])
+
   function storeReadIds(nextIds) {
     setReadIds(nextIds)
     window.localStorage.setItem(storageKey, JSON.stringify(nextIds))
   }
 
-  function openNotification(item) {
-    if (!readIds.includes(item.id)) storeReadIds([...readIds, item.id])
+  async function openNotification(item) {
+    if (item.alertId && !item.read) {
+      await markEarlyWarningsRead(userId, [item.alertId])
+      setEarlyWarnings((current) => current.map((alert) => alert.id === item.alertId ? { ...alert, read: true } : alert))
+    } else if (!item.alertId && !readIds.includes(item.id)) storeReadIds([...readIds, item.id])
     setOpen(false)
     onNavigate?.(item.page)
+  }
+
+  async function markAllRead() {
+    const unreadAlertIds = earlyWarnings.filter((alert) => !alert.read).map((alert) => alert.id)
+    await markEarlyWarningsRead(userId, unreadAlertIds)
+    setEarlyWarnings((current) => current.map((alert) => ({ ...alert, read: true })))
+    storeReadIds((roleNotifications[role] || roleNotifications.tourist).map((item) => item.id))
   }
 
   return (
@@ -64,12 +101,12 @@ export default function NotificationMenu({ role = 'tourist', userId, onNavigate,
         <section role="menu" className="absolute right-0 z-50 mt-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-xl">
           <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
             <div><h2 className="text-sm font-bold text-slate-800">Notifications</h2><p className="text-xs text-slate-400">{unreadCount ? `${unreadCount} unread` : 'You are all caught up'}</p></div>
-            <button type="button" disabled={!unreadCount} onClick={() => storeReadIds(notifications.map((item) => item.id))} className="inline-flex items-center gap-1 text-xs font-semibold text-slate-500 disabled:opacity-40"><CheckCheck size={14} /> Mark all read</button>
+            <button type="button" disabled={!unreadCount} onClick={markAllRead} className="inline-flex items-center gap-1 text-xs font-semibold text-slate-500 disabled:opacity-40"><CheckCheck size={14} /> Mark all read</button>
           </div>
           <div className="max-h-80 overflow-y-auto p-2">
             {notifications.map((item) => {
-              const unread = !readIds.includes(item.id)
-              return <button key={item.id} type="button" role="menuitem" onClick={() => openNotification(item)} className={`flex w-full gap-3 rounded-xl p-3 text-left transition ${accentClasses}`}><span className={`mt-1 size-2 shrink-0 rounded-full ${unread ? 'bg-red-500' : 'bg-slate-200'}`} /><span><b className="block text-sm text-slate-700">{item.title}</b><span className="mt-1 block text-xs leading-5 text-slate-500">{item.detail}</span></span></button>
+              const unread = item.alertId ? !item.read : !readIds.includes(item.id)
+              return <button key={item.id} type="button" role="menuitem" onClick={() => openNotification(item)} className={`flex w-full gap-3 rounded-xl p-3 text-left transition ${accentClasses}`}><span className={`mt-1 size-2 shrink-0 rounded-full ${unread ? item.severity === 'critical' ? 'bg-red-600' : item.severity === 'warning' ? 'bg-orange-500' : 'bg-amber-400' : 'bg-slate-200'}`} /><span><b className="block text-sm text-slate-700">{item.title}</b><span className="mt-1 block text-xs leading-5 text-slate-500">{item.detail}</span></span></button>
             })}
           </div>
         </section>

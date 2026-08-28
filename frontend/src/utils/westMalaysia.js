@@ -24,6 +24,11 @@ export function normalizeWestMalaysiaState(value) {
   return westMalaysiaStates.find((state) => state.toLowerCase() === clean.toLowerCase()) || ''
 }
 
+export function isWestMalaysiaLocation(location) {
+  return Boolean(normalizeWestMalaysiaState(location?.state))
+    && isWestMalaysiaCoordinate(location?.latitude ?? location?.lat, location?.longitude ?? location?.lng)
+}
+
 export function inferWestMalaysiaState(address) {
   const normalized = String(address || '').toLowerCase()
   return westMalaysiaStates.find((state) => normalized.includes(state.toLowerCase()))

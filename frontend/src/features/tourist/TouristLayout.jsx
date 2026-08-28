@@ -67,7 +67,7 @@ export default function TouristLayout({ activePage, onNavigate, user, profile, o
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center gap-4 border-b border-slate-100 bg-white px-4 md:px-6">
+        <header className="relative z-[1100] flex h-14 shrink-0 items-center gap-4 border-b border-slate-100 bg-white px-4 md:px-6">
           <button type="button" aria-label="Open tourist navigation" className="rounded-lg p-2 text-slate-500 hover:bg-slate-50 lg:hidden" onClick={() => setSidebarOpen(true)}><Menu size={20} /></button>
           <p className="min-w-0 flex-1 truncate text-sm"><span className="text-slate-400">Tourist / </span><strong className="text-slate-700">{pageLabel}</strong></p>
           <NotificationMenu role="tourist" userId={user?.id} onNavigate={onNavigate} accent="green" />
