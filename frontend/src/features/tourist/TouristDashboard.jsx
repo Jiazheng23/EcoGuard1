@@ -18,6 +18,7 @@ import {
   ArrowRight,
   Calculator,
   Car,
+  CheckCircle2,
   Clock3,
   LoaderCircle,
   Map,
@@ -69,7 +70,13 @@ function EcoGauge({ score }) {
   )
 }
 
-export default function TouristDashboard({ onNavigate, user, profile }) {
+export default function TouristDashboard({
+  onNavigate,
+  user,
+  profile,
+  successMessage = '',
+  onDismissMessage,
+}) {
   const [trips, setTrips] = useState([])
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
@@ -137,6 +144,38 @@ export default function TouristDashboard({ onNavigate, user, profile }) {
 
   return (
     <div className="tourist-dashboard-page mx-auto flex max-w-6xl flex-col gap-5">
+      {successMessage && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-slate-900/35 p-4 backdrop-blur-[2px]"
+          role="presentation"
+        >
+          <section
+            className="w-full max-w-md rounded-3xl border border-green-100 bg-white p-7 text-center shadow-2xl shadow-slate-900/20"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="trip-save-success-title"
+            aria-describedby="trip-save-success-description"
+          >
+            <span className="mx-auto grid size-16 place-items-center rounded-full bg-green-50 text-green-500">
+              <CheckCircle2 size={34} strokeWidth={2.25} />
+            </span>
+            <h2 id="trip-save-success-title" className="mt-5 text-xl font-bold text-slate-900">
+              Trip saved successfully
+            </h2>
+            <p id="trip-save-success-description" className="mt-2 text-sm text-slate-500">
+              {successMessage}
+            </p>
+            <button
+              type="button"
+              onClick={onDismissMessage}
+              className="mt-6 w-full rounded-xl bg-green-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700 focus:outline-none focus:ring-4 focus:ring-green-100"
+            >
+              OK
+            </button>
+          </section>
+        </div>
+      )}
+
       <section className="tourist-dashboard-hero flex flex-col justify-between gap-4 rounded-2xl bg-gradient-to-br from-green-600 to-teal-600 p-6 text-white shadow-lg shadow-green-600/20 md:flex-row md:items-center">
         <div>
           <p className="text-sm text-white/75">{greeting}, 👋</p>
