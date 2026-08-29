@@ -6,6 +6,7 @@ import { formatCarbon, formatTripDate, numberValue, transportLabels } from '../.
 import { downloadTripHistoryCsv, downloadTripHistoryPdf } from '../../utils/tripReport'
 
 const card = 'rounded-2xl border border-slate-100 bg-white shadow-sm'
+const supportedTransportModes = ['car', 'motorcycle', 'bus', 'walking', 'bicycle']
 
 export default function TouristHistory({ user }) {
   const [trips, setTrips] = useState([])
@@ -95,11 +96,6 @@ export default function TouristHistory({ user }) {
     else downloadTripHistoryCsv(filteredTrips)
   }
 
-  const modes = useMemo(
-    () => [...new Set(trips.map((trip) => trip.transport_mode).filter(Boolean))].sort(),
-    [trips],
-  )
-
   const term = query.trim().toLowerCase()
   const validSelectedYear = /^\d{4}$/.test(selectedYear) && Number(selectedYear) >= 2000 && Number(selectedYear) <= 2100
   const activeDateFrom = dateMode === 'range' ? dateFrom : dateMode === 'month' && selectedMonth ? `${selectedMonth}-01` : dateMode === 'year' && validSelectedYear ? `${selectedYear}-01-01` : ''
@@ -182,7 +178,7 @@ export default function TouristHistory({ user }) {
             <span className="sr-only">Filter by transport mode</span>
             <select value={mode} onChange={(event) => setMode(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-green-500 sm:w-48">
               <option value="all">All transport</option>
-              {modes.map((item) => <option key={item} value={item}>{transportLabels[item] || item}</option>)}
+              {supportedTransportModes.map((item) => <option key={item} value={item}>{transportLabels[item]}</option>)}
             </select>
           </label>
           <div ref={dateFilterRef} className="relative self-end">
@@ -241,7 +237,7 @@ export default function TouristHistory({ user }) {
                     <td className="px-5 py-4"><span className="rounded-full bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700">{transportLabels[trip.transport_mode] || trip.transport_mode}</span></td>
                     <td className="whitespace-nowrap px-5 py-4">{numberValue(trip.distance_km).toFixed(1)} km</td>
                     <td className="whitespace-nowrap px-5 py-4">{formatCarbon(trip.total_emission)}</td>
-                    <td className="whitespace-nowrap px-5 py-4 text-right font-semibold text-green-700">+{numberValue(trip.eco_points)}</td>
+                    <td className={`whitespace-nowrap px-5 py-4 text-right font-semibold ${numberValue(trip.eco_points) < 0 ? 'text-red-600' : 'text-green-700'}`}>{formatEcoPoints(trip.eco_points)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -295,7 +291,7 @@ function TripDetailsModal({ trip, onClose }) {
             <div className="grid grid-cols-3 gap-2">
               <DetailItem icon={Cloud} label="Base emission" value={formatCarbon(trip.carbon_emission)} tone="slate" />
               <DetailItem icon={Leaf} label="Total emission" value={formatCarbon(trip.total_emission)} tone="green" />
-              <DetailItem icon={Award} label="Eco points" value={`+${numberValue(trip.eco_points).toLocaleString()}`} tone="green" />
+              <DetailItem icon={Award} label="Eco points" value={formatEcoPoints(trip.eco_points)} tone={numberValue(trip.eco_points) < 0 ? 'red' : 'green'} />
             </div>
           </section>
 
@@ -321,7 +317,13 @@ function LocationPoint({ label, value, destination = false }) {
 
 function DetailItem({ icon: Icon, label, value, tone = 'slate' }) {
   const green = tone === 'green'
-  return <div className={`flex min-w-0 items-center gap-2 rounded-xl border p-2.5 ${green ? 'border-green-100 bg-green-50' : 'border-slate-100 bg-slate-50'}`}><span className={`grid size-8 shrink-0 place-items-center rounded-lg ${green ? 'bg-white text-green-600' : 'bg-white text-slate-500'}`}><Icon size={15} /></span><div className="min-w-0"><p className="text-[10px] font-medium text-slate-400">{label}</p><p className={`mt-0.5 break-words text-xs font-bold leading-snug ${green ? 'text-green-700' : 'text-slate-800'}`}>{value}</p></div></div>
+  const red = tone === 'red'
+  return <div className={`flex min-w-0 items-center gap-2 rounded-xl border p-2.5 ${green ? 'border-green-100 bg-green-50' : red ? 'border-red-100 bg-red-50' : 'border-slate-100 bg-slate-50'}`}><span className={`grid size-8 shrink-0 place-items-center rounded-lg ${green ? 'bg-white text-green-600' : red ? 'bg-white text-red-600' : 'bg-white text-slate-500'}`}><Icon size={15} /></span><div className="min-w-0"><p className="text-[10px] font-medium text-slate-400">{label}</p><p className={`mt-0.5 break-words text-xs font-bold leading-snug ${green ? 'text-green-700' : red ? 'text-red-700' : 'text-slate-800'}`}>{value}</p></div></div>
+}
+
+function formatEcoPoints(value) {
+  const points = numberValue(value)
+  return `${points > 0 ? '+' : ''}${points.toLocaleString()}`
 }
 
 function CoordinateItem({ label, value }) {
