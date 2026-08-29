@@ -20,14 +20,32 @@ export const transportColors = {
   flight: '#8b5cf6',
 }
 
+export function formatTransportModeLabel(mode) {
+  if (!mode) return 'Unknown transport'
+  return transportLabels[mode] || String(mode)
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, (character) => character.toUpperCase())
+}
+
 export function getTripTransportLabel(trip) {
   const mode = trip?.transport_mode
-  const label = transportLabels[mode] || mode || 'Unknown transport'
+  const label = formatTransportModeLabel(mode)
 
   if (mode !== 'car') return label
 
   const powertrain = String(trip?.car_powertrain || '').toLowerCase()
   return `${label} · ${powertrain === 'electricity' ? 'Electricity' : 'Petrol'}`
+}
+
+export function getTripTransportFilterValue(trip) {
+  if (trip?.transport_mode !== 'car') return trip?.transport_mode || ''
+  return `car:${String(trip.car_powertrain || '').toLowerCase() === 'electricity' ? 'electricity' : 'petrol'}`
+}
+
+export function formatTransportFilterLabel(value) {
+  if (value === 'car:petrol') return 'Car · Petrol'
+  if (value === 'car:electricity') return 'Car · Electricity'
+  return formatTransportModeLabel(value)
 }
 
 export function numberValue(value) {

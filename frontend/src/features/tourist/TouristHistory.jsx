@@ -2,12 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertCircle, Award, CalendarDays, Check, ChevronDown, Cloud, Download, History, Leaf, MapPin, Navigation, RefreshCw, Route, Search, SlidersHorizontal, Users, X } from 'lucide-react'
 import { listOwnTrips } from '../../services/tripService'
-import { formatCarbon, formatTripDate, getTripTransportLabel, numberValue, transportLabels } from '../../utils/tripAnalytics'
+import { formatCarbon, formatTransportFilterLabel, formatTripDate, getTripTransportFilterValue, getTripTransportLabel, numberValue } from '../../utils/tripAnalytics'
 import { downloadTripHistoryCsv, downloadTripHistoryPdf } from '../../utils/tripReport'
 
 const card = 'rounded-2xl border border-slate-100 bg-white shadow-sm'
-const supportedTransportModes = ['car', 'motorcycle', 'bus', 'walking', 'bicycle']
-
 export default function TouristHistory({ user }) {
   const [trips, setTrips] = useState([])
   const [query, setQuery] = useState('')
@@ -107,7 +105,7 @@ export default function TouristHistory({ user }) {
   const fromTime = activeDateFrom ? new Date(`${activeDateFrom}T00:00:00`).getTime() : null
   const toTime = activeDateTo ? new Date(`${activeDateTo}T23:59:59.999`).getTime() : null
   const filteredTrips = trips.filter((trip) => {
-    const matchesMode = mode === 'all' || trip.transport_mode === mode
+    const matchesMode = mode === 'all' || getTripTransportFilterValue(trip) === mode
     const matchesQuery = !term || [trip.starting_location, trip.destination, getTripTransportLabel(trip), trip.transport_mode]
       .some((value) => String(value || '').toLowerCase().includes(term))
     const travelledTime = new Date(trip.travelled_at).getTime()
@@ -138,6 +136,9 @@ export default function TouristHistory({ user }) {
     emission: trips.reduce((total, trip) => total + numberValue(trip.total_emission), 0),
     points: trips.reduce((total, trip) => total + numberValue(trip.eco_points), 0),
   }), [trips])
+  const transportModes = useMemo(() => [...new Set(
+    trips.map(getTripTransportFilterValue).filter(Boolean),
+  )].sort((left, right) => formatTransportFilterLabel(left).localeCompare(formatTransportFilterLabel(right))), [trips])
 
   return (
     <div className="tourist-history-page mx-auto flex max-w-6xl flex-col gap-6">
@@ -178,18 +179,18 @@ export default function TouristHistory({ user }) {
               <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search trips" className="w-full bg-transparent py-2.5 pl-10 pr-3 text-sm text-slate-700 outline-none" />
             </label>
-            <button type="button" onClick={() => { setDateFilterOpen(false); setExportMenuOpen(false); setTransportFilterOpen((open) => !open) }} aria-haspopup="listbox" aria-expanded={transportFilterOpen} className={`m-1 inline-flex max-w-[48%] shrink-0 items-center gap-1.5 rounded-lg border-l px-2.5 py-2 text-xs font-semibold transition sm:max-w-none sm:px-3 ${mode === 'all' ? 'border-slate-200 bg-white text-slate-600' : 'border-green-200 bg-green-100 text-green-700'}`}>
+            <button type="button" onClick={() => { setDateFilterOpen(false); setExportMenuOpen(false); setTransportFilterOpen((open) => !open) }} aria-haspopup="listbox" aria-expanded={transportFilterOpen} className={`m-1 inline-flex max-w-[44%] shrink-0 items-center gap-1 rounded-lg border-l px-2 py-1.5 text-[11px] font-semibold transition sm:max-w-40 ${mode === 'all' ? 'border-slate-200 bg-white text-slate-600' : 'border-green-200 bg-green-100 text-green-700'}`}>
               <SlidersHorizontal size={14} className="shrink-0" />
-              <span className="truncate">{mode === 'all' ? 'All transport' : transportLabels[mode]}</span>
+              <span className="truncate">{mode === 'all' ? 'All transport' : formatTransportFilterLabel(mode)}</span>
               <ChevronDown size={13} className={`shrink-0 transition-transform ${transportFilterOpen ? 'rotate-180' : ''}`} />
             </button>
             {transportFilterOpen && (
-              <div role="listbox" aria-label="Filter by transport mode" className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 rounded-2xl border border-slate-100 bg-white p-2 shadow-xl">
-                <p className="px-2 pb-2 pt-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Quick transport filter</p>
-                <div className="grid grid-cols-2 gap-1 sm:grid-cols-3">
-                  {['all', ...supportedTransportModes].map((item) => (
-                    <button key={item} type="button" role="option" aria-selected={mode === item} onClick={() => { setMode(item); setTransportFilterOpen(false) }} className={`flex items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-left text-xs font-semibold transition ${mode === item ? 'bg-green-600 text-white' : 'text-slate-600 hover:bg-green-50 hover:text-green-700'}`}>
-                      <span>{item === 'all' ? 'All transport' : transportLabels[item]}</span>
+              <div role="listbox" aria-label="Filter by transport mode" className="absolute right-0 top-[calc(100%+0.5rem)] z-20 w-72 max-w-[calc(100vw-2rem)] rounded-xl border border-slate-100 bg-white p-1.5 shadow-xl">
+                <p className="px-2 pb-1 pt-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-400">Transport mode</p>
+                <div className="grid grid-cols-2 gap-0.5">
+                  {['all', ...transportModes].map((item) => (
+                    <button key={item} type="button" role="option" aria-selected={mode === item} onClick={() => { setMode(item); setTransportFilterOpen(false) }} className={`flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-semibold transition ${mode === item ? 'bg-green-600 text-white' : 'text-slate-600 hover:bg-green-50 hover:text-green-700'}`}>
+                      <span className="truncate">{item === 'all' ? 'All transport' : formatTransportFilterLabel(item)}</span>
                       {mode === item && <Check size={14} className="shrink-0" />}
                     </button>
                   ))}
