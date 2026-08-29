@@ -18,6 +18,8 @@ import Reports from './Reports'
 import WasteManagement from './WasteManagement'
 import AdminApplications from './AdminApplications'
 import SensorManagement from './SensorManagement'
+import LocationDetailPage from '../location_admin/LocationDetailPage'
+import { tripMatchesEcologicalLocation } from '../../utils/tripAnalytics'
 
 export default function AdminWorkspace({ requiredRole }) {
   const navigate = useNavigate()
@@ -49,10 +51,15 @@ export default function AdminWorkspace({ requiredRole }) {
         listCrowdThresholds(),
         listLocationMetrics(),
       ])
-      console.log('refreshData', { profileRows, tripRows, locationRows, thresholdRows, metricRows })
       const assignedLocationId = String(scopeProfile?.location_id || '')
+      const assignedLocation = locationRows.find((item) => String(item.id) === assignedLocationId)
+      const scopedTrips = isSuper
+        ? tripRows
+        : assignedLocation
+          ? tripRows.filter((trip) => tripMatchesEcologicalLocation(trip, assignedLocation))
+          : []
       setProfiles(profileRows)
-      setTrips(tripRows)
+      setTrips(scopedTrips)
       setLocations(isSuper ? locationRows : locationRows.filter((item) => String(item.id) === assignedLocationId))
       setThresholds(isSuper ? thresholdRows : thresholdRows.filter((item) => String(item.location_id) === assignedLocationId))
       setMetrics(isSuper ? metricRows : metricRows.filter((item) => String(item.location_id) === assignedLocationId))
@@ -133,6 +140,14 @@ export default function AdminWorkspace({ requiredRole }) {
     setProfiles((current) => current.map((item) => item.id === updatedProfile.id ? updatedProfile : item))
   }
 
+  function handleNavigate(nextPage) {
+    if (profile?.role === 'location_admin' && ['locations', 'thresholds'].includes(nextPage)) {
+      setPage('location-detail')
+      return
+    }
+    setPage(nextPage)
+  }
+
   const handleMetricCreated = useCallback((createdMetric) => {
     setMetrics((current) => [
       createdMetric,
@@ -199,8 +214,9 @@ export default function AdminWorkspace({ requiredRole }) {
       onSectionChange={(nextSection) => setPage(`waste-${nextSection}`)}
     />
   ) : ({
-    dashboard: <AdminDashboard {...sharedProps} onNavigate={setPage} />,
+    dashboard: <AdminDashboard {...sharedProps} onNavigate={handleNavigate} />,
     locations: <EcologicalLocations {...sharedProps} />,
+    'location-detail': <LocationDetailPage {...sharedProps} />,
     sensors: <SensorManagement {...sharedProps} />,
     thresholds: <CrowdThresholds {...sharedProps} />,
     reports: <Reports {...sharedProps} />,
@@ -209,8 +225,8 @@ export default function AdminWorkspace({ requiredRole }) {
   }[page])
 
   return (
-    <AdminLayout activePage={page} onNavigate={setPage} onLogout={handleLogout} user={user} profile={profile}>
-      {pageContent || <AdminDashboard {...sharedProps} onNavigate={setPage} />}
+    <AdminLayout activePage={page} onNavigate={handleNavigate} onLogout={handleLogout} user={user} profile={profile}>
+      {pageContent || <AdminDashboard {...sharedProps} onNavigate={handleNavigate} />}
     </AdminLayout>
   )
 }

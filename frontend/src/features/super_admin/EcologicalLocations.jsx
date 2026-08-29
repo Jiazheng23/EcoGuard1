@@ -37,7 +37,7 @@ const emptyForm = () => ({
   is_active: true,
 })
 
-export default function EcologicalLocations({ user, isSuperAdmin, locations, loading, error, onDataChange }) {
+export default function EcologicalLocations({ user, isSuperAdmin, locations, loading, error, onDataChange, embedded = false, showFilters = true }) {
   const [query, setQuery] = useState('')
   const [stateFilter, setStateFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
@@ -57,6 +57,8 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
   )
 
   const filtered = useMemo(() => {
+    if (!showFilters) return westMalaysiaLocations
+
     const needle = query.trim().toLowerCase()
     return westMalaysiaLocations.filter((item) => {
       const matchesQuery = !needle || [item.name, item.state, item.location_type]
@@ -67,7 +69,7 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
         || (statusFilter === 'visible' ? item.is_active : !item.is_active)
       return matchesQuery && matchesState && matchesType && matchesStatus
     })
-  }, [query, stateFilter, statusFilter, typeFilter, westMalaysiaLocations])
+  }, [query, showFilters, stateFilter, statusFilter, typeFilter, westMalaysiaLocations])
 
   const states = [...new Set(westMalaysiaLocations.map((item) => item.state))].sort()
   const types = [...new Set(westMalaysiaLocations.map((item) => item.location_type))].sort()
@@ -180,8 +182,8 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
   }
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-6">
-      <header className="flex flex-wrap items-end justify-between gap-4">
+    <div className={embedded ? 'flex flex-col gap-6' : 'mx-auto flex max-w-6xl flex-col gap-6'}>
+      {!embedded && <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Ecological Locations</h1>
           <p className="mt-1 text-sm text-slate-500">Manage the protected places shown on the Tourist map</p>
@@ -189,7 +191,7 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
         {isSuperAdmin && <button type="button" onClick={openCreate} className="inline-flex items-center gap-2 rounded-xl bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-600">
           <Plus size={17} /> Add new location
         </button>}
-      </header>
+      </header>}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Stat label="Managed locations" value={westMalaysiaLocations.length} icon={MapPin} color="#3b82f6" loading={loading} />
@@ -204,15 +206,15 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
         <div className="border-b border-slate-100 p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
           <div><h2 className="font-bold text-slate-800">Location directory</h2><p className="text-xs text-slate-400">Coordinates become selectable points in Tourist monitoring</p></div>
-          <div className="relative w-full sm:w-72"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search location, state or type" className="w-full rounded-xl border border-slate-200 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-blue-500" /></div>
+          {showFilters && <div className="relative w-full sm:w-72"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search location, state or type" className="w-full rounded-xl border border-slate-200 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-blue-500" /></div>}
           </div>
-          <div className="mt-3 flex flex-wrap gap-2">
+          {showFilters && <div className="mt-3 flex flex-wrap gap-2">
             <FilterSelect label="All states" value={stateFilter} onChange={setStateFilter} options={states} />
             <FilterSelect label="All types" value={typeFilter} onChange={setTypeFilter} options={types} />
             <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 outline-none focus:border-blue-500"><option value="all">All map statuses</option><option value="visible">Visible on map</option><option value="hidden">Hidden from map</option></select>
             {filtersActive && <button type="button" onClick={clearFilters} className="rounded-xl px-3 py-2 text-xs font-semibold text-blue-600 hover:bg-blue-50">Clear filters</button>}
             <span className="ml-auto self-center text-xs text-slate-400">Showing {filtered.length} of {westMalaysiaLocations.length}</span>
-          </div>
+          </div>}
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-sm">

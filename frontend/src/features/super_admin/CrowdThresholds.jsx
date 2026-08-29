@@ -25,7 +25,7 @@ function statusFor(occupancy, threshold) {
   return 'optimal'
 }
 
-export default function CrowdThresholds({ user, locations, thresholds, metrics, loading, error, onDataChange }) {
+export default function CrowdThresholds({ user, locations, thresholds, metrics, loading, error, onDataChange, embedded = false, showFilters = true, showSummary = true }) {
   const [editing, setEditing] = useState(null)
   const [draft, setDraft] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -50,14 +50,14 @@ export default function CrowdThresholds({ user, locations, thresholds, metrics, 
     [status]: rows.filter((row) => row.status === status).length,
   }), {})
   const states = [...new Set(locations.map((item) => item.state))].sort()
-  const filteredRows = rows.filter((row) => {
+  const filteredRows = showFilters ? rows.filter((row) => {
     const needle = query.trim().toLowerCase()
     const matchesQuery = !needle || [row.location.name, row.location.state, row.location.location_type]
       .some((value) => value?.toLowerCase().includes(needle))
     const matchesState = stateFilter === 'all' || row.location.state === stateFilter
     const matchesStatus = statusFilter === 'all' || row.status === statusFilter
     return matchesQuery && matchesState && matchesStatus
-  })
+  }) : rows
   const filtersActive = query || stateFilter !== 'all' || statusFilter !== 'all'
 
   function beginEdit(row) {
@@ -96,13 +96,13 @@ export default function CrowdThresholds({ user, locations, thresholds, metrics, 
   }
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-6">
-      <header>
+    <div className={embedded ? 'flex flex-col gap-6' : 'mx-auto flex max-w-6xl flex-col gap-6'}>
+      {!embedded && <header>
         <h1 className="text-2xl font-bold text-slate-900">Crowd Thresholds</h1>
         <p className="mt-1 text-sm text-slate-500">Configure occupancy alerts for each managed ecological location</p>
-      </header>
+      </header>}
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      {showSummary && <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {Object.entries(levelStyles).map(([key, level]) => (
           <article key={key} className="rounded-2xl border p-4 shadow-sm" style={{ background: level.background, borderColor: `${level.color}30` }}>
             <span className="grid size-8 place-items-center rounded-lg bg-white" style={{ color: level.color }}><Activity size={16} /></span>
@@ -110,11 +110,11 @@ export default function CrowdThresholds({ user, locations, thresholds, metrics, 
             <p className="mt-1 text-2xl font-bold text-slate-800">{loading ? '-' : statusCounts[key]}</p>
           </article>
         ))}
-      </div>
+      </div>}
 
       {(error || message) && <div className={`flex items-start gap-2 rounded-xl border p-3 text-sm ${error || /unable|must/i.test(message) ? 'border-red-200 bg-red-50 text-red-600' : 'border-green-200 bg-green-50 text-green-700'}`}><AlertCircle size={17} className="mt-0.5 shrink-0" /><p>{error || message}</p></div>}
 
-      <section className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+      {showFilters && <section className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap gap-2">
           <label className="relative min-w-56 flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search location, state or type" className="w-full rounded-xl border border-slate-200 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-blue-500" /></label>
           <select value={stateFilter} onChange={(event) => setStateFilter(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-600 outline-none focus:border-blue-500"><option value="all">All states</option>{states.map((item) => <option key={item}>{item}</option>)}</select>
@@ -122,7 +122,7 @@ export default function CrowdThresholds({ user, locations, thresholds, metrics, 
           {filtersActive && <button type="button" onClick={() => { setQuery(''); setStateFilter('all'); setStatusFilter('all') }} className="rounded-xl px-3 py-2.5 text-sm font-semibold text-blue-600 hover:bg-blue-50">Clear</button>}
         </div>
         <p className="mt-2 text-right text-xs text-slate-400">Showing {filteredRows.length} of {rows.length} locations</p>
-      </section>
+      </section>}
 
       <section className="space-y-4">
         {filteredRows.map((row) => {

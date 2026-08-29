@@ -18,10 +18,11 @@ import NotificationMenu from '../../components/NotificationMenu'
 
 const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', page: 'dashboard' },
-  { icon: MapPin, label: 'Locations', page: 'locations' },
+  { icon: MapPin, label: 'Locations', page: 'locations', superOnly: true },
+  { icon: MapPin, label: 'Location Detail', page: 'location-detail', locationOnly: true },
   { icon: UserCheck, label: 'Applications', page: 'applications', superOnly: true },
   { icon: RadioTower, label: 'Sensors', page: 'sensors' },
-  { icon: SlidersHorizontal, label: 'Thresholds', page: 'thresholds' },
+  { icon: SlidersHorizontal, label: 'Thresholds', page: 'thresholds', superOnly: true },
   {
     icon: Recycle,
     label: 'Waste',
@@ -39,6 +40,7 @@ const navItems = [
 const pageLabels = {
   dashboard: 'Dashboard',
   locations: 'Ecological Locations',
+  'location-detail': 'Location Detail',
   sensors: 'Sensor Monitoring',
   thresholds: 'Crowd Thresholds',
   waste: 'Waste Management',
@@ -59,7 +61,10 @@ function getAdminDetails(user, profile) {
 
 function AdminSidebar({ activePage, onNavigate, onClose, profile }) {
   const [wasteOpen, setWasteOpen] = useState(() => activePage.startsWith('waste'))
-  const visibleItems = navItems.filter((item) => !item.superOnly || profile?.role === 'super_admin')
+  const visibleItems = navItems.filter((item) => (
+    (!item.superOnly || profile?.role === 'super_admin')
+    && (!item.locationOnly || profile?.role === 'location_admin')
+  ))
 
   function navigateTo(page) {
     onNavigate(page)

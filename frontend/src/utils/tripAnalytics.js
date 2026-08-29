@@ -203,3 +203,61 @@ export function getTripSummary(trips, profiles = []) {
     ).length,
   }
 }
+
+export function tripMatchesEcologicalLocation(trip, location, radiusKm = 1.5) {
+  if (!trip || !location) return false
+
+  const destination = normalizeLocationText(trip.destination)
+  const locationNames = [location.name, location.address, location.full_address]
+    .map(normalizeLocationText)
+    .filter((value) => value.length >= 5)
+
+  if (destination && locationNames.some((name) => (
+    destination === name || destination.includes(name) || name.includes(destination)
+  ))) {
+    return true
+  }
+
+  const coordinateValues = [
+    trip.destination_lat,
+    trip.destination_lng,
+    location.latitude,
+    location.longitude,
+  ]
+  if (coordinateValues.some((value) => value == null || value === '')) {
+    return false
+  }
+
+  const [destinationLat, destinationLng, locationLat, locationLng] = coordinateValues.map(Number)
+  if (![destinationLat, destinationLng, locationLat, locationLng].every(Number.isFinite)) {
+    return false
+  }
+
+  return coordinateDistanceKm(
+    destinationLat,
+    destinationLng,
+    locationLat,
+    locationLng,
+  ) <= radiusKm
+}
+
+function normalizeLocationText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+}
+
+function coordinateDistanceKm(firstLat, firstLng, secondLat, secondLng) {
+  const toRadians = (value) => value * (Math.PI / 180)
+  const latitudeDifference = toRadians(secondLat - firstLat)
+  const longitudeDifference = toRadians(secondLng - firstLng)
+  const firstLatitude = toRadians(firstLat)
+  const secondLatitude = toRadians(secondLat)
+  const haversine = Math.sin(latitudeDifference / 2) ** 2
+    + Math.cos(firstLatitude) * Math.cos(secondLatitude)
+      * Math.sin(longitudeDifference / 2) ** 2
+
+  return 6371 * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine))
+}
