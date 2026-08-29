@@ -29,6 +29,16 @@ test('trip CSV safely handles empty history', () => {
   assert.match(csv, /Calculated Total Carbon Emission/)
 })
 
+test('trip CSV identifies electric car history', () => {
+  const csv = buildTripHistoryCsv([{
+    ...trip,
+    transport_mode: 'car',
+    car_powertrain: 'electricity',
+  }])
+
+  assert.match(csv, /"Car · Electricity"/)
+})
+
 test('trip CSV escapes spreadsheet formulas and quotes', () => {
   const csv = buildTripHistoryCsv([{ ...trip, starting_location: '=CMD()', destination: 'A "quoted" place' }])
   assert.match(csv, /"'=CMD\(\)"/)

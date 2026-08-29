@@ -1,4 +1,4 @@
-import { numberValue, transportLabels } from './tripAnalytics.js'
+import { getTripTransportLabel, numberValue } from './tripAnalytics.js'
 import { downloadWasteReport, encodePdf, fillRect, text } from './wasteReport.js'
 
 const headers = [
@@ -21,7 +21,7 @@ export function buildTripHistoryCsv(trips = []) {
     trip.starting_location,
     trip.destination,
     trip.ecological_location_name || trip.ecological_location || '',
-    transportLabels[trip.transport_mode] || trip.transport_mode || 'Unknown',
+    getTripTransportLabel(trip),
     fixedNumber(trip.distance_km),
     fixedNumber(trip.carbon_emission),
     fixedNumber(trip.total_emission),
@@ -129,7 +129,7 @@ function buildTripTablePage(trips, pageNumber) {
   trips.forEach((trip, index) => {
     const y = 726 - index * 34
     if (index % 2 === 0) fillRect(commands, 34, y - 12, 527, 30, [0.97, 0.98, 0.98])
-    const mode = transportLabels[trip.transport_mode] || trip.transport_mode || 'Unknown'
+    const mode = getTripTransportLabel(trip)
     text(commands, shortPdfDate(trip.travelled_at), columns[0], y + 3, 7)
     text(commands, `${truncate(trip.starting_location, 22)} -> ${truncate(trip.destination, 25)}`, columns[1], y + 3, 7, 'F2')
     const ecologicalLocation = trip.ecological_location_name || trip.ecological_location

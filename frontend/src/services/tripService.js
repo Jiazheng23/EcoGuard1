@@ -19,6 +19,8 @@ const tripColumns = [
   'destination_lng',
 ].join(', ')
 
+const tripColumnsWithCarPowertrain = `${tripColumns}, car_powertrain`
+
 export async function createTrip(payload) {
   let { data, error } = await insertTrip(payload)
 
@@ -36,7 +38,9 @@ export async function createTrip(payload) {
   }
 
   if (error) throw error
-  return data
+  return data && payload.car_powertrain
+    ? { ...data, car_powertrain: payload.car_powertrain }
+    : data
 }
 
 function insertTrip(payload) {
@@ -56,24 +60,44 @@ function isMissingCarPowertrainColumn(error) {
 }
 
 export async function listOwnTrips(touristId, limit = 250) {
-  const { data, error } = await supabase
-    .from('trips')
-    .select(tripColumns)
-    .eq('tourist_id', touristId)
-    .order('travelled_at', { ascending: false })
-    .limit(limit)
+  let { data, error } = await selectOwnTrips(
+    touristId,
+    limit,
+    tripColumnsWithCarPowertrain,
+  )
+
+  if (error && isMissingCarPowertrainColumn(error)) {
+    ;({ data, error } = await selectOwnTrips(touristId, limit, tripColumns))
+  }
 
   if (error) throw error
   return data || []
 }
 
-export async function listAllTrips(limit = 2000) {
-  const { data, error } = await supabase
+function selectOwnTrips(touristId, limit, columns) {
+  return supabase
     .from('trips')
-    .select(tripColumns)
+    .select(columns)
+    .eq('tourist_id', touristId)
     .order('travelled_at', { ascending: false })
     .limit(limit)
+}
+
+export async function listAllTrips(limit = 2000) {
+  let { data, error } = await selectAllTrips(limit, tripColumnsWithCarPowertrain)
+
+  if (error && isMissingCarPowertrainColumn(error)) {
+    ;({ data, error } = await selectAllTrips(limit, tripColumns))
+  }
 
   if (error) throw error
   return data || []
+}
+
+function selectAllTrips(limit, columns) {
+  return supabase
+    .from('trips')
+    .select(columns)
+    .order('travelled_at', { ascending: false })
+    .limit(limit)
 }

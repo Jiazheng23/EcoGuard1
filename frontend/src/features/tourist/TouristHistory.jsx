@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertCircle, Award, CalendarDays, Check, ChevronDown, Cloud, Download, History, Leaf, MapPin, Navigation, RefreshCw, Route, Search, SlidersHorizontal, Users, X } from 'lucide-react'
 import { listOwnTrips } from '../../services/tripService'
-import { formatCarbon, formatTripDate, numberValue, transportLabels } from '../../utils/tripAnalytics'
+import { formatCarbon, formatTripDate, getTripTransportLabel, numberValue, transportLabels } from '../../utils/tripAnalytics'
 import { downloadTripHistoryCsv, downloadTripHistoryPdf } from '../../utils/tripReport'
 
 const card = 'rounded-2xl border border-slate-100 bg-white shadow-sm'
@@ -108,7 +108,7 @@ export default function TouristHistory({ user }) {
   const toTime = activeDateTo ? new Date(`${activeDateTo}T23:59:59.999`).getTime() : null
   const filteredTrips = trips.filter((trip) => {
     const matchesMode = mode === 'all' || trip.transport_mode === mode
-    const matchesQuery = !term || [trip.starting_location, trip.destination, transportLabels[trip.transport_mode], trip.transport_mode]
+    const matchesQuery = !term || [trip.starting_location, trip.destination, getTripTransportLabel(trip), trip.transport_mode]
       .some((value) => String(value || '').toLowerCase().includes(term))
     const travelledTime = new Date(trip.travelled_at).getTime()
     const matchesDate = (!activeDateFrom || travelledTime >= fromTime) && (!activeDateTo || travelledTime <= toTime)
@@ -254,7 +254,7 @@ export default function TouristHistory({ user }) {
                   <tr data-transport={trip.transport_mode} key={trip.id} role="button" tabIndex={0} aria-label={`View trip from ${trip.starting_location} to ${trip.destination}`} onClick={() => setSelectedTrip(trip)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedTrip(trip) } }} className="cursor-pointer text-slate-600 transition hover:bg-green-50/60 focus-visible:bg-green-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-green-500">
                     <td className="whitespace-nowrap px-5 py-4"><span className="inline-flex items-center gap-2"><CalendarDays size={15} className="text-slate-400" />{formatTripDate(trip.travelled_at)}</span></td>
                     <td className="px-5 py-4"><p className="font-semibold text-slate-800">{trip.destination}</p><p className="mt-0.5 max-w-64 truncate text-xs text-slate-400">From {trip.starting_location}{trip.round_trip ? ' · Round trip' : ''}</p></td>
-                    <td className="px-5 py-4"><span className="rounded-full bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700">{transportLabels[trip.transport_mode] || trip.transport_mode}</span></td>
+                    <td className="px-5 py-4"><span className="rounded-full bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700">{getTripTransportLabel(trip)}</span></td>
                     <td className="whitespace-nowrap px-5 py-4">{numberValue(trip.distance_km).toFixed(1)} km</td>
                     <td className="whitespace-nowrap px-5 py-4">{formatCarbon(trip.total_emission)}</td>
                     <td className={`whitespace-nowrap px-5 py-4 text-right font-semibold ${numberValue(trip.eco_points) < 0 ? 'text-red-600' : 'text-green-700'}`}>{formatEcoPoints(trip.eco_points)}</td>
@@ -282,7 +282,7 @@ function MobileTripCard({ trip, onOpen }) {
           <p className="truncate font-semibold text-slate-800">{trip.destination}</p>
           <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-500">From {trip.starting_location}</p>
         </div>
-        <span className="shrink-0 rounded-full bg-green-100 px-2.5 py-1 text-[10px] font-semibold text-green-700">{transportLabels[trip.transport_mode] || trip.transport_mode}</span>
+        <span className="shrink-0 rounded-full bg-green-100 px-2.5 py-1 text-[10px] font-semibold text-green-700">{getTripTransportLabel(trip)}</span>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-slate-200/70 pt-3 text-xs">
         <span className="flex items-center gap-1.5 text-slate-500"><CalendarDays size={13} className="shrink-0" />{formatTripDate(trip.travelled_at)}</span>
@@ -295,7 +295,7 @@ function MobileTripCard({ trip, onOpen }) {
 }
 
 function TripDetailsModal({ trip, onClose }) {
-  const transport = transportLabels[trip.transport_mode] || trip.transport_mode || 'Unknown transport'
+  const transport = getTripTransportLabel(trip)
   const hasOriginCoordinates = trip.origin_lat != null && trip.origin_lng != null
   const hasDestinationCoordinates = trip.destination_lat != null && trip.destination_lng != null
 
