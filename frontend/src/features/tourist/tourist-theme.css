@@ -86,6 +86,48 @@
 .tourist-modal > section > header { background: var(--eco-forest) !important; border-radius: .5rem 1.75rem 0 0; }
 .tourist-modal h2, .tourist-modal h3 { letter-spacing: -.015em; }
 
+/* Page personalities: one EcoGuard system with a different visual rhythm per task. */
+.tourist-dashboard-page .tourist-chart-card:nth-child(2) { border-top: 3px solid var(--eco-sage); }
+.tourist-dashboard-page .tourist-chart-card:nth-child(3) { border-top: 3px solid var(--eco-amber); }
+.tourist-dashboard-page > section:last-child > article:last-child { background: #f1eee2; border-style: dashed; }
+
+.tourist-history-table tbody tr[data-transport='car'] td:first-child,
+.tourist-trip-row[data-transport='car'] { border-left: 3px solid #b77a5d; }
+.tourist-history-table tbody tr[data-transport='motorcycle'] td:first-child,
+.tourist-trip-row[data-transport='motorcycle'] { border-left: 3px solid #d99436; }
+.tourist-history-table tbody tr[data-transport='bus'] td:first-child,
+.tourist-trip-row[data-transport='bus'] { border-left: 3px solid var(--eco-teal); }
+.tourist-history-table tbody tr[data-transport='walking'] td:first-child,
+.tourist-trip-row[data-transport='walking'] { border-left: 3px solid var(--eco-sage); }
+.tourist-history-table tbody tr[data-transport='bicycle'] td:first-child,
+.tourist-trip-row[data-transport='bicycle'] { border-left: 3px solid #668fa1; }
+.tourist-history-table { background: rgba(255,253,248,.58) !important; }
+
+.tourist-achievements-page { --eco-leaf: #8b6829; }
+.tourist-achievement-summary { background: #efe2bc !important; color: #503d1e !important; border: 1px solid #dfc889 !important; border-radius: 2rem .5rem 2rem .5rem !important; position: relative; overflow: hidden; }
+.tourist-achievement-summary p, .tourist-achievement-summary svg { color: #745925 !important; }
+.tourist-achievement-summary::after { content: ''; position: absolute; inset: 0; pointer-events: none; background-image: radial-gradient(circle, rgba(139,104,41,.13) 1px, transparent 1px); background-size: 14px 14px; mask-image: linear-gradient(90deg, transparent 40%, black); }
+.tourist-achievement-grid article[data-earned='true'] { background: #fbf3d9; border-color: #dec581; transform: translateY(-2px); }
+.tourist-achievement-grid article[data-earned='true'] .bg-green-500 { background: var(--eco-amber); }
+.tourist-achievement-grid article[data-earned='true'] .text-green-600 { color: #a36b18; }
+.tourist-achievement-grid article[data-earned='false'] { border-style: dashed; opacity: .82; }
+.tourist-achievement-grid article > div:nth-of-type(2) > div:last-child > div { background: linear-gradient(90deg, var(--eco-amber), #e7b458); }
+
+.tourist-monitoring-page { --eco-leaf: var(--eco-teal); --eco-sage-soft: #e1eeee; }
+.tourist-monitoring-page > header { padding: 1rem 1.25rem; border-left: 4px solid var(--eco-teal); background: #e6f0ed; border-radius: 0 1.5rem 1.5rem 0; }
+.tourist-monitoring-page > section:first-of-type { background: transparent; border-width: 0 0 1px; border-radius: 0; padding-inline: 0; }
+.tourist-monitoring-page > section, .tourist-monitoring-page > div { border-color: #cddeda; }
+.tourist-eco-map { border: 4px solid #d5e5e1 !important; border-radius: .5rem 1.5rem .5rem .5rem !important; background: #e6f0ed !important; }
+.tourist-eco-map .leaflet-container { filter: saturate(.88) contrast(.98); }
+.tourist-destination-card { border-radius: .35rem 1.25rem .35rem .35rem !important; background: #f9fbf7 !important; }
+.tourist-destination-card > div:first-child { height: 5.25rem; }
+.tourist-destination-card:hover { border-color: #8bb8ad !important; box-shadow: 0 8px 20px rgba(50,123,120,.10) !important; }
+
+.tourist-route-picker { background: #f8f8f0 !important; border-radius: .5rem 1.75rem .5rem .5rem !important; border-left: 4px solid var(--eco-leaf) !important; }
+.tourist-route-picker button.border-green-500 { background: #dfede3; box-shadow: inset 0 0 0 1px var(--eco-leaf); }
+.tourist-route-picker button.border-orange-500 { background: #fff0d8; box-shadow: inset 0 0 0 1px var(--eco-amber); }
+.tourist-route-picker .leaflet-container { outline: 4px solid rgba(47,118,88,.08); }
+
 @keyframes tourist-reveal { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @media (max-width: 767px) {
   .tourist-main { padding-bottom: 5rem; }

@@ -544,7 +544,7 @@ function FitVisibleDestinations({ destinations }) {
 
 function MapView({ destinations, onSelect }) {
   return (
-    <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+    <section className="tourist-eco-map overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
       <div className="h-96">
         <MapContainer
           center={WEST_MALAYSIA_CENTER}
@@ -619,7 +619,7 @@ function DestinationCard({ destination, onSelect }) {
     <button
       type="button"
       onClick={onSelect}
-      className="overflow-hidden rounded-2xl border border-slate-100 bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+      className="tourist-destination-card overflow-hidden rounded-2xl border border-slate-100 bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
     >
       <div
         className={`flex h-24 items-end justify-between bg-gradient-to-br ${destination.gradient} p-3`}

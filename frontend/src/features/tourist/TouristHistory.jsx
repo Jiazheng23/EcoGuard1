@@ -251,7 +251,7 @@ export default function TouristHistory({ user }) {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredTrips.map((trip) => (
-                  <tr key={trip.id} role="button" tabIndex={0} aria-label={`View trip from ${trip.starting_location} to ${trip.destination}`} onClick={() => setSelectedTrip(trip)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedTrip(trip) } }} className="cursor-pointer text-slate-600 transition hover:bg-green-50/60 focus-visible:bg-green-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-green-500">
+                  <tr data-transport={trip.transport_mode} key={trip.id} role="button" tabIndex={0} aria-label={`View trip from ${trip.starting_location} to ${trip.destination}`} onClick={() => setSelectedTrip(trip)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedTrip(trip) } }} className="cursor-pointer text-slate-600 transition hover:bg-green-50/60 focus-visible:bg-green-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-green-500">
                     <td className="whitespace-nowrap px-5 py-4"><span className="inline-flex items-center gap-2"><CalendarDays size={15} className="text-slate-400" />{formatTripDate(trip.travelled_at)}</span></td>
                     <td className="px-5 py-4"><p className="font-semibold text-slate-800">{trip.destination}</p><p className="mt-0.5 max-w-64 truncate text-xs text-slate-400">From {trip.starting_location}{trip.round_trip ? ' · Round trip' : ''}</p></td>
                     <td className="px-5 py-4"><span className="rounded-full bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700">{transportLabels[trip.transport_mode] || trip.transport_mode}</span></td>
@@ -276,7 +276,7 @@ function MobileTripCard({ trip, onOpen }) {
   const points = numberValue(trip.eco_points)
 
   return (
-    <button type="button" onClick={onOpen} className="w-full rounded-2xl border border-slate-100 bg-slate-50 p-4 text-left transition hover:border-green-200 hover:bg-green-50/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-green-500">
+    <button type="button" data-transport={trip.transport_mode} onClick={onOpen} className="tourist-trip-row w-full rounded-2xl border border-slate-100 bg-slate-50 p-4 text-left transition hover:border-green-200 hover:bg-green-50/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-green-500">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate font-semibold text-slate-800">{trip.destination}</p>

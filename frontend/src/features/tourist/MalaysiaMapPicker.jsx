@@ -248,7 +248,7 @@ export default function MalaysiaMapPicker({
   }
 
   return (
-    <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+    <section className="tourist-route-picker rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="font-bold text-slate-800">

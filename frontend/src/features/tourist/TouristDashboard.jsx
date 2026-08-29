@@ -136,7 +136,7 @@ export default function TouristDashboard({ onNavigate, user, profile }) {
   const greeting = new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 18 ? 'Good afternoon' : 'Good evening'
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-5">
+    <div className="tourist-dashboard-page mx-auto flex max-w-6xl flex-col gap-5">
       <section className="tourist-dashboard-hero flex flex-col justify-between gap-4 rounded-2xl bg-gradient-to-br from-green-600 to-teal-600 p-6 text-white shadow-lg shadow-green-600/20 md:flex-row md:items-center">
         <div>
           <p className="text-sm text-white/75">{greeting}, 👋</p>
