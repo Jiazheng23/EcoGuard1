@@ -84,6 +84,16 @@ export default function TouristWorkspace() {
     navigate("/login", { replace: true });
   }
 
+  async function handleTripSaved() {
+    if (!user) return;
+
+    try {
+      setProfile(await getOwnProfile(user));
+    } catch (profileError) {
+      console.error("Eco Score refresh failed:", profileError.message);
+    }
+  }
+
   if (loading) {
     return (
       <div className="grid min-h-screen place-items-center bg-slate-50">
@@ -103,7 +113,11 @@ export default function TouristWorkspace() {
       {page === "dashboard" ? (
         <TouristDashboard onNavigate={handleNavigate} user={user} profile={profile} />
       ) : page === "carbon" ? (
-        <CarbonCalculator user={user} initialDestination={calculatorDestination} />
+        <CarbonCalculator
+          user={user}
+          initialDestination={calculatorDestination}
+          onTripSaved={handleTripSaved}
+        />
       ) : page === "history" ? (
         <TouristHistory user={user} />
       ) : page === "achievements" ? (
@@ -115,6 +129,7 @@ export default function TouristWorkspace() {
           user={user}
           profile={profile}
           onProfileChange={setProfile}
+          onNavigate={handleNavigate}
         />
       ) : (
         <section className="rounded-2xl border border-slate-100 bg-white p-8 shadow-sm">

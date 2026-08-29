@@ -147,7 +147,9 @@ export function subscribeToEnvironmentalIndicators(onChange) {
 export function latestMetricsByLocation(metrics) {
   return (metrics || []).reduce((latest, metric) => {
     const key = String(metric.location_id)
-    if (!latest[key]) latest[key] = metric
+    const currentTimestamp = new Date(latest[key]?.recorded_at || 0).getTime()
+    const candidateTimestamp = new Date(metric.recorded_at || 0).getTime()
+    if (!latest[key] || candidateTimestamp >= currentTimestamp) latest[key] = metric
     return latest
   }, {})
 }

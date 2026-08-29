@@ -20,6 +20,16 @@ export const transportColors = {
   flight: '#8b5cf6',
 }
 
+export function getTripTransportLabel(trip) {
+  const mode = trip?.transport_mode
+  const label = transportLabels[mode] || mode || 'Unknown transport'
+
+  if (mode !== 'car') return label
+
+  const powertrain = String(trip?.car_powertrain || '').toLowerCase()
+  return `${label} · ${powertrain === 'electricity' ? 'Electricity' : 'Petrol'}`
+}
+
 export function numberValue(value) {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : 0

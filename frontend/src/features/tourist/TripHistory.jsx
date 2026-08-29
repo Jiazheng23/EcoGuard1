@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AlertCircle, ArrowLeft, Car, LoaderCircle, Plus, Train } from 'lucide-react'
 import { listOwnTrips } from '../../services/tripService'
-import { formatCarbon, formatTripDate, numberValue, transportLabels } from '../../utils/tripAnalytics'
+import { formatCarbon, formatTripDate, getTripTransportLabel, numberValue } from '../../utils/tripAnalytics'
 
 const card = 'rounded-2xl border border-slate-100 bg-white p-5 shadow-sm'
 
@@ -99,7 +99,7 @@ function TripRow({ trip }) {
       <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-500"><TripIcon size={16} /></span>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-slate-800">{trip.starting_location} → {trip.destination}</p>
-        <p className="mt-1 text-xs text-slate-400">{formatTripDate(trip.travelled_at, { hour: 'numeric', minute: '2-digit' })} · {transportLabels[trip.transport_mode] || trip.transport_mode || 'Unknown transport'}</p>
+        <p className="mt-1 text-xs text-slate-400">{formatTripDate(trip.travelled_at, { hour: 'numeric', minute: '2-digit' })} · {getTripTransportLabel(trip)}</p>
       </div>
       <div className="min-w-24 text-left text-xs sm:text-right">
         <b className="text-slate-700">{formatCarbon(trip.carbon_emission)}</b>

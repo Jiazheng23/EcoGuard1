@@ -19,36 +19,85 @@ const tripColumns = [
   'destination_lng',
 ].join(', ')
 
+const tripColumnsWithCarPowertrain = `${tripColumns}, car_powertrain`
+
 export async function createTrip(payload) {
-  const { data, error } = await supabase
+  let { data, error } = await insertTrip(payload)
+
+  if (error && payload.car_powertrain === 'petrol' && isMissingCarPowertrainColumn(error)) {
+    const petrolFallback = Object.fromEntries(
+      Object.entries(payload).filter(([key]) => key !== 'car_powertrain'),
+    )
+    ;({ data, error } = await insertTrip(petrolFallback))
+  }
+
+  if (error && payload.car_powertrain === 'electricity' && isMissingCarPowertrainColumn(error)) {
+    throw new Error(
+      'Electric car saving is not enabled in the database yet. Apply supabase/trip_emissions_and_eco_score.sql when you are ready.',
+    )
+  }
+
+  if (error) throw error
+  return data && payload.car_powertrain
+    ? { ...data, car_powertrain: payload.car_powertrain }
+    : data
+}
+
+function insertTrip(payload) {
+  return supabase
     .from('trips')
     .insert(payload)
     .select(tripColumns)
     .single()
+}
 
-  if (error) throw error
-  return data
+function isMissingCarPowertrainColumn(error) {
+  return (
+    error?.code === '42703' ||
+    error?.code === 'PGRST204' ||
+    /car_powertrain/i.test(error?.message || '')
+  )
 }
 
 export async function listOwnTrips(touristId, limit = 250) {
-  const { data, error } = await supabase
-    .from('trips')
-    .select(tripColumns)
-    .eq('tourist_id', touristId)
-    .order('travelled_at', { ascending: false })
-    .limit(limit)
+  let { data, error } = await selectOwnTrips(
+    touristId,
+    limit,
+    tripColumnsWithCarPowertrain,
+  )
+
+  if (error && isMissingCarPowertrainColumn(error)) {
+    ;({ data, error } = await selectOwnTrips(touristId, limit, tripColumns))
+  }
 
   if (error) throw error
   return data || []
 }
 
-export async function listAllTrips(limit = 2000) {
-  const { data, error } = await supabase
+function selectOwnTrips(touristId, limit, columns) {
+  return supabase
     .from('trips')
-    .select(tripColumns)
+    .select(columns)
+    .eq('tourist_id', touristId)
     .order('travelled_at', { ascending: false })
     .limit(limit)
+}
+
+export async function listAllTrips(limit = 2000) {
+  let { data, error } = await selectAllTrips(limit, tripColumnsWithCarPowertrain)
+
+  if (error && isMissingCarPowertrainColumn(error)) {
+    ;({ data, error } = await selectAllTrips(limit, tripColumns))
+  }
 
   if (error) throw error
   return data || []
+}
+
+function selectAllTrips(limit, columns) {
+  return supabase
+    .from('trips')
+    .select(columns)
+    .order('travelled_at', { ascending: false })
+    .limit(limit)
 }

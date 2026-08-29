@@ -12,10 +12,10 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<LandingPage />} />
-        <Route path="/login" element={<AuthPage initialMode="login" />} />
-        <Route path="/register" element={<AuthPage initialMode="register" />} />
-        <Route path="/forgot-password" element={<AuthPage initialMode="forgot" />} />
-        <Route path="/reset-password" element={<AuthPage initialMode="reset" />} />
+        <Route path="/login" element={<AuthPage key="login" initialMode="login" />} />
+        <Route path="/register" element={<AuthPage key="register" initialMode="register" />} />
+        <Route path="/forgot-password" element={<AuthPage key="forgot" initialMode="forgot" />} />
+        <Route path="/reset-password" element={<AuthPage key="reset" initialMode="reset" />} />
         <Route path="/tourist/dashboard" element={<TouristWorkspace />} />
         <Route path="/super_admin/dashboard" element={<AdminWorkspace />} />
         <Route path="/location_admin/dashboard" element={<LocationAdminWorkspace />} />

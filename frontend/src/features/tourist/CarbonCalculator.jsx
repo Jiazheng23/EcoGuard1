@@ -13,20 +13,27 @@ import {
   Bike,
   Bus,
   Car,
+  Footprints,
   Leaf,
   MapPin,
   Navigation,
   TrendingDown,
 } from 'lucide-react'
 import { createTrip } from '../../services/tripService'
+import {
+  CAR_POWERTRAINS,
+  CAR_POWERTRAIN_OPTIONS,
+  calculateTripEnvironmentalImpact,
+  recommendedModeForDistance,
+} from '../../utils/tripEnvironmentalRules'
 import MalaysiaMapPicker from './MalaysiaMapPicker'
 
 const modes = [
-  { id: 'car', label: 'Car', icon: Car, factor: 0.21, color: '#ef4444', tip: 'Highest emitter. Carpooling reduces per-person emissions.' },
-  { id: 'motorcycle', label: 'Motorcycle', icon: Bike, factor: 0.11, color: '#f97316', tip: 'Better than a car, but still dependent on fossil fuel.' },
-  { id: 'bus', label: 'Bus', icon: Bus, factor: 0.089, color: '#f59e0b', tip: 'A good group transport choice with lower emissions.' },
-  { id: 'walking', label: 'Walking', icon: Bike, factor: 0, color: '#14b8a6', tip: 'Walking produces no transport emissions.' },
-  { id: 'bicycle', label: 'Bicycle', icon: Bike, factor: 0, color: '#0ea5e9', tip: 'Cycling produces no transport emissions.' },
+  { id: 'car', label: 'Car', icon: Car, color: '#ef4444', tip: 'Choose petrol or electricity to use the correct car emission factor.' },
+  { id: 'motorcycle', label: 'Motorcycle', icon: Bike, color: '#f97316', tip: 'Petrol motorcycles emit 41.57 g CO₂e per passenger-km.' },
+  { id: 'bus', label: 'Bus', icon: Bus, color: '#f59e0b', tip: 'Diesel buses are the recommended motorised option for longer routes.' },
+  { id: 'walking', label: 'Walking', icon: Footprints, color: '#14b8a6', tip: 'Walking produces no direct transport emissions.' },
+  { id: 'bicycle', label: 'Bicycle', icon: Bike, color: '#0ea5e9', tip: 'Cycling produces no direct transport emissions.' },
 ]
 
 const impact = [
@@ -39,15 +46,14 @@ const impact = [
 
 const card = 'rounded-2xl border border-slate-100 bg-white p-5 shadow-sm'
 
-function recommendedModeForDistance(distanceKm) {
-  if (distanceKm <= 2) return 'walking'
-  if (distanceKm <= 10) return 'bicycle'
-  return 'bus'
-}
-
-export default function CarbonCalculator({ user, initialDestination = null }) {
+export default function CarbonCalculator({
+  user,
+  initialDestination = null,
+  onTripSaved,
+}) {
   const [step, setStep] = useState(1)
   const [modeId, setModeId] = useState('car')
+  const [carPowertrain, setCarPowertrain] = useState(CAR_POWERTRAINS.petrol)
   const [recommendedModeId, setRecommendedModeId] = useState(null)
   const [distance, setDistance] = useState('0')
   const [roundTrip, setRoundTrip] = useState(false)
@@ -64,9 +70,16 @@ export default function CarbonCalculator({ user, initialDestination = null }) {
   const mode = modes.find((item) => item.id === modeId)
   const km = Math.max(0, Number(distance) || 0)
   const pax = 1
-  const multiplier = roundTrip ? 2 : 1
-  const total = mode.factor * km * multiplier
-  const perPassenger = total / pax
+  const environmentalImpact = calculateTripEnvironmentalImpact({
+    mode: modeId,
+    distanceKm: km,
+    passengers: pax,
+    roundTrip,
+    carPowertrain,
+  })
+  const perPassenger = environmentalImpact.carbonEmissionKg
+  const total = environmentalImpact.totalEmissionKg
+  const ecoPoints = environmentalImpact.ecoPoints
   const rating = impact.find((item) => perPassenger <= item.max) || impact.at(-1)
 
   const comparison = useMemo(
@@ -75,23 +88,25 @@ export default function CarbonCalculator({ user, initialDestination = null }) {
         .filter((item) => !['walking', 'bicycle'].includes(item.id))
         .map((item) => ({
           name: item.label,
-          emission: Number(((item.factor * km * multiplier) / pax).toFixed(2)),
+          emission: calculateTripEnvironmentalImpact({
+            mode: item.id,
+            distanceKm: km,
+            passengers: pax,
+            roundTrip,
+            carPowertrain,
+          }).carbonEmissionKg,
           color: item.color,
         })),
-    [km, multiplier, pax],
+    [carPowertrain, km, pax, roundTrip],
   )
 
-  const greener = (0.089 * km * multiplier) / pax
-  const ecoPoints =
-    perPassenger <= 1
-      ? 10
-      : perPassenger <= 5
-        ? 7
-        : perPassenger <= 15
-          ? 4
-          : perPassenger <= 50
-            ? 1
-            : -3
+  const greener = calculateTripEnvironmentalImpact({
+    mode: 'bus',
+    distanceKm: km,
+    passengers: pax,
+    roundTrip,
+    carPowertrain,
+  }).carbonEmissionKg
 
   function handleJourneyChange({
     origin: selectedOrigin,
@@ -136,11 +151,12 @@ export default function CarbonCalculator({ user, initialDestination = null }) {
     setIsSaving(true)
 
     try {
-      await createTrip({
+      const savedTrip = await createTrip({
         tourist_id: user.id,
         starting_location: origin,
         destination,
         transport_mode: mode.id,
+        ...(mode.id === 'car' ? { car_powertrain: carPowertrain } : {}),
         distance_km: km,
         passengers: pax,
         round_trip: roundTrip,
@@ -153,9 +169,9 @@ export default function CarbonCalculator({ user, initialDestination = null }) {
         destination_lng: journeyCoordinates.destination.lng,
       })
 
-      setSaveMessage(
-        `Trip saved successfully. You received ${ecoPoints} Eco Points.`,
-      )
+      const savedPoints = Number(savedTrip.eco_points) || 0
+      setSaveMessage(`Trip saved successfully. Eco Score changed by ${formatSignedPoints(savedPoints)}.`)
+      onTripSaved?.(savedTrip)
     } catch (error) {
       setSaveError(error.message || 'Unable to save this trip.')
     } finally {
@@ -164,7 +180,7 @@ export default function CarbonCalculator({ user, initialDestination = null }) {
   }
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-6">
+    <div className="tourist-calculator mx-auto flex max-w-7xl flex-col gap-6">
       <header>
         <h1 className="text-2xl font-bold text-slate-900">
           Carbon Footprint Calculator
@@ -174,7 +190,7 @@ export default function CarbonCalculator({ user, initialDestination = null }) {
         </p>
       </header>
 
-      <div className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+      <div className="tourist-stepper flex items-center gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
         <StepIndicator number="1" label="Select origin" active={step === 1} complete={step === 2} />
         <div className="h-px flex-1 bg-slate-200" />
         <StepIndicator number="2" label="Review journey" active={step === 2} />
@@ -208,9 +224,9 @@ export default function CarbonCalculator({ user, initialDestination = null }) {
             ← Change origin
           </button>
 
-      <div className="grid gap-5 lg:grid-cols-5">
-        <div className="space-y-4 lg:col-span-2">
-          <section className={`${card} space-y-4`}>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="space-y-5">
+          <section className={`${card} space-y-5 sm:p-6`}>
             <h2 className="font-bold text-slate-800">Journey Details</h2>
 
             <ReadOnlyField
@@ -251,14 +267,14 @@ export default function CarbonCalculator({ user, initialDestination = null }) {
             </button>
           </section>
 
-          <section className={card}>
+          <section className={`${card} sm:p-6`}>
             <h2 className="mb-3 font-bold text-slate-800">Transport Mode</h2>
             {recommendedModeId && (
               <p className="mb-3 rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-700">
                 Recommended for this {km.toFixed(1)} km route: <b>{modes.find((item) => item.id === recommendedModeId)?.label}</b>. You may choose another mode below.
               </p>
             )}
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
               {modes.map((item) => {
                 const Icon = item.icon
                 const active = item.id === modeId
@@ -284,11 +300,44 @@ export default function CarbonCalculator({ user, initialDestination = null }) {
                 )
               })}
             </div>
+
+            {modeId === 'car' && (
+              <fieldset className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3">
+                <legend className="px-1 text-xs font-semibold text-red-800">
+                  Car power source
+                </legend>
+                <div className="mt-1 grid gap-2 sm:grid-cols-2">
+                  {CAR_POWERTRAIN_OPTIONS.map((option) => {
+                    const active = carPowertrain === option.id
+
+                    return (
+                      <button
+                        type="button"
+                        aria-pressed={active}
+                        onClick={() => {
+                          setCarPowertrain(option.id)
+                          setSaveMessage('')
+                        }}
+                        className={`rounded-lg border px-3 py-2 text-left text-xs transition ${
+                          active
+                            ? 'border-red-500 bg-white text-red-800 shadow-sm'
+                            : 'border-red-200 text-red-700 hover:border-red-400'
+                        }`}
+                        key={option.id}
+                      >
+                        <b className="block">{option.label}</b>
+                        {option.factorG} g CO₂e / passenger-km
+                      </button>
+                    )
+                  })}
+                </div>
+              </fieldset>
+            )}
           </section>
 
         </div>
 
-        <div className="space-y-4 lg:col-span-3">
+        <div className="space-y-5">
           <section
             className={`${card} border-2`}
             style={{ borderColor: `${rating.color}40` }}
@@ -337,7 +386,7 @@ export default function CarbonCalculator({ user, initialDestination = null }) {
               />
               <ResultItem
                 label="Emission Factor"
-                value={`${mode.factor} kg/km`}
+                value={`${environmentalImpact.factorG} g/pax-km`}
                 color="#64748b"
               />
             </div>
@@ -345,6 +394,32 @@ export default function CarbonCalculator({ user, initialDestination = null }) {
             <div className="mt-5 flex gap-3 rounded-xl border border-green-200 bg-green-50 p-3.5 text-sm text-green-700">
               <Leaf className="mt-0.5 shrink-0" size={17} />
               <p>{mode.tip}</p>
+            </div>
+
+            <div className={`mt-4 rounded-xl border p-4 ${ecoPoints < 0 ? 'border-red-200 bg-red-50' : 'border-green-200 bg-green-50'}`}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Eco Score effect
+                  </p>
+                  <p className={`mt-1 text-2xl font-bold ${ecoPoints < 0 ? 'text-red-600' : 'text-green-700'}`}>
+                    {formatSignedPoints(ecoPoints)} points
+                  </p>
+                </div>
+                {environmentalImpact.isRecommended && (
+                  <span className="rounded-full bg-green-600 px-3 py-1 text-xs font-semibold text-white">
+                    Recommended +3
+                  </span>
+                )}
+              </div>
+              <div className="mt-3 grid gap-2 text-xs text-slate-600 sm:grid-cols-3">
+                <ScoreRule label="Mode & distance" value={environmentalImpact.breakdown.modeDistancePoints} />
+                <ScoreRule label="Emission level" value={environmentalImpact.breakdown.emissionPoints} />
+                <ScoreRule label="Recommendation" value={environmentalImpact.breakdown.recommendationPoints} />
+              </div>
+              <p className="mt-3 text-xs leading-5 text-slate-500">
+                Walking is recommended up to 2 km, bicycle up to 10 km, and bus above 10 km. Emissions above 5 kg start reducing points; above 15 kg has the strongest penalty.
+              </p>
             </div>
 
             {!['bus', 'walking', 'bicycle'].includes(modeId) &&
@@ -393,7 +468,7 @@ export default function CarbonCalculator({ user, initialDestination = null }) {
               >
                 {isSaving
                   ? 'Saving Trip...'
-                  : `Save Trip (${ecoPoints} Eco Points)`}
+                  : `Save Trip (${formatSignedPoints(ecoPoints)} Eco Score)`}
               </button>
             </div>
           </section>
@@ -513,4 +588,20 @@ function ResultItem({ label, value, color }) {
       </b>
     </div>
   )
+}
+
+function ScoreRule({ label, value }) {
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-lg bg-white/80 px-3 py-2">
+      <span>{label}</span>
+      <b className={value < 0 ? 'text-red-600' : 'text-green-700'}>
+        {formatSignedPoints(value)}
+      </b>
+    </div>
+  )
+}
+
+function formatSignedPoints(value) {
+  const points = Number(value) || 0
+  return points > 0 ? `+${points}` : String(points)
 }
