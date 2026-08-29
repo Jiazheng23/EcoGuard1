@@ -20,14 +20,39 @@ const tripColumns = [
 ].join(', ')
 
 export async function createTrip(payload) {
-  const { data, error } = await supabase
+  let { data, error } = await insertTrip(payload)
+
+  if (error && payload.car_powertrain === 'petrol' && isMissingCarPowertrainColumn(error)) {
+    const petrolFallback = Object.fromEntries(
+      Object.entries(payload).filter(([key]) => key !== 'car_powertrain'),
+    )
+    ;({ data, error } = await insertTrip(petrolFallback))
+  }
+
+  if (error && payload.car_powertrain === 'electricity' && isMissingCarPowertrainColumn(error)) {
+    throw new Error(
+      'Electric car saving is not enabled in the database yet. Apply supabase/trip_emissions_and_eco_score.sql when you are ready.',
+    )
+  }
+
+  if (error) throw error
+  return data
+}
+
+function insertTrip(payload) {
+  return supabase
     .from('trips')
     .insert(payload)
     .select(tripColumns)
     .single()
+}
 
-  if (error) throw error
-  return data
+function isMissingCarPowertrainColumn(error) {
+  return (
+    error?.code === '42703' ||
+    error?.code === 'PGRST204' ||
+    /car_powertrain/i.test(error?.message || '')
+  )
 }
 
 export async function listOwnTrips(touristId, limit = 250) {
