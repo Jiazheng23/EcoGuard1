@@ -16,14 +16,21 @@ import {
   AlertTriangle,
   CheckCircle,
   CloudSun,
+  Droplets,
   MapPin,
-  RadioTower,
+  Recycle,
   Route,
+  ThermometerSun,
   Trash2,
   TrendingDown,
   Users,
 } from 'lucide-react'
 import { latestMetricsByLocation } from '../../services/locationService'
+import {
+  airQualityLabel,
+  sensorReadingSummary,
+  waterQualityLabel,
+} from '../../utils/sensorMetrics'
 import {
   formatCarbon,
   formatTripDate,
@@ -40,7 +47,18 @@ const tooltipStyle = {
   fontSize: '0.75rem',
 }
 
-export default function AdminDashboard({ onNavigate, profiles, trips, locations = [], metrics = [], loading, error }) {
+export default function AdminDashboard({
+  onNavigate,
+  profiles,
+  trips,
+  locations = [],
+  metrics = [],
+  loading,
+  error,
+  isSuperAdmin,
+  selectedSensorLocationId,
+  onSensorLocationChange,
+}) {
   const data = useMemo(() => {
     const summary = getTripSummary(trips, profiles)
     const monthly = getMonthlySeries(trips)
@@ -53,38 +71,29 @@ export default function AdminDashboard({ onNavigate, profiles, trips, locations 
     return { summary, monthly, destinations, highCarbonTrips }
   }, [profiles, trips])
 
-  const environmental = useMemo(() => {
-    const latest = latestMetricsByLocation(metrics)
-    const readings = locations.map((location) => latest[String(location.id)]).filter(Boolean)
-    const totalCrowd = readings.reduce((sum, reading) => sum + numberValue(reading.crowd_count), 0)
-    const totalWaste = readings.reduce((sum, reading) => sum + numberValue(reading.waste_kg), 0)
-    const totalRecycled = readings.reduce((sum, reading) => sum + numberValue(reading.recycled_kg), 0)
-    const averageAirQuality = readings.length
-      ? readings.reduce((sum, reading) => sum + numberValue(reading.air_quality_index), 0) / readings.length
-      : 0
-    const averageWaterQuality = readings.length
-      ? readings.reduce((sum, reading) => sum + numberValue(reading.water_quality_score), 0) / readings.length
-      : 0
-    const latestUpdate = readings.reduce((newest, reading) => {
-      const timestamp = new Date(reading.recorded_at).getTime()
-      return Number.isFinite(timestamp) ? Math.max(newest, timestamp) : newest
-    }, 0)
-
-    return { readings, totalCrowd, totalWaste, totalRecycled, averageAirQuality, averageWaterQuality, latestUpdate }
-  }, [locations, metrics])
+  const latestMetrics = useMemo(() => latestMetricsByLocation(metrics), [metrics])
+  const selectedSensorLocation = locations.find(
+    (location) => String(location.id) === String(selectedSensorLocationId),
+  ) || locations[0] || null
+  const selectedSensorReading = selectedSensorLocation
+    ? latestMetrics[String(selectedSensorLocation.id)]
+    : null
+  const sensor = sensorReadingSummary(selectedSensorLocation, selectedSensorReading)
 
   const kpis = [
-    { label: 'Total Tourists', value: data.summary.touristCount, delta: `${profiles.length} total profiles`, color: '#3b82f6', icon: Users, page: 'reports' },
+    { label: 'Registered Tourists', value: data.summary.touristCount, delta: `${profiles.length} total profiles`, color: '#3b82f6', icon: Users, page: 'reports' },
     { label: 'Recorded Destinations', value: data.summary.destinationCount, delta: `${data.summary.totalTrips} saved trips`, color: '#22c55e', icon: MapPin, page: 'locations' },
     { label: 'High Carbon Trips', value: data.summary.highEmissionTrips, delta: 'Above 15 kg per passenger', color: '#ef4444', icon: AlertTriangle, page: 'thresholds' },
     { label: 'Avg Carbon/Trip', value: `${data.summary.averageEmission.toFixed(1)} kg`, delta: `${data.summary.totalEmission.toFixed(1)} kg total`, color: '#8b5cf6', icon: TrendingDown, page: 'reports' },
   ]
 
   const environmentalKpis = [
-    { label: 'Locations Monitored', value: `${environmental.readings.length}/${locations.length}`, delta: 'Backend sensor coverage', color: '#0ea5e9', icon: RadioTower, page: 'sensors' },
-    { label: 'Current Visitors', value: Math.round(environmental.totalCrowd).toLocaleString(), delta: 'Across latest readings', color: '#2563eb', icon: Activity, page: 'reports' },
-    { label: 'Detected Waste', value: `${environmental.totalWaste.toFixed(1)} kg`, delta: `${environmental.totalRecycled.toFixed(1)} kg recyclable`, color: '#f97316', icon: Trash2, page: 'reports' },
-    { label: 'Average Air Quality', value: Math.round(environmental.averageAirQuality), delta: `${environmental.averageWaterQuality.toFixed(1)}/100 water quality`, color: '#8b5cf6', icon: CloudSun, page: 'reports' },
+    { label: 'Visitors', value: sensor.visitors.toLocaleString(), delta: `${sensor.occupancyPercent.toFixed(1)}% of ${sensor.capacity.toLocaleString()} capacity`, color: '#3b82f6', icon: Activity },
+    { label: 'Waste', value: `${sensor.waste.toFixed(2)} kg`, delta: 'Current detected level', color: '#f97316', icon: Trash2 },
+    { label: 'Recyclable material', value: `${sensor.recyclable.toFixed(2)} kg`, delta: `${sensor.recyclablePercent.toFixed(1)}% of waste`, color: '#22c55e', icon: Recycle },
+    { label: 'Air quality index', value: sensor.airQualityIndex, delta: airQualityLabel(sensor.airQualityIndex), color: '#8b5cf6', icon: CloudSun },
+    { label: 'Water quality', value: `${sensor.waterQualityScore.toFixed(1)} / 100`, delta: waterQualityLabel(sensor.waterQualityScore), color: '#06b6d4', icon: Droplets },
+    { label: 'Temperature', value: sensor.temperatureC == null ? 'Unavailable' : `${sensor.temperatureC.toFixed(1)} °C`, delta: 'Current sensor temperature', color: '#ef4444', icon: ThermometerSun },
   ]
 
   const lowImpact = trips.filter((trip) => numberValue(trip.carbon_emission) <= 5).length
@@ -95,7 +104,7 @@ export default function AdminDashboard({ onNavigate, profiles, trips, locations 
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-900">Admin Dashboard</h1>
-          <p className="mt-0.5 text-sm text-slate-500">Live Supabase overview · profiles + trips</p>
+          <p className="mt-0.5 text-sm text-slate-500">Live Supabase overview · profiles, trips, and sensor readings</p>
         </div>
         <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-3 py-1.5">
           <span className="size-2 animate-pulse rounded-full bg-green-500" />
@@ -122,22 +131,43 @@ export default function AdminDashboard({ onNavigate, profiles, trips, locations 
         <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
           <div>
             <h2 id="environmental-overview-heading" className="font-bold text-slate-900">Environmental Monitoring</h2>
-            <p className="mt-0.5 text-xs text-slate-400">Integrated with the tourist and trip overview</p>
+            <p className="mt-0.5 text-xs text-slate-400">The same current reading shown on the Sensors page</p>
           </div>
-          <span className="text-xs font-medium text-slate-400">Backend sensors · every 5 minutes{environmental.latestUpdate ? ` · Updated ${formatMetricDate(environmental.latestUpdate)}` : ''}</span>
+          <div className="flex flex-wrap items-end gap-3">
+            {selectedSensorLocation && isSuperAdmin && locations.length > 1 ? (
+              <label className="min-w-56 text-xs font-semibold text-slate-500">
+                Location
+                <select
+                  aria-label="Dashboard sensor location"
+                  value={selectedSensorLocation.id}
+                  onChange={(event) => onSensorLocationChange?.(event.target.value)}
+                  className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none focus:border-blue-500"
+                >
+                  {locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
+                </select>
+              </label>
+            ) : selectedSensorLocation ? (
+              <span className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600"><MapPin size={14} className="text-blue-500" />{selectedSensorLocation.name}</span>
+            ) : null}
+            <span className="pb-2 text-xs font-medium text-slate-400">Every 5 minutes{sensor.recordedAt ? ` · Updated ${formatMetricDate(sensor.recordedAt)}` : ''}</span>
+          </div>
         </div>
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          {environmentalKpis.map(({ label, value, delta, color, icon: Icon, page }) => (
-            <button key={label} type="button" onClick={() => onNavigate(page)} className="flex flex-col gap-2 rounded-2xl border border-slate-100 bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-slate-500">{label}</span>
-                <span className="grid size-8 place-items-center rounded-lg" style={{ backgroundColor: `${color}15` }}><Icon size={16} style={{ color }} /></span>
-              </div>
-              <strong className="text-2xl leading-none" style={{ color }}>{loading ? '—' : value}</strong>
-              <span className="text-xs text-slate-400">{delta}</span>
-            </button>
-          ))}
-        </div>
+        {selectedSensorReading ? (
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+            {environmentalKpis.map(({ label, value, delta, color, icon: Icon }) => (
+              <button key={label} type="button" onClick={() => onNavigate('sensors')} className="flex flex-col gap-2 rounded-2xl border border-slate-100 bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-slate-500">{label}</span>
+                  <span className="grid size-8 place-items-center rounded-lg" style={{ backgroundColor: `${color}15` }}><Icon size={16} style={{ color }} /></span>
+                </div>
+                <strong className="text-2xl leading-none" style={{ color }}>{loading ? '—' : value}</strong>
+                <span className="text-xs text-slate-400">{delta}</span>
+              </button>
+            ))}
+          </div>
+        ) : !loading && (
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center text-sm text-slate-400">No sensor reading is available for this location yet.</div>
+        )}
       </section>
 
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">

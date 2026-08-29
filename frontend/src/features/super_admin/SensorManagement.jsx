@@ -18,9 +18,22 @@ import {
   listLocationSensorControls,
   saveLocationSensorControl,
 } from '../../services/locationService'
+import {
+  airQualityLabel,
+  sensorReadingSummary,
+  waterQualityLabel,
+} from '../../utils/sensorMetrics'
 
-export default function SensorManagement({ locations, metrics, loading, error, isSuperAdmin, user }) {
-  const [selectedId, setSelectedId] = useState('')
+export default function SensorManagement({
+  locations,
+  metrics,
+  loading,
+  error,
+  isSuperAdmin,
+  user,
+  selectedSensorLocationId,
+  onSensorLocationChange,
+}) {
   const [controls, setControls] = useState([])
   const [controlLoading, setControlLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -45,7 +58,7 @@ export default function SensorManagement({ locations, metrics, loading, error, i
     () => Object.fromEntries(controls.map((control) => [String(control.location_id), control])),
     [controls],
   )
-  const selected = locations.find((location) => String(location.id) === String(selectedId)) || locations[0] || null
+  const selected = locations.find((location) => String(location.id) === String(selectedSensorLocationId)) || locations[0] || null
   const reading = selected ? latest[String(selected.id)] : null
   const selectedControl = selected ? controlMap[String(selected.id)] : null
   const sensorEnabled = selectedControl?.is_enabled !== false
@@ -71,12 +84,7 @@ export default function SensorManagement({ locations, metrics, loading, error, i
     }
   }
 
-  const capacity = Math.max(1, Number(selected?.max_capacity) || 1)
-  const crowdCount = Number(reading?.crowd_count || 0)
-  const occupancy = (crowdCount / capacity) * 100
-  const waste = Number(reading?.waste_kg || 0)
-  const recycled = Number(reading?.recycled_kg || 0)
-  const recycledRate = waste > 0 ? (recycled / waste) * 100 : 0
+  const sensor = sensorReadingSummary(selected, reading)
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
@@ -94,7 +102,7 @@ export default function SensorManagement({ locations, metrics, loading, error, i
               aria-label="Sensor location"
               value={selected.id}
               onChange={(event) => {
-                setSelectedId(event.target.value)
+                onSensorLocationChange?.(event.target.value)
                 setMessage('')
               }}
               className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:border-blue-500"
@@ -157,12 +165,12 @@ export default function SensorManagement({ locations, metrics, loading, error, i
                 <p className="mt-0.5 text-xs text-slate-400">All available data for the selected location</p>
               </div>
               <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
-                <MetricCard icon={Users} label="Visitors" value={crowdCount.toLocaleString()} detail={`${occupancy.toFixed(1)}% of ${capacity.toLocaleString()} capacity`} color="#3b82f6" />
-                <MetricCard icon={Trash2} label="Waste" value={`${waste.toFixed(2)} kg`} detail="Current detected level" color="#f97316" />
-                <MetricCard icon={Recycle} label="Recyclable material" value={`${recycled.toFixed(2)} kg`} detail={`${recycledRate.toFixed(1)}% of waste`} color="#22c55e" />
-                <MetricCard icon={CloudSun} label="Air quality index" value={Number(reading.air_quality_index || 0)} detail={airQualityLabel(reading.air_quality_index)} color="#8b5cf6" />
-                <MetricCard icon={Droplets} label="Water quality" value={`${Number(reading.water_quality_score || 0).toFixed(1)} / 100`} detail={waterQualityLabel(reading.water_quality_score)} color="#06b6d4" />
-                <MetricCard icon={ThermometerSun} label="Temperature" value={reading.temperature_c == null ? 'Unavailable' : `${Number(reading.temperature_c).toFixed(1)} °C`} detail="Current sensor temperature" color="#ef4444" />
+                <MetricCard icon={Users} label="Visitors" value={sensor.visitors.toLocaleString()} detail={`${sensor.occupancyPercent.toFixed(1)}% of ${sensor.capacity.toLocaleString()} capacity`} color="#3b82f6" />
+                <MetricCard icon={Trash2} label="Waste" value={`${sensor.waste.toFixed(2)} kg`} detail="Current detected level" color="#f97316" />
+                <MetricCard icon={Recycle} label="Recyclable material" value={`${sensor.recyclable.toFixed(2)} kg`} detail={`${sensor.recyclablePercent.toFixed(1)}% of waste`} color="#22c55e" />
+                <MetricCard icon={CloudSun} label="Air quality index" value={sensor.airQualityIndex} detail={airQualityLabel(sensor.airQualityIndex)} color="#8b5cf6" />
+                <MetricCard icon={Droplets} label="Water quality" value={`${sensor.waterQualityScore.toFixed(1)} / 100`} detail={waterQualityLabel(sensor.waterQualityScore)} color="#06b6d4" />
+                <MetricCard icon={ThermometerSun} label="Temperature" value={sensor.temperatureC == null ? 'Unavailable' : `${sensor.temperatureC.toFixed(1)} °C`} detail="Current sensor temperature" color="#ef4444" />
               </div>
             </section>
           ) : !loading && (
@@ -188,21 +196,6 @@ function MetricCard({ icon: Icon, label, value, detail, color }) {
 
 function Notice({ message, error }) {
   return <div className={`flex items-start gap-2 rounded-xl border p-3 text-sm ${error ? 'border-red-200 bg-red-50 text-red-600' : 'border-green-200 bg-green-50 text-green-700'}`} role={error ? 'alert' : 'status'}><AlertCircle size={17} className="mt-0.5 shrink-0" /><p>{message}</p></div>
-}
-
-function airQualityLabel(value) {
-  const aqi = Number(value || 0)
-  if (aqi <= 50) return 'Good'
-  if (aqi <= 100) return 'Moderate'
-  if (aqi <= 150) return 'Unhealthy for sensitive groups'
-  return 'Unhealthy'
-}
-
-function waterQualityLabel(value) {
-  const score = Number(value || 0)
-  if (score >= 80) return 'Good'
-  if (score >= 60) return 'Moderate'
-  return 'Needs attention'
 }
 
 function formatDate(value) {
