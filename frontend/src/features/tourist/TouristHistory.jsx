@@ -140,7 +140,7 @@ export default function TouristHistory({ user }) {
   }), [trips])
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-6">
+    <div className="tourist-history-page mx-auto flex max-w-6xl flex-col gap-6">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Trip History</h1>
@@ -170,7 +170,7 @@ export default function TouristHistory({ user }) {
         <SummaryCard label="Eco Points" value={summary.points.toLocaleString()} detail={`${formatCarbon(summary.emission)} recorded`} icon={Leaf} />
       </section>
 
-      <section className={`${card} relative overflow-visible`}>
+      <section className={`${card} tourist-history-table relative overflow-visible`}>
         <div className="grid gap-3 border-b border-slate-100 p-4 lg:grid-cols-[minmax(0,1fr)_14rem]">
           <div ref={transportFilterRef} className="relative flex min-w-0 items-center rounded-xl border border-slate-200 bg-slate-50 focus-within:border-green-500">
             <label className="relative min-w-0 flex-1">
@@ -300,7 +300,7 @@ function TripDetailsModal({ trip, onClose }) {
   const hasDestinationCoordinates = trip.destination_lat != null && trip.destination_lng != null
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/55 p-3 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
+    <div className="tourist-modal fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/55 p-3 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
       <section role="dialog" aria-modal="true" aria-labelledby="trip-details-title" className="max-h-[calc(100dvh-1.5rem)] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl sm:max-h-[calc(100dvh-2rem)]">
         <header className="relative overflow-hidden rounded-t-2xl bg-gradient-to-br from-green-600 to-emerald-500 px-5 py-3.5 text-white">
           <button type="button" onClick={onClose} aria-label="Close trip details" className="absolute right-3 top-3 grid size-8 place-items-center rounded-full bg-white/15 transition hover:bg-white/25 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"><X size={16} /></button>

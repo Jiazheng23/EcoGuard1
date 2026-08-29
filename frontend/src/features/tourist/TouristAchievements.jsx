@@ -48,7 +48,7 @@ export default function TouristAchievements({ user, profile }) {
         <Award size={70} strokeWidth={1.2} className="hidden text-white/70 sm:block" />
       </section>
 
-      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <section className="tourist-achievement-grid grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {badges.map((badge) => {
           return (
             <article className={`${card} ${badge.earned ? 'border-amber-200' : ''}`} key={badge.id}>

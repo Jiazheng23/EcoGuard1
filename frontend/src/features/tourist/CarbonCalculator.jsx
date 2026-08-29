@@ -164,7 +164,7 @@ export default function CarbonCalculator({ user, initialDestination = null }) {
   }
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-6">
+    <div className="tourist-calculator mx-auto flex max-w-6xl flex-col gap-6">
       <header>
         <h1 className="text-2xl font-bold text-slate-900">
           Carbon Footprint Calculator
@@ -174,7 +174,7 @@ export default function CarbonCalculator({ user, initialDestination = null }) {
         </p>
       </header>
 
-      <div className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+      <div className="tourist-stepper flex items-center gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
         <StepIndicator number="1" label="Select origin" active={step === 1} complete={step === 2} />
         <div className="h-px flex-1 bg-slate-200" />
         <StepIndicator number="2" label="Review journey" active={step === 2} />

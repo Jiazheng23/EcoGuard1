@@ -381,7 +381,7 @@ export default function EcologicalMonitoring({ onNavigate }) {
     selectedTypes.length > 0
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-4">
+    <div className="tourist-monitoring-page mx-auto flex max-w-6xl flex-col gap-4">
       <header>
         <h1 className="text-2xl font-bold text-slate-900">
           Explore Ecological Destinations

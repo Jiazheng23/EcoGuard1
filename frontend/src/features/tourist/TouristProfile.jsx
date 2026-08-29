@@ -143,7 +143,7 @@ export default function TouristProfile({ user, profile, onProfileChange, onNavig
   }
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-6">
+    <div className="tourist-profile-page mx-auto flex max-w-4xl flex-col gap-6">
       <header>
         <h1 className="text-2xl font-bold text-slate-900">
           Tourist Profile

@@ -137,7 +137,7 @@ export default function TouristDashboard({ onNavigate, user, profile }) {
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-5">
-      <section className="flex flex-col justify-between gap-4 rounded-2xl bg-gradient-to-br from-green-600 to-teal-600 p-6 text-white shadow-lg shadow-green-600/20 md:flex-row md:items-center">
+      <section className="tourist-dashboard-hero flex flex-col justify-between gap-4 rounded-2xl bg-gradient-to-br from-green-600 to-teal-600 p-6 text-white shadow-lg shadow-green-600/20 md:flex-row md:items-center">
         <div>
           <p className="text-sm text-white/75">{greeting}, 👋</p>
           <h1 className="mt-1 text-2xl font-bold">{fullName}</h1>
@@ -163,7 +163,7 @@ export default function TouristDashboard({ onNavigate, user, profile }) {
         </div>
       )}
 
-      <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <section className="tourist-dashboard-stats grid grid-cols-2 gap-4 lg:grid-cols-4">
         {[
           ['Eco Score', ecoScore, '/ 100', `${analytics.ecoPoints >= 0 ? '+' : ''}${analytics.ecoPoints} trip points`, 'text-green-500'],
           ["Today's Emission", analytics.todayEmission.toFixed(1), 'kg CO₂', 'From saved trips today', 'text-blue-500'],
@@ -183,7 +183,7 @@ export default function TouristDashboard({ onNavigate, user, profile }) {
         ))}
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-3">
+      <section className="tourist-impact-grid grid gap-4 lg:grid-cols-3">
         <article className={`${card} flex flex-col items-center justify-center gap-3`}>
           <EcoGauge score={ecoScore} />
           <div className="text-center">
@@ -300,7 +300,7 @@ export default function TouristDashboard({ onNavigate, user, profile }) {
 
 function ChartCard({ title, aside, children }) {
   return (
-    <article className={card}>
+    <article className={`${card} tourist-chart-card`}>
       <div className="mb-3 flex items-center justify-between">
         <h2 className="font-bold text-slate-800">{title}</h2>
         {aside && <span className="text-xs text-slate-400">{aside}</span>}
