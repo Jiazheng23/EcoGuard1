@@ -253,6 +253,8 @@ function normalizeLocation(values) {
     operating_hours: values.operating_hours?.trim() || null,
     best_visit_time: values.best_visit_time?.trim() || null,
     alternative_location: values.alternative_location?.trim() || null,
+    wallpaper_url: values.wallpaper_url?.trim() || null,
+    gallery_urls: Array.isArray(values.gallery_urls) ? values.gallery_urls.filter(Boolean) : [],
     is_active: values.is_active !== false,
   }
 }

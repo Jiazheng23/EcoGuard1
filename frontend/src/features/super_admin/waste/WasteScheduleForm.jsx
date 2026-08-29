@@ -41,14 +41,15 @@ export default function WasteScheduleForm({ location, schedule, schedules, onClo
   }
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-slate-950/45 p-4" role="dialog" aria-modal="true" aria-labelledby="waste-schedule-title">
-      <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
-        <header className="flex items-start justify-between border-b border-slate-100 p-5">
+    <div className="fixed inset-0 z-[2000] grid place-items-center overflow-hidden bg-slate-950/45 px-4 pb-4 pt-20" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) onClose() }} onKeyDown={(event) => { if (event.key === 'Escape' && !saving) onClose() }}>
+      <div role="dialog" aria-modal="true" aria-labelledby="waste-schedule-title" className="flex max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <header className="flex shrink-0 items-start justify-between border-b border-slate-100 p-5">
           <div><h2 id="waste-schedule-title" className="flex items-center gap-2 text-lg font-bold text-slate-800"><CalendarClock size={20} className="text-blue-500" />{editing ? 'Edit collection schedule' : 'Create collection schedule'}</h2><p className="mt-1 text-xs text-slate-400">Collection windows cannot overlap at the same location.</p></div>
           <button type="button" onClick={onClose} aria-label="Close schedule form" className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
         </header>
 
-        <form onSubmit={submit} className="space-y-5 p-5">
+        <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
           <FormField label="Location"><input value={location.name} disabled className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-500" /></FormField>
           <div className="grid gap-4 md:grid-cols-2">
             <FormField label="Collection starts" error={errors.scheduled_for}><input name="scheduled_for" type="datetime-local" value={values.scheduled_for} onChange={updateValue} className={inputClass(errors.scheduled_for)} /></FormField>
@@ -60,8 +61,9 @@ export default function WasteScheduleForm({ location, schedule, schedules, onClo
 
           {errors.conflict && <Notice message={errors.conflict} />}
           {submitError && <Notice message={submitError} />}
+          </div>
 
-          <footer className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+          <footer className="flex shrink-0 justify-end gap-2 border-t border-slate-100 bg-white p-5">
             <button type="button" onClick={onClose} disabled={saving} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 disabled:opacity-50">Cancel</button>
             <button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"><Save size={16} />{saving ? 'Saving...' : editing ? 'Save changes' : 'Create schedule'}</button>
           </footer>

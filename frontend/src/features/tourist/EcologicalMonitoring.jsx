@@ -6,7 +6,10 @@ import {
   Calendar,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Clock3,
+  Expand,
   List,
   Map as MapIcon,
   MapPin,
@@ -14,6 +17,7 @@ import {
   SlidersHorizontal,
   Trash2,
   Users,
+  X,
 } from 'lucide-react'
 import {
   CircleMarker,
@@ -272,6 +276,8 @@ function managedDestination(location, indicator, index) {
     bestTime: location.best_visit_time || 'Visit during off-peak hours',
     alternative: location.alternative_location || 'Choose another low-crowd destination',
     gradient: gradients[index % gradients.length],
+    wallpaper: location.wallpaper_url || '',
+    images: [...new Set([location.wallpaper_url, ...(location.gallery_urls || [])].filter(Boolean))],
     description: location.description || 'A protected ecological location managed by EcoGuard administrators.',
     metrics: recyclingRate == null ? [] : [['Estimated recycling rate', Math.round(recyclingRate)]],
   }
@@ -622,12 +628,14 @@ function DestinationCard({ destination, onSelect }) {
       className="overflow-hidden rounded-2xl border border-slate-100 bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
     >
       <div
-        className={`flex h-24 items-end justify-between bg-gradient-to-br ${destination.gradient} p-3`}
+        className={`relative flex h-32 items-end justify-between overflow-hidden bg-gradient-to-br ${destination.gradient} p-3`}
+        style={destination.wallpaper ? { backgroundImage: `url("${destination.wallpaper}")`, backgroundPosition: 'center', backgroundSize: 'cover' } : undefined}
       >
-        <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${typeColor[destination.type] || 'bg-emerald-50 text-emerald-700'}`}>
+        {destination.wallpaper && <span className="absolute inset-0 bg-gradient-to-t from-slate-950/75 via-slate-950/10 to-transparent" />}
+        <span className={`relative rounded-full px-2 py-0.5 text-xs font-semibold ${typeColor[destination.type] || 'bg-emerald-50 text-emerald-700'}`}>
           {destination.type}
         </span>
-        <span className="flex items-center gap-1 text-xs text-white/90">
+        <span className="relative flex items-center gap-1 text-xs text-white/90">
           <MapPin size={13} /> {destination.state}
         </span>
       </div>
@@ -687,7 +695,12 @@ function DestinationDetails({ destination, onBack, onNavigate }) {
       </button>
 
       <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
-        <div className={`h-44 bg-gradient-to-br ${destination.gradient} p-6 text-white`}>
+        <div
+          className={`relative h-64 bg-gradient-to-br ${destination.gradient} bg-cover bg-center p-6 text-white`}
+          style={destination.wallpaper ? { backgroundImage: `url("${destination.wallpaper}")` } : undefined}
+        >
+          {destination.wallpaper && <span className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/25 to-slate-950/10" />}
+          <div className="relative">
           <span className="rounded-full bg-white/20 px-2.5 py-1 text-xs font-semibold">
             {destination.type}
           </span>
@@ -695,6 +708,7 @@ function DestinationDetails({ destination, onBack, onNavigate }) {
           <p className="mt-1 flex items-center gap-1 text-sm text-white/80">
             <MapPin size={15} /> {destination.state} · {destination.distance} from Kuala Lumpur
           </p>
+          </div>
         </div>
 
         <div className="grid gap-6 p-6 lg:grid-cols-[1.4fr_1fr]">
@@ -715,6 +729,8 @@ function DestinationDetails({ destination, onBack, onNavigate }) {
             <p className="mt-2 text-sm leading-6 text-slate-600">
               {destination.description}
             </p>
+
+            {!!destination.images?.length && <ImageSlideshow images={destination.images} locationName={destination.name} />}
 
             <h2 className="mt-6 font-bold text-slate-800">Environmental condition</h2>
             <div className="mt-3 grid grid-cols-2 gap-3">
@@ -788,6 +804,50 @@ function DestinationDetails({ destination, onBack, onNavigate }) {
       </section>
     </div>
   )
+}
+
+function ImageSlideshow({ images, locationName }) {
+  const [activeIndex, setActiveIndex] = useState(0)
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const activeImage = images[activeIndex]
+
+  function previous() {
+    setActiveIndex((current) => (current - 1 + images.length) % images.length)
+  }
+
+  function next() {
+    setActiveIndex((current) => (current + 1) % images.length)
+  }
+
+  return <section className="mt-6">
+    <div className="flex items-end justify-between gap-3">
+      <div><h2 className="font-bold text-slate-800">Location gallery</h2><p className="mt-1 text-xs text-slate-400">Select a thumbnail or use the arrows to preview each image.</p></div>
+      <span className="text-xs font-semibold text-slate-500">{activeIndex + 1} / {images.length}</span>
+    </div>
+    <div className="group relative mt-3 overflow-hidden rounded-2xl bg-slate-950">
+      <button type="button" onClick={() => setPreviewOpen(true)} className="block w-full" aria-label={`Preview ${locationName} image ${activeIndex + 1}`}>
+        <img src={activeImage} alt={`${locationName} ${activeIndex + 1}`} className="h-72 w-full object-contain sm:h-96" />
+        <span className="absolute right-3 top-3 rounded-full bg-slate-950/65 p-2 text-white"><Expand size={17} /></span>
+      </button>
+      {images.length > 1 && <>
+        <SlideshowButton label="Previous image" position="left-3" onClick={previous}><ChevronLeft size={22} /></SlideshowButton>
+        <SlideshowButton label="Next image" position="right-3" onClick={next}><ChevronRight size={22} /></SlideshowButton>
+      </>}
+    </div>
+    {images.length > 1 && <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+      {images.map((url, index) => <button type="button" onClick={() => setActiveIndex(index)} className={`shrink-0 overflow-hidden rounded-lg border-2 ${index === activeIndex ? 'border-green-500' : 'border-transparent opacity-70 hover:opacity-100'}`} aria-label={`Show image ${index + 1}`} key={url}><img src={url} alt="" loading="lazy" className="h-16 w-24 object-cover" /></button>)}
+    </div>}
+    {previewOpen && <div className="fixed inset-0 z-[3000] flex items-center justify-center bg-slate-950/95 p-4" role="dialog" aria-modal="true" aria-label={`${locationName} image preview`} onMouseDown={(event) => { if (event.target === event.currentTarget) setPreviewOpen(false) }} onKeyDown={(event) => { if (event.key === 'Escape') setPreviewOpen(false) }}>
+      <button type="button" onClick={() => setPreviewOpen(false)} aria-label="Close image preview" className="absolute right-5 top-5 rounded-full bg-white/10 p-2 text-white hover:bg-white/20"><X size={24} /></button>
+      <img src={activeImage} alt={`${locationName} ${activeIndex + 1}`} className="max-h-[88vh] max-w-full object-contain" />
+      {images.length > 1 && <><SlideshowButton label="Previous image" position="left-5" onClick={previous}><ChevronLeft size={28} /></SlideshowButton><SlideshowButton label="Next image" position="right-5" onClick={next}><ChevronRight size={28} /></SlideshowButton></>}
+      <span className="absolute bottom-5 rounded-full bg-white/10 px-3 py-1 text-sm font-semibold text-white">{activeIndex + 1} / {images.length}</span>
+    </div>}
+  </section>
+}
+
+function SlideshowButton({ label, position, onClick, children }) {
+  return <button type="button" onClick={(event) => { event.stopPropagation(); onClick() }} aria-label={label} className={`absolute top-1/2 -translate-y-1/2 rounded-full bg-slate-950/60 p-2 text-white transition hover:bg-slate-950/80 ${position}`}>{children}</button>
 }
 
 function StatusRow({ label, value }) {

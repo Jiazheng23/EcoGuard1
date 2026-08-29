@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { AlertCircle, Edit3, Leaf, MapPin, Plus, Search, Trash2, X } from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
+import { AlertCircle, CheckCircle2, Edit3, Leaf, MapPin, Plus, Search, Trash2, X } from 'lucide-react'
 import {
   createEcologicalLocation,
   deleteEcologicalLocation,
@@ -7,8 +7,10 @@ import {
 } from '../../services/locationService'
 import WestMalaysiaLocationPicker from './WestMalaysiaLocationPicker'
 import { isWestMalaysiaCoordinate, isWestMalaysiaLocation } from '../../utils/westMalaysia'
+import { deleteLocationImages, MAX_GALLERY_IMAGES, uploadLocationImages } from '../../services/locationImageService'
 
 const locationTypes = ['Cultural Site', 'World Heritage Site', 'National Park', 'Tourist attractions', 'Geopark', 'Marine Park', 'Highland Reserve']
+const localImagePreviewUrls = new WeakMap()
 const timeOptions = Array.from({ length: 48 }, (_, index) => {
   const hours = String(Math.floor(index / 2)).padStart(2, '0')
   const minutes = index % 2 ? '30' : '00'
@@ -30,6 +32,8 @@ const emptyForm = () => ({
   visit_start: '09:00',
   visit_end: '16:00',
   location_confirmed: false,
+  wallpaper_url: '',
+  gallery_urls: [],
   is_active: true,
 })
 
@@ -43,6 +47,9 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
+  const [galleryFiles, setGalleryFiles] = useState([])
+  const [newWallpaperIndex, setNewWallpaperIndex] = useState(null)
+  const [removedGalleryUrls, setRemovedGalleryUrls] = useState([])
 
   const westMalaysiaLocations = useMemo(
     () => locations.filter(isWestMalaysiaLocation),
@@ -77,6 +84,9 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
     setEditing('new')
     setForm(emptyForm())
     setMessage('')
+    setGalleryFiles([])
+    setNewWallpaperIndex(null)
+    setRemovedGalleryUrls([])
   }
 
   function openEdit(location) {
@@ -98,9 +108,14 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
       visit_start: visitRange.start,
       visit_end: visitRange.end,
       location_confirmed: true,
+      wallpaper_url: location.wallpaper_url || '',
+      gallery_urls: Array.isArray(location.gallery_urls) ? location.gallery_urls : [],
       is_active: location.is_active,
     })
     setMessage('')
+    setGalleryFiles([])
+    setNewWallpaperIndex(null)
+    setRemovedGalleryUrls([])
   }
 
   function updateField(event) {
@@ -126,8 +141,19 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
         operating_hours: `${form.operating_start} - ${form.operating_end}`,
         best_visit_time: `${form.visit_start} - ${form.visit_end}`,
       }
-      if (editing === 'new') await createEcologicalLocation(user.id, values)
-      else await updateEcologicalLocation(editing, values)
+      const savedLocation = editing === 'new'
+        ? await createEcologicalLocation(user.id, values)
+        : { id: editing }
+      const uploadedGalleryUrls = await uploadLocationImages(savedLocation.id, galleryFiles)
+      const finalValues = {
+        ...values,
+        wallpaper_url: isSuperAdmin && newWallpaperIndex != null
+          ? uploadedGalleryUrls[newWallpaperIndex]
+          : values.wallpaper_url,
+        gallery_urls: [...values.gallery_urls, ...uploadedGalleryUrls],
+      }
+      await updateEcologicalLocation(savedLocation.id, finalValues)
+      await deleteLocationImages(removedGalleryUrls)
       await onDataChange()
       setEditing(null)
       setMessage('Location saved to Supabase. Tourist map data is now updated.')
@@ -194,7 +220,7 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
             <tbody className="divide-y divide-slate-100">
               {filtered.map((location) => (
                 <tr key={location.id} className="hover:bg-slate-50/60">
-                  <td className="px-5 py-4"><div className="flex items-center gap-2.5"><span className="grid size-9 place-items-center rounded-xl bg-blue-50 text-blue-500"><MapPin size={16} /></span><div><p className="font-semibold text-slate-800">{location.name}</p><p className="text-xs text-slate-400">{location.state}</p></div></div></td>
+                  <td className="px-5 py-4"><div className="flex items-center gap-2.5">{location.wallpaper_url ? <img src={location.wallpaper_url} alt="" className="size-10 rounded-xl object-cover" /> : <span className="grid size-10 place-items-center rounded-xl bg-blue-50 text-blue-500"><MapPin size={16} /></span>}<div><p className="font-semibold text-slate-800">{location.name}</p><p className="text-xs text-slate-400">{location.state}</p></div></div></td>
                   <td className="px-5 py-4 text-slate-600">{location.location_type}</td>
                   <td className="px-5 py-4 font-mono text-xs text-slate-500">{Number(location.latitude).toFixed(4)}, {Number(location.longitude).toFixed(4)}</td>
                   <td className="px-5 py-4 text-slate-600">{Number(location.max_capacity).toLocaleString()}</td>
@@ -209,9 +235,15 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
       </section>
 
       {editing && (
-        <div className="fixed inset-0 z-[1000] grid place-items-center overflow-y-auto bg-slate-950/45 p-4" role="presentation">
-          <form onSubmit={saveLocation} className="my-6 w-full max-w-3xl rounded-2xl bg-white p-6 shadow-2xl">
-            <div className="flex items-start justify-between gap-4"><div><h2 className="text-lg font-bold text-slate-900">{editing === 'new' ? 'Add ecological location' : 'Edit ecological location'}</h2><p className="mt-1 text-sm text-slate-500">This information is shared with the Tourist map.</p></div><button type="button" onClick={() => setEditing(null)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={19} /></button></div>
+        <div
+          className="fixed inset-0 z-[2000] grid place-items-center overflow-hidden bg-slate-950/45 px-4 pb-4 pt-20"
+          role="presentation"
+          onMouseDown={(event) => { if (event.target === event.currentTarget) setEditing(null) }}
+          onKeyDown={(event) => { if (event.key === 'Escape') setEditing(null) }}
+        >
+          <form onSubmit={saveLocation} role="dialog" aria-modal="true" aria-labelledby="location-dialog-title" className="flex max-h-full w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-100 px-6 py-4"><div><h2 id="location-dialog-title" className="text-lg font-bold text-slate-900">{editing === 'new' ? 'Add ecological location' : 'Edit ecological location'}</h2><p className="mt-1 text-sm text-slate-500">This information is shared with the Tourist map.</p></div><button type="button" onClick={() => setEditing(null)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={19} /></button></div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">
             <div className="mt-5">
               <WestMalaysiaLocationPicker latitude={form.latitude} longitude={form.longitude} state={form.state} onConfirmationChange={(confirmed) => setForm((current) => ({ ...current, location_confirmed: confirmed }))} onChange={(location) => setForm((current) => ({ ...current, latitude: location.lat, longitude: location.lng, state: location.state, location_confirmed: true }))} />
             </div>
@@ -224,17 +256,103 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
               <TimeRangeField label="Best visit time" startName="visit_start" endName="visit_end" start={form.visit_start} end={form.visit_end} onChange={updateField} />
               <label className="flex items-end"><span className="flex h-[42px] w-full items-center gap-3 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-700"><input name="is_active" type="checkbox" checked={form.is_active} onChange={updateField} className="size-4 accent-blue-500" /> Display on Tourist map</span></label>
               <label className="sm:col-span-2"><span className="mb-1.5 block text-xs font-semibold text-slate-600">Description</span><textarea name="description" value={form.description} onChange={updateField} rows="3" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-500" /></label>
+              <ImageFields
+                form={form}
+                galleryFiles={galleryFiles}
+                isSuperAdmin={isSuperAdmin}
+                newWallpaperIndex={newWallpaperIndex}
+                onGalleryChange={setGalleryFiles}
+                onSelectSavedWallpaper={(url) => { setForm((current) => ({ ...current, wallpaper_url: url })); setNewWallpaperIndex(null) }}
+                onSelectNewWallpaper={setNewWallpaperIndex}
+                onClearWallpaper={() => {
+                  if (form.wallpaper_url && !form.gallery_urls.includes(form.wallpaper_url)) {
+                    setRemovedGalleryUrls((current) => [...current, form.wallpaper_url])
+                  }
+                  setForm((current) => ({ ...current, wallpaper_url: '' }))
+                  setNewWallpaperIndex(null)
+                }}
+                onRemoveGallery={(url) => {
+                  if (url === form.wallpaper_url) {
+                    setMessage('Choose another wallpaper before removing the current wallpaper image.')
+                    return
+                  }
+                  setRemovedGalleryUrls((current) => [...current, url])
+                  setForm((current) => ({ ...current, gallery_urls: current.gallery_urls.filter((item) => item !== url) }))
+                }}
+              />
             </div>
-            <div className="mt-6 flex justify-end gap-3"><button type="button" onClick={() => setEditing(null)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600">Cancel</button><button type="submit" disabled={saving || !form.location_confirmed} className="rounded-xl bg-blue-500 px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60">{saving ? 'Saving...' : 'Save location'}</button></div>
+            </div>
+            <div className="flex shrink-0 justify-end gap-3 border-t border-slate-100 bg-white px-6 py-4"><button type="button" onClick={() => setEditing(null)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600">Cancel</button><button type="submit" disabled={saving || !form.location_confirmed} className="rounded-xl bg-blue-500 px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60">{saving ? 'Saving...' : 'Save location'}</button></div>
           </form>
         </div>
       )}
 
       {deleteTarget && (
-        <div className="fixed inset-0 z-[1000] grid place-items-center bg-slate-950/45 p-4"><section className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"><h2 className="text-lg font-bold text-slate-900">Delete {deleteTarget.name}?</h2><p className="mt-2 text-sm leading-6 text-slate-500">Its crowd thresholds and environmental snapshots will also be removed. This cannot be undone.</p><div className="mt-6 flex justify-end gap-3"><button type="button" onClick={() => setDeleteTarget(null)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold">Cancel</button><button type="button" onClick={removeLocation} disabled={saving} className="rounded-xl bg-red-500 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60">{saving ? 'Deleting...' : 'Delete location'}</button></div></section></div>
+        <div className="fixed inset-0 z-[2000] grid place-items-center bg-slate-950/45 px-4 pb-4 pt-20" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDeleteTarget(null) }} onKeyDown={(event) => { if (event.key === 'Escape') setDeleteTarget(null) }}><section role="dialog" aria-modal="true" aria-labelledby="delete-location-title" className="max-h-full w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"><h2 id="delete-location-title" className="text-lg font-bold text-slate-900">Delete {deleteTarget.name}?</h2><p className="mt-2 text-sm leading-6 text-slate-500">Its crowd thresholds and environmental snapshots will also be removed. This cannot be undone.</p><div className="mt-6 flex justify-end gap-3"><button type="button" onClick={() => setDeleteTarget(null)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold">Cancel</button><button type="button" onClick={removeLocation} disabled={saving} className="rounded-xl bg-red-500 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60">{saving ? 'Deleting...' : 'Delete location'}</button></div></section></div>
       )}
     </div>
   )
+}
+
+function ImageFields({ form, galleryFiles, isSuperAdmin, newWallpaperIndex, onGalleryChange, onSelectSavedWallpaper, onSelectNewWallpaper, onRemoveGallery }) {
+  const fileInputRef = useRef(null)
+  const [selectionError, setSelectionError] = useState('')
+
+  function chooseGallery(event) {
+    const files = [...(event.target.files || [])]
+    const existingKeys = new Set(galleryFiles.map((file) => `${file.name}-${file.size}-${file.lastModified}`))
+    const newFiles = files.filter((file) => !existingKeys.has(`${file.name}-${file.size}-${file.lastModified}`))
+    if (form.gallery_urls.length + galleryFiles.length + newFiles.length > MAX_GALLERY_IMAGES) {
+      setSelectionError(`A location can have up to ${MAX_GALLERY_IMAGES} gallery images.`)
+      event.target.value = ''
+      return
+    }
+    onGalleryChange([...galleryFiles, ...newFiles])
+    setSelectionError('')
+    event.target.value = ''
+  }
+
+  return <fieldset className="space-y-4 sm:col-span-2">
+    <legend className="text-sm font-bold text-slate-800">Location images</legend>
+    <p className="text-xs text-slate-400">Add multiple JPG, PNG or WebP thumbnails, up to 5 MB each and {MAX_GALLERY_IMAGES} images total.</p>
+    {/* {form.wallpaper_url && <div>
+      <div className="mb-2 flex items-center justify-between"><p className="text-xs font-semibold text-slate-600">Current wallpaper</p>{!isSuperAdmin && <span className="text-xs text-slate-400">Only a super administrator can change it</span>}</div>
+      <div className="w-40"><ImagePreview url={form.wallpaper_url} label="Wallpaper" isWallpaper canRemove={isSuperAdmin} onRemove={onClearWallpaper} /></div>
+    </div>} */}
+    <div>
+      <div className="mb-2 flex items-center justify-between gap-3"><p className="text-xs font-semibold text-slate-600">Location thumbnails</p>{isSuperAdmin && <p className="text-xs font-semibold text-blue-600">Click an image to set it as the wallpaper</p>}</div>
+      <input ref={fileInputRef} type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={chooseGallery} className="hidden" />
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {form.gallery_urls.map((url, index) => <ImagePreview key={url} url={url} label={`Image ${index + 1}`} isWallpaper={url === form.wallpaper_url} canSelectWallpaper={isSuperAdmin} onSelectWallpaper={() => onSelectSavedWallpaper(url)} onRemove={() => onRemoveGallery(url)} />)}
+        {galleryFiles.map((file, index) => <FileImagePreview key={`${file.name}-${file.lastModified}`} file={file} label={`New ${index + 1}`} isWallpaper={newWallpaperIndex === index} canSelectWallpaper={isSuperAdmin} onSelectWallpaper={() => onSelectNewWallpaper(index)} onRemove={() => { onGalleryChange(galleryFiles.filter((_, itemIndex) => itemIndex !== index)); if (newWallpaperIndex === index) onSelectNewWallpaper(null); else if (newWallpaperIndex > index) onSelectNewWallpaper(newWallpaperIndex - 1) }} />)}
+        {form.gallery_urls.length + galleryFiles.length < MAX_GALLERY_IMAGES && <button type="button" onClick={() => fileInputRef.current?.click()} className="flex min-h-28 flex-col items-center justify-center rounded-xl border-2 border-dashed border-blue-200 bg-blue-50/50 text-blue-600 transition hover:border-blue-400 hover:bg-blue-50">
+          <span className="grid size-10 place-items-center rounded-full bg-blue-100"><Plus size={22} /></span>
+          <span className="mt-2 text-sm font-semibold">Add images</span>
+          <span className="mt-0.5 text-[11px] text-blue-400">Select one or many</span>
+        </button>}
+      </div>
+    </div>
+    {selectionError && <p className="text-xs font-semibold text-red-500">{selectionError}</p>}
+  </fieldset>
+}
+
+function ImagePreview({ url, label, isWallpaper, canSelectWallpaper, canRemove = true, onSelectWallpaper, onRemove }) {
+  return <div className={`relative overflow-hidden rounded-xl border bg-slate-50 transition ${isWallpaper ? 'border-blue-500 ring-4 ring-inset ring-blue-500/40' : 'border-slate-200'} ${canSelectWallpaper ? 'cursor-pointer hover:border-blue-400 hover:shadow-md' : ''}`}>
+    <img src={url} alt={label} className="h-28 w-full object-cover" />
+    {canSelectWallpaper && <button type="button" onClick={onSelectWallpaper} aria-label={`Use ${label} as wallpaper`} className="absolute inset-0 z-10" />}
+    <span className={`pointer-events-none absolute bottom-1 left-1 z-20 rounded px-2 py-1 text-[10px] font-bold text-white ${isWallpaper ? 'bg-blue-600' : 'bg-slate-950/70'}`}>{isWallpaper ? '✓ Selected wallpaper' : label}</span>
+    {isWallpaper && <span className="pointer-events-none absolute left-2 top-2 z-20 grid size-7 place-items-center rounded-full bg-blue-600 text-white shadow"><CheckCircle2 size={17} /></span>}
+    {canRemove && <button type="button" onClick={onRemove} aria-label={`Remove ${label}`} className="absolute right-1 top-1 z-30 rounded-full bg-white/95 p-1.5 text-red-500 shadow hover:bg-red-50"><X size={14} /></button>}
+  </div>
+}
+
+function FileImagePreview({ file, ...props }) {
+  let url = localImagePreviewUrls.get(file)
+  if (!url) {
+    url = URL.createObjectURL(file)
+    localImagePreviewUrls.set(file, url)
+  }
+  return <ImagePreview {...props} url={url} />
 }
 
 function Input({ label, required = true, ...props }) {

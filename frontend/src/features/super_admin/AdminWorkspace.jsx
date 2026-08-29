@@ -40,13 +40,15 @@ export default function AdminWorkspace({ requiredRole }) {
 
     try {
       const isSuper = scopeProfile?.role === 'super_admin'
+      const isAdmin = ['location_admin', 'super_admin'].includes(scopeProfile?.role)
       const [profileRows, tripRows, locationRows, thresholdRows, metricRows] = await Promise.all([
         isSuper ? listProfiles() : Promise.resolve(scopeProfile ? [scopeProfile] : []),
-        isSuper ? listAllTrips() : Promise.resolve([]),
+        isAdmin ? listAllTrips() : Promise.resolve([]),
         listEcologicalLocations(),
         listCrowdThresholds(),
         listLocationMetrics(),
       ])
+      console.log('refreshData', { profileRows, tripRows, locationRows, thresholdRows, metricRows })
       const assignedLocationId = String(scopeProfile?.location_id || '')
       setProfiles(profileRows)
       setTrips(tripRows)

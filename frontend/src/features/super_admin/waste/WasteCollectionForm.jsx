@@ -57,14 +57,15 @@ export default function WasteCollectionForm({ location, schedule, onClose, onSav
   const missed = values.status === 'missed'
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-slate-950/45 p-4" role="dialog" aria-modal="true" aria-labelledby="waste-collection-title">
-      <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
-        <header className="flex items-start justify-between border-b border-slate-100 p-5">
+    <div className="fixed inset-0 z-[2000] grid place-items-center overflow-hidden bg-slate-950/45 px-4 pb-4 pt-20" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) onClose() }} onKeyDown={(event) => { if (event.key === 'Escape' && !saving) onClose() }}>
+      <div role="dialog" aria-modal="true" aria-labelledby="waste-collection-title" className="flex max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <header className="flex shrink-0 items-start justify-between border-b border-slate-100 p-5">
           <div><h2 id="waste-collection-title" className="flex items-center gap-2 text-lg font-bold text-slate-800"><ClipboardCheck size={20} className="text-green-500" />Record waste collection</h2><p className="mt-1 text-xs text-slate-400">{schedule ? `Completes the ${formatDate(schedule.scheduled_for)} schedule atomically.` : 'Creates an unscheduled collection-history record.'}</p></div>
           <button type="button" onClick={onClose} aria-label="Close collection form" className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
         </header>
 
-        <form onSubmit={submit} className="space-y-5 p-5">
+        <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
           <div className="grid gap-4 md:grid-cols-2">
             <FormField label="Location"><input value={location.name} disabled className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-500" /></FormField>
             <FormField label="Collection time" error={errors.collected_at}><input name="collected_at" type="datetime-local" max={toLocalInput(new Date())} value={values.collected_at} onChange={updateValue} className={inputClass(errors.collected_at)} /></FormField>
@@ -80,8 +81,9 @@ export default function WasteCollectionForm({ location, schedule, onClose, onSav
           {missed && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">A missed collection records zero kilograms. For a scheduled record, the schedule will also be marked missed.</div>}
           <FormField label="Notes (optional)"><textarea name="notes" rows="3" value={values.notes} onChange={updateValue} placeholder="Collection result, issue, vehicle, or reason for a missed collection" className={inputClass()} /></FormField>
           {submitError && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-600">{submitError}</div>}
+          </div>
 
-          <footer className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+          <footer className="flex shrink-0 justify-end gap-2 border-t border-slate-100 bg-white p-5">
             <button type="button" onClick={onClose} disabled={saving} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 disabled:opacity-50">Cancel</button>
             <button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-green-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"><Save size={16} />{saving ? 'Recording...' : 'Record collection'}</button>
           </footer>
