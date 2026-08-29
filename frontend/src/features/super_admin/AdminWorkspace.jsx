@@ -29,6 +29,7 @@ export default function AdminWorkspace({ requiredRole }) {
   const [locations, setLocations] = useState([])
   const [thresholds, setThresholds] = useState([])
   const [metrics, setMetrics] = useState([])
+  const [selectedSensorLocationId, setSelectedSensorLocationId] = useState('')
   const [loading, setLoading] = useState(true)
   const [accessError, setAccessError] = useState('')
   const [dataLoading, setDataLoading] = useState(true)
@@ -177,6 +178,8 @@ export default function AdminWorkspace({ requiredRole }) {
     user,
     profile,
     isSuperAdmin: profile.role === 'super_admin',
+    selectedSensorLocationId,
+    onSensorLocationChange: setSelectedSensorLocationId,
   }
 
   const wasteSections = {
