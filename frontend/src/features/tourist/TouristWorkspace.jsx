@@ -115,6 +115,7 @@ export default function TouristWorkspace() {
           user={user}
           profile={profile}
           onProfileChange={setProfile}
+          onNavigate={handleNavigate}
         />
       ) : (
         <section className="rounded-2xl border border-slate-100 bg-white p-8 shadow-sm">

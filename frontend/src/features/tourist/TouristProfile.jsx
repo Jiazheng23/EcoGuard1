@@ -12,12 +12,12 @@ import {
 import { supabase } from '../../services/supabaseClient'
 import { updateOwnProfile } from '../../services/profileService'
 import { listOwnTrips } from '../../services/tripService'
-import AchievementBadges from './AchievementBadges'
+import AchievementBadges from '../../components/AchievementBadges'
 import ProfileAvatarUploader from '../profile/ProfileAvatarUploader'
 
 const card = 'rounded-2xl border border-slate-100 bg-white p-5 shadow-sm'
 
-export default function TouristProfile({ user, profile, onProfileChange }) {
+export default function TouristProfile({ user, profile, onProfileChange, onNavigate }) {
   const [fullName, setFullName] = useState(
     profile?.full_name || user?.user_metadata?.full_name || '',
   )
@@ -249,7 +249,7 @@ export default function TouristProfile({ user, profile, onProfileChange }) {
         </form>
       </div>
 
-      <AchievementBadges trips={trips} profile={profile} loading={badgesLoading} error={badgesError} />
+      <AchievementBadges trips={trips} profile={profile} loading={badgesLoading} error={badgesError} onShowMore={() => onNavigate('achievements')} />
     </div>
   )
 }

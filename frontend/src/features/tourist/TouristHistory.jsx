@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { AlertCircle, Award, CalendarDays, ChevronDown, Cloud, Download, History, Leaf, MapPin, Navigation, RefreshCw, Route, Search, Users, X } from 'lucide-react'
+import { AlertCircle, Award, CalendarDays, Check, ChevronDown, Cloud, Download, History, Leaf, MapPin, Navigation, RefreshCw, Route, Search, SlidersHorizontal, Users, X } from 'lucide-react'
 import { listOwnTrips } from '../../services/tripService'
 import { formatCarbon, formatTripDate, numberValue, transportLabels } from '../../utils/tripAnalytics'
 import { downloadTripHistoryCsv, downloadTripHistoryPdf } from '../../utils/tripReport'
@@ -18,12 +18,14 @@ export default function TouristHistory({ user }) {
   const [selectedMonth, setSelectedMonth] = useState('')
   const [selectedYear, setSelectedYear] = useState('')
   const [dateFilterOpen, setDateFilterOpen] = useState(false)
+  const [transportFilterOpen, setTransportFilterOpen] = useState(false)
   const [exportMenuOpen, setExportMenuOpen] = useState(false)
   const [selectedTrip, setSelectedTrip] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const exportMenuRef = useRef(null)
   const dateFilterRef = useRef(null)
+  const transportFilterRef = useRef(null)
 
   useEffect(() => {
     let active = true
@@ -47,9 +49,10 @@ export default function TouristHistory({ user }) {
   useEffect(() => {
     function closeExportMenu(event) {
       if (event.type === 'keydown' && event.key !== 'Escape') return
-      if (event.type === 'pointerdown' && (exportMenuRef.current?.contains(event.target) || dateFilterRef.current?.contains(event.target))) return
+      if (event.type === 'pointerdown' && (exportMenuRef.current?.contains(event.target) || dateFilterRef.current?.contains(event.target) || transportFilterRef.current?.contains(event.target))) return
       setExportMenuOpen(false)
       setDateFilterOpen(false)
+      setTransportFilterOpen(false)
     }
 
     document.addEventListener('pointerdown', closeExportMenu)
@@ -143,19 +146,19 @@ export default function TouristHistory({ user }) {
           <h1 className="text-2xl font-bold text-slate-900">Trip History</h1>
           <p className="mt-1 text-sm text-slate-500">Review the journeys saved from your carbon calculator.</p>
         </div>
-        <div className="flex flex-wrap gap-2 self-start">
-          <div ref={exportMenuRef} className="relative">
-            <button type="button" onClick={() => { setDateFilterOpen(false); setExportMenuOpen((open) => !open) }} disabled={loading || !exportableTrips.length} title={!loading && !exportableTrips.length ? 'No matching trip history to download' : `Download ${exportableTrips.length} matching trip${exportableTrips.length === 1 ? '' : 's'}`} aria-haspopup="menu" aria-expanded={exportMenuOpen} className="inline-flex items-center justify-center gap-2 rounded-xl bg-green-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50">
+        <div className="grid w-full grid-cols-2 gap-2 self-start sm:flex sm:w-auto sm:flex-wrap">
+          <div ref={exportMenuRef} className="relative min-w-0">
+            <button type="button" onClick={() => { setDateFilterOpen(false); setTransportFilterOpen(false); setExportMenuOpen((open) => !open) }} disabled={loading || !exportableTrips.length} title={!loading && !exportableTrips.length ? 'No matching trip history to download' : `Download ${exportableTrips.length} matching trip${exportableTrips.length === 1 ? '' : 's'}`} aria-haspopup="menu" aria-expanded={exportMenuOpen} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:px-4">
               <Download size={15} />Download <ChevronDown size={15} className={`transition-transform ${exportMenuOpen ? 'rotate-180' : ''}`} />
             </button>
             {exportMenuOpen && (
-              <div role="menu" className="absolute right-0 z-20 mt-2 min-w-44 overflow-hidden rounded-xl border border-slate-100 bg-white p-1.5 shadow-lg">
+              <div role="menu" className="absolute left-0 z-20 mt-2 min-w-44 overflow-hidden rounded-xl border border-slate-100 bg-white p-1.5 shadow-lg sm:left-auto sm:right-0">
                 <button type="button" role="menuitem" onClick={() => downloadHistory('pdf')} className="block w-full rounded-lg px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:bg-green-50 hover:text-green-700">Download PDF</button>
                 <button type="button" role="menuitem" onClick={() => downloadHistory('csv')} className="block w-full rounded-lg px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:bg-green-50 hover:text-green-700">Download CSV</button>
               </div>
             )}
           </div>
-          <button type="button" onClick={loadHistory} disabled={loading} className="inline-flex items-center justify-center gap-2 rounded-xl border border-green-100 bg-white px-4 py-2.5 text-sm font-semibold text-green-700 transition hover:bg-green-50 disabled:opacity-50">
+          <button type="button" onClick={loadHistory} disabled={loading} className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-green-100 bg-white px-3 py-2.5 text-sm font-semibold text-green-700 transition hover:bg-green-50 disabled:opacity-50 sm:w-auto sm:px-4">
             <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />Refresh
           </button>
         </div>
@@ -168,27 +171,40 @@ export default function TouristHistory({ user }) {
       </section>
 
       <section className={`${card} relative overflow-visible`}>
-        <div className="grid gap-3 border-b border-slate-100 p-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_12rem_14rem]">
-          <label className="relative min-w-0 self-end">
-            <span className="sr-only">Search trip history</span>
-            <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search origin, destination, or transport" className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-3 text-sm text-slate-700 outline-none focus:border-green-500" />
-          </label>
-          <label className="self-end">
-            <span className="sr-only">Filter by transport mode</span>
-            <select value={mode} onChange={(event) => setMode(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-green-500 sm:w-48">
-              <option value="all">All transport</option>
-              {supportedTransportModes.map((item) => <option key={item} value={item}>{transportLabels[item]}</option>)}
-            </select>
-          </label>
+        <div className="grid gap-3 border-b border-slate-100 p-4 lg:grid-cols-[minmax(0,1fr)_14rem]">
+          <div ref={transportFilterRef} className="relative flex min-w-0 items-center rounded-xl border border-slate-200 bg-slate-50 focus-within:border-green-500">
+            <label className="relative min-w-0 flex-1">
+              <span className="sr-only">Search trip history</span>
+              <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search trips" className="w-full bg-transparent py-2.5 pl-10 pr-3 text-sm text-slate-700 outline-none" />
+            </label>
+            <button type="button" onClick={() => { setDateFilterOpen(false); setExportMenuOpen(false); setTransportFilterOpen((open) => !open) }} aria-haspopup="listbox" aria-expanded={transportFilterOpen} className={`m-1 inline-flex max-w-[48%] shrink-0 items-center gap-1.5 rounded-lg border-l px-2.5 py-2 text-xs font-semibold transition sm:max-w-none sm:px-3 ${mode === 'all' ? 'border-slate-200 bg-white text-slate-600' : 'border-green-200 bg-green-100 text-green-700'}`}>
+              <SlidersHorizontal size={14} className="shrink-0" />
+              <span className="truncate">{mode === 'all' ? 'All transport' : transportLabels[mode]}</span>
+              <ChevronDown size={13} className={`shrink-0 transition-transform ${transportFilterOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {transportFilterOpen && (
+              <div role="listbox" aria-label="Filter by transport mode" className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 rounded-2xl border border-slate-100 bg-white p-2 shadow-xl">
+                <p className="px-2 pb-2 pt-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Quick transport filter</p>
+                <div className="grid grid-cols-2 gap-1 sm:grid-cols-3">
+                  {['all', ...supportedTransportModes].map((item) => (
+                    <button key={item} type="button" role="option" aria-selected={mode === item} onClick={() => { setMode(item); setTransportFilterOpen(false) }} className={`flex items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-left text-xs font-semibold transition ${mode === item ? 'bg-green-600 text-white' : 'text-slate-600 hover:bg-green-50 hover:text-green-700'}`}>
+                      <span>{item === 'all' ? 'All transport' : transportLabels[item]}</span>
+                      {mode === item && <Check size={14} className="shrink-0" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
           <div ref={dateFilterRef} className="relative self-end">
-            <button type="button" onClick={() => { setExportMenuOpen(false); setDateFilterOpen((open) => !open) }} aria-haspopup="dialog" aria-expanded={dateFilterOpen} className={`flex w-full items-center gap-2 rounded-xl border px-3 py-2.5 text-sm outline-none transition ${hasDateFilter ? 'border-green-300 bg-green-50 text-green-700' : 'border-slate-200 bg-slate-50 text-slate-700'} hover:border-green-400`}>
+            <button type="button" onClick={() => { setExportMenuOpen(false); setTransportFilterOpen(false); setDateFilterOpen((open) => !open) }} aria-haspopup="dialog" aria-expanded={dateFilterOpen} className={`flex w-full items-center gap-2 rounded-xl border px-3 py-2.5 text-sm outline-none transition ${hasDateFilter ? 'border-green-300 bg-green-50 text-green-700' : 'border-slate-200 bg-slate-50 text-slate-700'} hover:border-green-400`}>
               <CalendarDays size={16} className="shrink-0" />
               <span className="min-w-0 flex-1 truncate text-left font-medium">{dateFilterLabel}</span>
               <ChevronDown size={15} className={`shrink-0 transition-transform ${dateFilterOpen ? 'rotate-180' : ''}`} />
             </button>
             {dateFilterOpen && (
-              <div role="dialog" aria-label="Filter trips by date" className="absolute right-0 z-20 mt-2 w-[min(22rem,calc(100vw-2rem))] rounded-2xl border border-slate-100 bg-white p-4 shadow-xl">
+              <div role="dialog" aria-label="Filter trips by date" className="absolute left-1/2 z-20 mt-2 w-[min(22rem,calc(100vw-2rem))] -translate-x-1/2 rounded-2xl border border-slate-100 bg-white p-3 shadow-xl sm:left-auto sm:right-0 sm:translate-x-0 sm:p-4">
                 <div className="grid grid-cols-3 rounded-xl bg-slate-100 p-1">
                   {['range', 'month', 'year'].map((item) => (
                     <button key={item} type="button" onClick={() => setDateMode(item)} className={`rounded-lg px-2 py-2 text-xs font-semibold capitalize transition ${dateMode === item ? 'bg-white text-green-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>{item}</button>
@@ -196,7 +212,7 @@ export default function TouristHistory({ user }) {
                 </div>
                 <div className="mt-4">
                   {dateMode === 'range' ? (
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid gap-3 min-[380px]:grid-cols-2">
                       <label><span className="mb-1 block text-xs font-semibold text-slate-500">From</span><input type="date" value={dateFrom} max={dateTo || undefined} onChange={(event) => setDateFrom(event.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-green-500" /></label>
                       <label><span className="mb-1 block text-xs font-semibold text-slate-500">To</span><input type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => setDateTo(event.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-green-500" /></label>
                     </div>
@@ -224,8 +240,12 @@ export default function TouristHistory({ user }) {
         ) : invalidDateRange || filteredTrips.length === 0 ? (
           <div className="grid min-h-56 place-items-center px-6 text-center"><div><History className="mx-auto text-slate-300" size={34} /><p className="mt-3 font-semibold text-slate-700">No matching trips</p><p className="mt-1 text-sm text-slate-400">Saved carbon-calculator trips will appear here.</p></div></div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-left text-sm">
+          <>
+            <div className="space-y-3 p-3 md:hidden">
+              {filteredTrips.map((trip) => <MobileTripCard key={trip.id} trip={trip} onOpen={() => setSelectedTrip(trip)} />)}
+            </div>
+            <div className="hidden overflow-x-auto md:block">
+              <table className="w-full min-w-[760px] text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-400">
                 <tr><th className="px-5 py-3 font-semibold">Date</th><th className="px-5 py-3 font-semibold">Journey</th><th className="px-5 py-3 font-semibold">Transport</th><th className="px-5 py-3 font-semibold">Distance</th><th className="px-5 py-3 font-semibold">Emission</th><th className="px-5 py-3 text-right font-semibold">Points</th></tr>
               </thead>
@@ -241,13 +261,36 @@ export default function TouristHistory({ user }) {
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
+              </table>
+            </div>
+          </>
         )}
       </section>
 
       {selectedTrip && <TripDetailsModal trip={selectedTrip} onClose={() => setSelectedTrip(null)} />}
     </div>
+  )
+}
+
+function MobileTripCard({ trip, onOpen }) {
+  const points = numberValue(trip.eco_points)
+
+  return (
+    <button type="button" onClick={onOpen} className="w-full rounded-2xl border border-slate-100 bg-slate-50 p-4 text-left transition hover:border-green-200 hover:bg-green-50/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-green-500">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate font-semibold text-slate-800">{trip.destination}</p>
+          <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-500">From {trip.starting_location}</p>
+        </div>
+        <span className="shrink-0 rounded-full bg-green-100 px-2.5 py-1 text-[10px] font-semibold text-green-700">{transportLabels[trip.transport_mode] || trip.transport_mode}</span>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-slate-200/70 pt-3 text-xs">
+        <span className="flex items-center gap-1.5 text-slate-500"><CalendarDays size={13} className="shrink-0" />{formatTripDate(trip.travelled_at)}</span>
+        <span className="text-right font-medium text-slate-600">{numberValue(trip.distance_km).toFixed(1)} km</span>
+        <span className="text-slate-500">{formatCarbon(trip.total_emission)}</span>
+        <span className={`text-right font-semibold ${points < 0 ? 'text-red-600' : 'text-green-700'}`}>{formatEcoPoints(points)} pts</span>
+      </div>
+    </button>
   )
 }
 
@@ -258,7 +301,7 @@ function TripDetailsModal({ trip, onClose }) {
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/55 p-3 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
-      <section role="dialog" aria-modal="true" aria-labelledby="trip-details-title" className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+      <section role="dialog" aria-modal="true" aria-labelledby="trip-details-title" className="max-h-[calc(100dvh-1.5rem)] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl sm:max-h-[calc(100dvh-2rem)]">
         <header className="relative overflow-hidden rounded-t-2xl bg-gradient-to-br from-green-600 to-emerald-500 px-5 py-3.5 text-white">
           <button type="button" onClick={onClose} aria-label="Close trip details" className="absolute right-3 top-3 grid size-8 place-items-center rounded-full bg-white/15 transition hover:bg-white/25 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"><X size={16} /></button>
           <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-green-100">Trip details</p>
@@ -278,7 +321,7 @@ function TripDetailsModal({ trip, onClose }) {
 
           <section>
             <h3 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Travel information</h3>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="grid gap-2 min-[360px]:grid-cols-2 sm:grid-cols-4">
               <DetailItem icon={Navigation} label="Transport" value={transport} />
               <DetailItem icon={Route} label="Trip type" value={trip.round_trip ? 'Round trip' : 'One way'} />
               <DetailItem icon={MapPin} label="Total distance" value={`${numberValue(trip.distance_km).toFixed(1)} km`} />
@@ -288,7 +331,7 @@ function TripDetailsModal({ trip, onClose }) {
 
           <section>
             <h3 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Environmental impact</h3>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid gap-2 min-[360px]:grid-cols-3">
               <DetailItem icon={Cloud} label="Base emission" value={formatCarbon(trip.carbon_emission)} tone="slate" />
               <DetailItem icon={Leaf} label="Total emission" value={formatCarbon(trip.total_emission)} tone="green" />
               <DetailItem icon={Award} label="Eco points" value={formatEcoPoints(trip.eco_points)} tone={numberValue(trip.eco_points) < 0 ? 'red' : 'green'} />
@@ -298,7 +341,7 @@ function TripDetailsModal({ trip, onClose }) {
           {(hasOriginCoordinates || hasDestinationCoordinates) && (
             <section>
               <h3 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Location coordinates</h3>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid gap-2 min-[420px]:grid-cols-2">
                 {hasOriginCoordinates && <CoordinateItem label="Starting coordinates" value={`${Number(trip.origin_lat).toFixed(5)}, ${Number(trip.origin_lng).toFixed(5)}`} />}
                 {hasDestinationCoordinates && <CoordinateItem label="Destination coordinates" value={`${Number(trip.destination_lat).toFixed(5)}, ${Number(trip.destination_lng).toFixed(5)}`} />}
               </div>

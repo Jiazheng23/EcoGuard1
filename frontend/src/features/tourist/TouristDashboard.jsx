@@ -25,8 +25,8 @@ import {
   TrendingDown,
 } from 'lucide-react'
 import { listOwnTrips } from '../../services/tripService'
-import AchievementBadges from './AchievementBadges'
-import { getAchievementBadges } from './achievementBadgeRules'
+import AchievementBadges from '../../components/AchievementBadges'
+import { getAchievementBadges } from '../../services/achievementService'
 import {
   formatCarbon,
   formatTripDate,
@@ -131,7 +131,8 @@ export default function TouristDashboard({ onNavigate, user, profile }) {
     'Tourist'
   const ecoScore = profile?.eco_score ?? 50
   const savedCarbon = numberValue(profile?.total_carbon_saved)
-  const earnedBadges = getAchievementBadges(trips, profile).filter((badge) => badge.earned).length
+  const achievementBadges = getAchievementBadges(trips, profile)
+  const earnedBadges = achievementBadges.filter((badge) => badge.earned).length
   const greeting = new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 18 ? 'Good afternoon' : 'Good evening'
 
   return (
@@ -167,7 +168,7 @@ export default function TouristDashboard({ onNavigate, user, profile }) {
           ['Eco Score', ecoScore, '/ 100', `${analytics.ecoPoints >= 0 ? '+' : ''}${analytics.ecoPoints} trip points`, 'text-green-500'],
           ["Today's Emission", analytics.todayEmission.toFixed(1), 'kg CO₂', 'From saved trips today', 'text-blue-500'],
           ['Monthly Emission', analytics.monthlyEmission.toFixed(1), 'kg CO₂', 'Current calendar month', 'text-violet-500'],
-          ['Badges Earned', earnedBadges, '/ 6', `${6 - earnedBadges} still available`, 'text-amber-500'],
+          ['Badges Earned', earnedBadges, `/ ${achievementBadges.length}`, `${achievementBadges.length - earnedBadges} still available`, 'text-amber-500'],
         ].map(([label, value, unit, delta, color]) => (
           <article className={card} key={label}>
             <p className="text-xs font-medium text-slate-500">{label}</p>
@@ -244,7 +245,7 @@ export default function TouristDashboard({ onNavigate, user, profile }) {
         </ResponsiveContainer>
       </ChartCard>
 
-      <AchievementBadges trips={trips} profile={profile} loading={loading} />
+      <AchievementBadges trips={trips} profile={profile} loading={loading} onShowMore={() => onNavigate('achievements')} />
 
       <section className="grid gap-4 lg:grid-cols-2">
         <article className={card}>
