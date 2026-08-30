@@ -59,7 +59,7 @@
 .tourist-main .leaflet-container { font-family: inherit; }
 
 .tourist-dashboard-hero { background: var(--eco-forest-deep) !important; position: relative; overflow: hidden; box-shadow: none !important; border-radius: .5rem 2rem .5rem .5rem !important; }
-.tourist-dashboard-hero::after { content: '↗'; position: absolute; right: 2rem; bottom: -2.5rem; color: rgba(255,255,255,.055); font: 9rem/1 Georgia,serif; }
+.tourist-dashboard-hero::after { content: '↗'; position: absolute; right: 2rem; bottom: -2.5rem; color: rgba(255,255,255,.055); font: 9rem/1 Georgia,serif; pointer-events: none; }
 .tourist-dashboard-hero h1 { color: white; font-family: Georgia, 'Times New Roman', serif; }
 .tourist-dashboard-stats article { border-radius: 0 !important; border-width: 0 0 1px !important; background: transparent !important; padding: 1.1rem .25rem !important; }
 .tourist-dashboard-stats article:first-child { border-bottom-color: var(--eco-amber) !important; }

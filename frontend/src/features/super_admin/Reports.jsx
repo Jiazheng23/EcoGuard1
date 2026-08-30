@@ -25,7 +25,12 @@ import {
 
 const card = 'rounded-2xl border border-slate-100 bg-white p-5 shadow-sm'
 
-export default function Reports({ profiles, trips, locations, metrics, loading, error }) {
+function formatDestinationLabel(value, maxLength = 22) {
+  const label = String(value || '')
+  return label.length > maxLength ? `${label.slice(0, maxLength - 1)}…` : label
+}
+
+export default function Reports({ profiles, trips, locations, metrics, loading, error, isSuperAdmin = false }) {
   const [query, setQuery] = useState('')
   const [locationFilter, setLocationFilter] = useState('all')
   const [dateRange, setDateRange] = useState('30')
@@ -143,12 +148,25 @@ export default function Reports({ profiles, trips, locations, metrics, loading, 
       />
 
       <section className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-        <div className="grid gap-3 md:grid-cols-[1fr_220px_170px_auto]">
-          <label className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search destination, state or transport" className="w-full rounded-xl border border-slate-200 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-blue-500" /></label>
-          <select value={locationFilter} onChange={(event) => setLocationFilter(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-600 outline-none focus:border-blue-500"><option value="all">All ecological locations</option>{locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select>
-          <select value={dateRange} onChange={(event) => setDateRange(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-600 outline-none focus:border-blue-500"><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="all">All time</option></select>
-          {(query || locationFilter !== 'all' || dateRange !== '30') && <button type="button" onClick={() => { setQuery(''); setLocationFilter('all'); setDateRange('30') }} className="rounded-xl px-3 py-2.5 text-sm font-semibold text-blue-600 hover:bg-blue-50">Reset</button>}
-        </div>
+        {isSuperAdmin ? (
+          <div className="grid gap-3 md:grid-cols-[1fr_220px_170px_auto]">
+            <label className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search destination, state or transport" className="w-full rounded-xl border border-slate-200 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-blue-500" /></label>
+            <select value={locationFilter} onChange={(event) => setLocationFilter(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-600 outline-none focus:border-blue-500"><option value="all">All ecological locations</option>{locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select>
+            <select aria-label="Report date range" value={dateRange} onChange={(event) => setDateRange(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-600 outline-none focus:border-blue-500"><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="all">All time</option></select>
+            {(query || locationFilter !== 'all' || dateRange !== '30') && <button type="button" onClick={() => { setQuery(''); setLocationFilter('all'); setDateRange('30') }} className="rounded-xl px-3 py-2.5 text-sm font-semibold text-blue-600 hover:bg-blue-50">Reset</button>}
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-slate-700">Report period</p>
+              <p className="mt-0.5 text-xs text-slate-400">Filter data for your assigned ecological location</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <select aria-label="Report date range" value={dateRange} onChange={(event) => setDateRange(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-600 outline-none focus:border-blue-500"><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="all">All time</option></select>
+              {dateRange !== '30' && <button type="button" onClick={() => setDateRange('30')} className="rounded-xl px-3 py-2.5 text-sm font-semibold text-blue-600 hover:bg-blue-50">Reset</button>}
+            </div>
+          </div>
+        )}
         <div className="mt-2 flex flex-wrap justify-end gap-3 text-xs text-slate-400"><span>{filteredTrips.length} trips</span><span>{filteredMetrics.length} environmental readings</span><span>{filteredLocations.length} locations</span></div>
       </section>
 
@@ -205,11 +223,19 @@ export default function Reports({ profiles, trips, locations, metrics, loading, 
       <section className="grid gap-4 lg:grid-cols-2">
         <article className={card}>
           <h2 className="mb-4 font-bold text-slate-800">Carbon by destination</h2>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={analytics.destinations} layout="vertical" margin={{ left: 12 }}>
+          <ResponsiveContainer width="100%" height={Math.max(280, analytics.destinations.length * 42)}>
+            <BarChart data={analytics.destinations} layout="vertical" margin={{ left: 8, right: 16 }} barCategoryGap="28%">
               <CartesianGrid stroke="#f1f5f9" strokeDasharray="3 3" />
-              <XAxis type="number" tick={{ fontSize: 10, fill: '#94a3b8' }} />
-              <YAxis type="category" dataKey="name" width={95} tick={{ fontSize: 10, fill: '#64748b' }} />
+              <XAxis type="number" tick={{ fontSize: 10, fill: '#94a3b8' }} tickLine={false} />
+              <YAxis
+                type="category"
+                dataKey="name"
+                width={145}
+                interval={0}
+                tickFormatter={formatDestinationLabel}
+                tick={{ fontSize: 10, fill: '#64748b' }}
+                tickLine={false}
+              />
               <Tooltip formatter={(value) => [`${value} kg CO₂`, 'Carbon']} />
               <Bar dataKey="emission" fill="#22c55e" radius={[0, 5, 5, 0]} isAnimationActive={false} />
             </BarChart>

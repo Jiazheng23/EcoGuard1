@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { MapPin, RefreshCw } from 'lucide-react'
+import { RefreshCw } from 'lucide-react'
 import { latestMetricsByLocation } from '../../services/locationService'
 import {
   listWasteCollections,
@@ -175,13 +175,6 @@ export default function WasteManagement({ locations, metrics, loading, error, on
           </button>
         </div>
       </header>
-
-      {selected && !isSuperAdmin && (
-        <div className="flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-          <MapPin size={16} className="shrink-0" />
-          <span><span className="font-semibold">Assigned location:</span> {selected.name}</span>
-        </div>
-      )}
 
       {error && <ModuleNotice message={error} />}
       {wasteError && <ModuleNotice message={wasteError} />}

@@ -138,20 +138,21 @@ export default function AdminDashboard({
       </section>
 
       <section aria-labelledby="environmental-overview-heading">
-        <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 id="environmental-overview-heading" className="font-bold text-slate-900">Environmental Monitoring</h2>
             <p className="mt-0.5 text-xs text-slate-400">The same current reading shown on the Sensors page</p>
+            <p className="mt-1 text-xs font-medium text-slate-400">Every 5 minutes{sensor.recordedAt ? ` · Updated ${formatMetricDate(sensor.recordedAt)}` : ''}</p>
           </div>
-          <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             {selectedSensorLocation && isSuperAdmin && locations.length > 1 ? (
-              <label className="min-w-56 text-xs font-semibold text-slate-500">
-                Location
+              <label className="flex min-w-72 items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
+                <span className="inline-flex shrink-0 items-center gap-2"><MapPin size={15} className="text-blue-500" />Location</span>
                 <select
                   aria-label="Dashboard sensor location"
                   value={selectedSensorLocation.id}
                   onChange={(event) => onSensorLocationChange?.(event.target.value)}
-                  className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none focus:border-blue-500"
+                  className="block min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none focus:border-blue-500"
                 >
                   {locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
                 </select>
@@ -159,7 +160,6 @@ export default function AdminDashboard({
             ) : selectedSensorLocation ? (
               <span className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600"><MapPin size={14} className="text-blue-500" />{selectedSensorLocation.name}</span>
             ) : null}
-            <span className="pb-2 text-xs font-medium text-slate-400">Every 5 minutes{sensor.recordedAt ? ` · Updated ${formatMetricDate(sensor.recordedAt)}` : ''}</span>
           </div>
         </div>
         {selectedSensorReading ? (
