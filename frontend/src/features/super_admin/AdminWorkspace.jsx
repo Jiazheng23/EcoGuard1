@@ -167,12 +167,12 @@ export default function AdminWorkspace({ requiredRole }) {
   }, [handleMetricCreated, profile])
 
   if (loading) {
-    return <main className="grid min-h-screen place-items-center bg-slate-50"><p className="text-sm font-medium text-slate-500">Loading administrator workspace...</p></main>
+    return <main className="admin-theme grid min-h-screen place-items-center bg-slate-50"><p className="text-sm font-medium text-slate-500">Loading administrator workspace...</p></main>
   }
 
   if (accessError || !profile) {
     return (
-      <main className="grid min-h-screen place-items-center bg-slate-50 p-6">
+      <main className="admin-theme grid min-h-screen place-items-center bg-slate-50 p-6">
         <section className="max-w-lg rounded-2xl border border-red-100 bg-white p-6 text-center shadow-sm">
           <h1 className="text-lg font-bold text-slate-900">Administrator access unavailable</h1>
           <p className="mt-2 text-sm leading-6 text-red-600">{accessError || 'No administrator profile was found.'}</p>

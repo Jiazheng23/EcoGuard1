@@ -14,6 +14,7 @@ import { updateOwnProfile } from '../../services/profileService'
 import { listOwnTrips } from '../../services/tripService'
 import AchievementBadges from '../../components/AchievementBadges'
 import ProfileAvatarUploader from '../profile/ProfileAvatarUploader'
+import { isValidMalaysianPhone, MALAYSIAN_PHONE_ERROR } from '../../utils/malaysianPhone'
 
 const card = 'rounded-2xl border border-slate-100 bg-white p-5 shadow-sm'
 
@@ -93,8 +94,8 @@ export default function TouristProfile({ user, profile, onProfileChange, onNavig
       return
     }
 
-    if (cleanPhone && !/^[0-9+()\-\s]{7,20}$/.test(cleanPhone)) {
-      setErrorMessage('Enter a valid phone number.')
+    if (!isValidMalaysianPhone(cleanPhone)) {
+      setErrorMessage(MALAYSIAN_PHONE_ERROR)
       return
     }
 
@@ -205,6 +206,8 @@ export default function TouristProfile({ user, profile, onProfileChange, onNavig
               value={phone}
               onChange={setPhone}
               placeholder="Example: +60 12-345 6789"
+              type="tel"
+              inputMode="tel"
             />
 
             <GenderField value={gender} onChange={setGender} />
@@ -262,6 +265,8 @@ function ProfileField({
   placeholder,
   readOnly = false,
   required = false,
+  type = 'text',
+  inputMode,
 }) {
   return (
     <label className="block">
@@ -276,6 +281,8 @@ function ProfileField({
         />
 
         <input
+          type={type}
+          inputMode={inputMode}
           value={value}
           onChange={
             onChange
@@ -321,7 +328,6 @@ function GenderField({ value, onChange }) {
           <option value="female">Female</option>
           <option value="male">Male</option>
           <option value="non_binary">Non-binary</option>
-          <option value="prefer_not_to_say">Prefer not to say</option>
         </select>
         <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">⌄</span>
       </span>

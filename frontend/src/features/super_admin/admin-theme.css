@@ -1,0 +1,90 @@
+.admin-theme {
+  --admin-blue: #1769c2;
+  --admin-blue-dark: #0b3f78;
+  --admin-blue-soft: #eaf3fc;
+  --admin-bg: #f1f5f9;
+  --admin-line: #d8e2ec;
+  --admin-ink: #14263d;
+  --admin-muted: #607086;
+  background: var(--admin-bg);
+  color: var(--admin-ink);
+}
+
+.admin-sidebar-shell { background: #102b4b; border-right: 1px solid #1d4167; }
+.admin-sidebar { background: linear-gradient(180deg, #102e51 0%, #0d2744 100%); }
+.admin-brand { border-color: rgb(255 255 255 / 10%); }
+.admin-brand-mark { background: #2381dc; box-shadow: 0 0 0 4px rgb(61 147 228 / 12%); }
+.admin-nav-item { color: #aebfd2; }
+.admin-nav-item:hover { background: rgb(255 255 255 / 7%); color: #fff; }
+.admin-nav-item.is-active { background: #f5f9ff; color: #125ea9; box-shadow: inset 3px 0 #3b8ddd; }
+.admin-subnav { border-color: rgb(255 255 255 / 14%); }
+
+.admin-header { background: rgb(255 255 255 / 96%); border-color: var(--admin-line); box-shadow: 0 1px 0 rgb(15 45 75 / 3%); }
+.admin-main { background-color: var(--admin-bg); background-image: radial-gradient(circle at 85% 0%, rgb(65 145 220 / 8%), transparent 26rem); }
+.admin-main > * { animation: admin-enter .24s ease-out; }
+@keyframes admin-enter { from { opacity: 0; transform: translateY(3px); } }
+
+/* Page hierarchy */
+.admin-theme h1 { color: var(--admin-ink); letter-spacing: -.025em; }
+.admin-theme h2, .admin-theme h3 { letter-spacing: -.012em; }
+.admin-theme h1 + p { color: var(--admin-muted); }
+.admin-theme main > div, .admin-theme main > section { width: 100%; }
+
+/* Surfaces are defined by borders and spacing, not a wall of floating cards. */
+.admin-theme .bg-white { border-color: var(--admin-line); }
+.admin-theme .shadow-sm { box-shadow: 0 1px 2px rgb(20 43 68 / 4%); }
+.admin-theme .shadow-lg { box-shadow: 0 14px 35px rgb(20 43 68 / 12%); }
+.admin-theme .shadow-xl, .admin-theme .shadow-2xl { box-shadow: 0 22px 55px rgb(11 38 67 / 18%); }
+.admin-theme section.bg-white,
+.admin-theme section[class*="bg-white"],
+.admin-theme div[class*="rounded-2xl"][class*="bg-white"] { border-radius: .75rem; }
+.admin-theme [class*="bg-slate-50"] { background-color: #f6f8fb; }
+
+/* Controls */
+.admin-theme input:not([type="checkbox"]):not([type="radio"]),
+.admin-theme select,
+.admin-theme textarea {
+  border-color: #cbd8e5;
+  background-color: #fbfdff;
+  border-radius: .5rem;
+  color: var(--admin-ink);
+  transition: border-color .15s, box-shadow .15s, background-color .15s;
+}
+.admin-theme input:hover, .admin-theme select:hover, .admin-theme textarea:hover { border-color: #aebfd1; }
+.admin-theme input:focus, .admin-theme select:focus, .admin-theme textarea:focus {
+  border-color: #3985cd !important;
+  box-shadow: 0 0 0 3px rgb(57 133 205 / 13%);
+  background: #fff;
+}
+.admin-theme button[class*="bg-blue-500"], .admin-theme button[class*="bg-blue-600"] {
+  background-color: var(--admin-blue);
+  border-radius: .5rem;
+  box-shadow: 0 1px 2px rgb(11 63 120 / 16%);
+}
+.admin-theme button[class*="bg-blue-500"]:hover, .admin-theme button[class*="bg-blue-600"]:hover { background-color: #0f5ba8; }
+.admin-theme button[class*="bg-green-"], .admin-theme button[class*="bg-emerald-"] { border-radius: .5rem; }
+
+/* Data-dense elements */
+.admin-theme table { border-collapse: separate; border-spacing: 0; }
+.admin-theme thead[class*="bg-slate-50"] { background: #edf3f8; color: #50647a; }
+.admin-theme thead th { font-size: .68rem; letter-spacing: .055em; font-weight: 700; border-bottom: 1px solid #d6e1eb; }
+.admin-theme tbody tr { transition: background-color .14s; }
+.admin-theme tbody tr:hover { background: #f6faff !important; }
+.admin-theme tbody td { border-color: #e4ebf2; }
+.admin-theme [class*="rounded-full"] { box-shadow: inset 0 0 0 1px rgb(30 65 100 / 5%); }
+
+/* Charts and environmental semantics */
+.admin-theme .recharts-cartesian-grid line { stroke: #dbe5ee; }
+.admin-theme .recharts-text { fill: #64768a; font-size: 11px; }
+.admin-theme .recharts-default-tooltip { border: 1px solid #d4e0eb !important; border-radius: 8px !important; box-shadow: 0 8px 24px rgb(16 43 75 / 10%); }
+.admin-theme .text-green-500, .admin-theme .text-green-600, .admin-theme .text-emerald-500, .admin-theme .text-emerald-600 { color: #13856a; }
+.admin-theme .bg-green-50, .admin-theme .bg-emerald-50 { background-color: #edf9f5; }
+.admin-theme .border-green-100, .admin-theme .border-green-200, .admin-theme .border-emerald-100, .admin-theme .border-emerald-200 { border-color: #bfe8dc; }
+
+@media (max-width: 1023px) {
+  .admin-sidebar-shell .admin-sidebar { min-height: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-main > * { animation: none; }
+}

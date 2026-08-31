@@ -290,10 +290,7 @@ export default function TouristDashboard({
         <article className={card}>
           <div className="mb-4 flex justify-between">
             <h2 className="font-bold text-slate-800">Recent Trips</h2>
-            <div className="flex items-center gap-3">
-              <button onClick={() => onNavigate('history')} className="flex items-center gap-1 text-xs font-semibold text-slate-500">View history <ArrowRight size={13} /></button>
-              <button onClick={() => onNavigate('carbon')} className="flex items-center gap-1 text-xs font-semibold text-green-600">Add trip <ArrowRight size={13} /></button>
-            </div>
+            <button onClick={() => onNavigate('history')} className="flex items-center gap-1 text-xs font-semibold text-slate-500">View history <ArrowRight size={13} /></button>
           </div>
           <div className="space-y-3">
             {trips.slice(0, 4).map((trip) => {
