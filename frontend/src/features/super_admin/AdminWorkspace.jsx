@@ -14,6 +14,7 @@ import AdminLayout from './AdminLayout'
 import AdminProfile from './AdminProfile'
 import CrowdThresholds from './CrowdThresholds'
 import EcologicalLocations from './EcologicalLocations'
+import EnvironmentalAnalytics from './EnvironmentalAnalytics'
 import Reports from './Reports'
 import WasteManagement from './WasteManagement'
 import AdminApplications from './AdminApplications'
@@ -219,6 +220,7 @@ export default function AdminWorkspace({ requiredRole }) {
     'location-detail': <LocationDetailPage {...sharedProps} />,
     sensors: <SensorManagement {...sharedProps} />,
     thresholds: <CrowdThresholds {...sharedProps} />,
+    analytics: <EnvironmentalAnalytics {...sharedProps} />,
     reports: <Reports {...sharedProps} />,
     applications: <AdminApplications />,
     profile: <AdminProfile user={user} profile={profile} onProfileChange={handleProfileChange} />,

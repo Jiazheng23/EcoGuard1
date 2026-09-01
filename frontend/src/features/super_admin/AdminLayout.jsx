@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import {
+  Activity,
   BarChart2,
   ChevronDown,
   ChevronRight,
@@ -35,6 +36,7 @@ const navItems = [
       { label: 'Analytics & Reports', page: 'waste-analytics' },
     ],
   },
+  { icon: Activity, label: 'Environmental Analytics', page: 'analytics' },
   { icon: BarChart2, label: 'Reports', page: 'reports' },
 ]
 
@@ -49,6 +51,7 @@ const pageLabels = {
   'waste-schedules': 'Waste / Collection Schedules',
   'waste-history': 'Waste / Collection History',
   'waste-analytics': 'Waste / Analytics & Reports',
+  analytics: 'Environmental Analytics',
   reports: 'Reports & Environmental Data',
   profile: 'Profile',
   applications: 'Location Admin Applications',

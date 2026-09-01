@@ -1,5 +1,7 @@
 import { supabase } from './supabaseClient'
 
+let environmentalHistoryChannelSequence = 0
+
 function throwIfError(error) {
   if (error) throw error
 }
@@ -88,6 +90,33 @@ export async function listLocationMetrics({ limit = 500 } = {}) {
 
   throwIfError(error)
   return data || []
+}
+
+export async function listEnvironmentalMetricHistory({ limit = 5000 } = {}) {
+  const { data, error } = await supabase
+    .from('environmental_metric_history')
+    .select('*')
+    .order('recorded_at', { ascending: false })
+    .limit(limit)
+
+  throwIfError(error)
+  return data || []
+}
+
+export function subscribeToEnvironmentalMetricHistory(onChange) {
+  if (!supabase) return () => {}
+  environmentalHistoryChannelSequence += 1
+
+  const channel = supabase
+    .channel(`environmental-metric-history-${environmentalHistoryChannelSequence}`)
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'environmental_metric_history' },
+      (payload) => onChange?.(payload.new),
+    )
+    .subscribe()
+
+  return () => { void supabase.removeChannel(channel) }
 }
 
 export async function listLocationSensorControls() {
