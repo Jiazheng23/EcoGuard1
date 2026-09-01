@@ -15,7 +15,7 @@ import AdminProfile from './AdminProfile'
 import CrowdThresholds from './CrowdThresholds'
 import EcologicalLocations from './EcologicalLocations'
 import EnvironmentalAnalytics from './EnvironmentalAnalytics'
-import Reports from './Reports'
+import ReportsHub from './ReportsHub'
 import WasteManagement from './WasteManagement'
 import AdminApplications from './AdminApplications'
 import SensorManagement from './SensorManagement'
@@ -37,6 +37,7 @@ export default function AdminWorkspace({ requiredRole }) {
   const [accessError, setAccessError] = useState('')
   const [dataLoading, setDataLoading] = useState(true)
   const [dataError, setDataError] = useState('')
+  const [reportTab, setReportTab] = useState('environment')
 
   const refreshData = useCallback(async (scopeProfile) => {
     setDataLoading(true)
@@ -142,6 +143,11 @@ export default function AdminWorkspace({ requiredRole }) {
   }
 
   function handleNavigate(nextPage) {
+    if (nextPage === 'waste-analytics') {
+      setReportTab('waste')
+      setPage('reports')
+      return
+    }
     if (profile?.role === 'location_admin' && ['locations', 'thresholds'].includes(nextPage)) {
       setPage('location-detail')
       return
@@ -205,7 +211,6 @@ export default function AdminWorkspace({ requiredRole }) {
     'waste-overview': 'overview',
     'waste-schedules': 'schedules',
     'waste-history': 'history',
-    'waste-analytics': 'analytics',
   }
   const wasteSection = wasteSections[page]
   const pageContent = wasteSection ? (
@@ -221,7 +226,7 @@ export default function AdminWorkspace({ requiredRole }) {
     sensors: <SensorManagement {...sharedProps} />,
     thresholds: <CrowdThresholds {...sharedProps} />,
     analytics: <EnvironmentalAnalytics {...sharedProps} />,
-    reports: <Reports {...sharedProps} />,
+    reports: <ReportsHub {...sharedProps} activeTab={reportTab} onTabChange={setReportTab} />,
     applications: <AdminApplications />,
     profile: <AdminProfile user={user} profile={profile} onProfileChange={handleProfileChange} />,
   }[page])

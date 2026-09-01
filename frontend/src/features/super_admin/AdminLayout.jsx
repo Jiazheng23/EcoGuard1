@@ -33,7 +33,6 @@ const navItems = [
       { label: 'Overview', page: 'waste-overview' },
       { label: 'Collection Schedules', page: 'waste-schedules' },
       { label: 'Collection History', page: 'waste-history' },
-      { label: 'Analytics & Reports', page: 'waste-analytics' },
     ],
   },
   { icon: Activity, label: 'Environmental Analytics', page: 'analytics' },
@@ -50,9 +49,8 @@ const pageLabels = {
   'waste-overview': 'Waste / Overview',
   'waste-schedules': 'Waste / Collection Schedules',
   'waste-history': 'Waste / Collection History',
-  'waste-analytics': 'Waste / Analytics & Reports',
   analytics: 'Environmental Analytics',
-  reports: 'Reports & Environmental Data',
+  reports: 'Reports & Analytics',
   profile: 'Profile',
   applications: 'Location Admin Applications',
 }

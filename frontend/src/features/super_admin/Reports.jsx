@@ -16,6 +16,7 @@ import ReportDownloadDialog from '../../components/ReportDownloadDialog'
 import { latestMetricsByLocation } from '../../services/locationService'
 import { adminReportFilename, buildAdminTripPdfBytes, buildEnvironmentalPdfBytes } from '../../utils/adminReport'
 import { downloadWasteReport } from '../../utils/wasteReport'
+import { isWestMalaysiaCoordinate } from '../../utils/westMalaysia'
 import {
   getDestinationSeries,
   getMonthlySeries,
@@ -30,7 +31,7 @@ function formatDestinationLabel(value, maxLength = 22) {
   return label.length > maxLength ? `${label.slice(0, maxLength - 1)}…` : label
 }
 
-export default function Reports({ profiles, trips, locations, metrics, loading, error, isSuperAdmin = false }) {
+export default function Reports({ profiles, trips, locations, metrics, loading, error, isSuperAdmin = false, embedded = false }) {
   const [query, setQuery] = useState('')
   const [locationFilter, setLocationFilter] = useState('all')
   const [dateRange, setDateRange] = useState('30')
@@ -61,13 +62,26 @@ export default function Reports({ profiles, trips, locations, metrics, loading, 
     const matchesDate = !startTimestamp || new Date(metric.recorded_at).getTime() >= startTimestamp
     return matchesDate && visibleLocationIds.has(String(metric.location_id))
   }), [metrics, startTimestamp, visibleLocationIds])
+  const eastMalaysiaLocationNames = useMemo(() => new Set(
+    locations
+      .filter((location) => ['sabah', 'sarawak', 'labuan'].includes(String(location.state || '').trim().toLowerCase()))
+      .map((location) => location.name.trim().toLowerCase()),
+  ), [locations])
 
   const analytics = useMemo(() => ({
     summary: getTripSummary(filteredTrips, profiles),
     monthly: getMonthlySeries(filteredTrips),
-    destinations: getDestinationSeries(filteredTrips).slice(0, 8),
+    destinations: getDestinationSeries(filteredTrips)
+      .filter((destination) => {
+        if (eastMalaysiaLocationNames.has(destination.name.trim().toLowerCase())) return false
+        const lat = Number(destination.lat)
+        const lng = Number(destination.lng)
+        const hasCoordinates = destination.lat !== null && destination.lng !== null
+          && Number.isFinite(lat) && Number.isFinite(lng)
+        return !hasCoordinates || isWestMalaysiaCoordinate(lat, lng)
+      }),
     transport: getTransportSeries(filteredTrips),
-  }), [filteredTrips, profiles])
+  }), [eastMalaysiaLocationNames, filteredTrips, profiles])
   const environmental = useMemo(() => {
     const latest = latestMetricsByLocation(filteredMetrics)
     const byLocation = filteredLocations.map((location) => {
@@ -131,9 +145,9 @@ export default function Reports({ profiles, trips, locations, metrics, loading, 
   }
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-6">
+    <div className={`${embedded ? '' : 'mx-auto max-w-6xl'} flex flex-col gap-6`}>
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <div><h1 className="text-2xl font-bold text-slate-900">Reports & Environmental Data</h1><p className="mt-1 text-sm text-slate-500">Shared Supabase analytics from trips and current environmental readings</p></div>
+        <div><h2 className={`${embedded ? 'text-lg' : 'text-2xl'} font-bold text-slate-900`}>{embedded ? 'Environmental & Travel Reports' : 'Reports & Environmental Data'}</h2><p className="mt-1 text-sm text-slate-500">Shared Supabase analytics from trips and current environmental readings</p></div>
         <button type="button" onClick={() => { setDownloadMessage(''); setDownloadDialogOpen(true) }} disabled={!filteredMetrics.length && !filteredTrips.length} className="inline-flex items-center justify-center gap-2 rounded-xl bg-green-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"><Download size={15} />Download</button>
       </header>
 
@@ -220,26 +234,22 @@ export default function Reports({ profiles, trips, locations, metrics, loading, 
         </ResponsiveContainer>
       </article>
 
-      <section className="grid gap-4 lg:grid-cols-2">
+      <section className={`grid gap-4 ${isSuperAdmin ? '' : 'lg:grid-cols-2'}`}>
         <article className={card}>
-          <h2 className="mb-4 font-bold text-slate-800">Carbon by destination</h2>
-          <ResponsiveContainer width="100%" height={Math.max(280, analytics.destinations.length * 42)}>
-            <BarChart data={analytics.destinations} layout="vertical" margin={{ left: 8, right: 16 }} barCategoryGap="28%">
-              <CartesianGrid stroke="#f1f5f9" strokeDasharray="3 3" />
-              <XAxis type="number" tick={{ fontSize: 10, fill: '#94a3b8' }} tickLine={false} />
-              <YAxis
-                type="category"
-                dataKey="name"
-                width={145}
-                interval={0}
-                tickFormatter={formatDestinationLabel}
-                tick={{ fontSize: 10, fill: '#64748b' }}
-                tickLine={false}
-              />
-              <Tooltip formatter={(value) => [`${value} kg CO₂`, 'Carbon']} />
-              <Bar dataKey="emission" fill="#22c55e" radius={[0, 5, 5, 0]} isAnimationActive={false} />
-            </BarChart>
-          </ResponsiveContainer>
+          {isSuperAdmin ? <DestinationCarbonRanking destinations={analytics.destinations} loading={loading} /> : (
+            <div className="flex min-h-[250px] flex-col justify-between">
+              <div>
+                <h2 className="font-bold text-slate-800">Carbon for assigned location</h2>
+                <p className="mt-1 text-xs text-slate-400">{locations[0]?.name || 'Assigned ecological location'} · selected report period</p>
+              </div>
+              <div className="py-8 text-center">
+                <Leaf className="mx-auto text-green-500" size={28} />
+                <p className="mt-4 text-4xl font-bold text-slate-900">{loading ? '-' : `${analytics.summary.totalEmission.toFixed(1)} kg`}</p>
+                <p className="mt-2 text-sm font-medium text-slate-500">Total CO₂ emissions</p>
+                <p className="mt-1 text-xs text-slate-400">Calculated from {analytics.summary.totalTrips} recorded trip{analytics.summary.totalTrips === 1 ? '' : 's'}</p>
+              </div>
+            </div>
+          )}
         </article>
 
         <article className={card}>
@@ -255,6 +265,84 @@ export default function Reports({ profiles, trips, locations, metrics, loading, 
           </ResponsiveContainer>
         </article>
       </section>
+    </div>
+  )
+}
+
+function DestinationCarbonRanking({ destinations, loading }) {
+  const [page, setPage] = useState(1)
+  const [query, setQuery] = useState('')
+  const pageSize = 5
+  const needle = query.trim().toLowerCase()
+  const filteredDestinations = destinations.filter((destination) => !needle || destination.name.toLowerCase().includes(needle))
+  const totalPages = Math.max(1, Math.ceil(filteredDestinations.length / pageSize))
+  const currentPage = Math.min(page, totalPages)
+  const visibleDestinations = filteredDestinations.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+  const peakEmission = Math.max(...filteredDestinations.map((item) => Number(item.emission) || 0), 0)
+  const totalEmission = filteredDestinations.reduce((sum, item) => sum + (Number(item.emission) || 0), 0)
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="font-bold text-slate-800">Carbon across all destinations</h2>
+          <p className="mt-1 text-xs text-slate-400">Ranked by total CO₂ emissions for the selected report period</p>
+        </div>
+        <div className="rounded-xl bg-green-50 px-3 py-2 text-right">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-green-600">{query ? 'Matching carbon' : 'Combined carbon'}</p>
+          <p className="mt-0.5 text-lg font-bold text-green-700">{loading ? '-' : `${totalEmission.toFixed(1)} kg`}</p>
+        </div>
+      </div>
+
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-slate-50 p-3">
+        <label className="relative min-w-0 flex-1 sm:max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => { setQuery(event.target.value); setPage(1) }}
+            placeholder="Search destinations"
+            aria-label="Search carbon destinations"
+            className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm outline-none transition focus:border-blue-500"
+          />
+        </label>
+        <div className="flex items-center gap-3 text-xs text-slate-400">
+          <span>{filteredDestinations.length} destination{filteredDestinations.length === 1 ? '' : 's'}</span>
+          {query && <button type="button" onClick={() => { setQuery(''); setPage(1) }} className="font-semibold text-blue-600 hover:underline">Clear</button>}
+        </div>
+      </div>
+
+      {filteredDestinations.length ? (
+        <div className="mt-6 space-y-4">
+          {visibleDestinations.map((destination, index) => {
+            const emission = Number(destination.emission) || 0
+            const width = peakEmission ? Math.max((emission / peakEmission) * 100, 2) : 0
+            const share = totalEmission ? (emission / totalEmission) * 100 : 0
+            const rank = (currentPage - 1) * pageSize + index + 1
+            return (
+              <div key={destination.name}>
+                <div className="mb-1.5 flex items-center gap-3 text-sm">
+                  <span className="grid size-6 shrink-0 place-items-center rounded-lg bg-slate-100 text-[11px] font-bold text-slate-500">{rank}</span>
+                  <span className="min-w-0 flex-1 truncate font-semibold text-slate-700" title={destination.name}>{formatDestinationLabel(destination.name, 9999)}</span>
+                  <span className="shrink-0 font-bold text-slate-800">{emission.toFixed(1)} kg</span>
+                  <span className="w-12 shrink-0 text-right text-xs text-slate-400">{share.toFixed(1)}%</span>
+                </div>
+                <div className="ml-9 h-2.5 overflow-hidden rounded-full bg-slate-100">
+                  <div className="h-full rounded-full bg-gradient-to-r from-green-400 to-emerald-600" style={{ width: `${width}%` }} />
+                </div>
+                <p className="ml-9 mt-1 text-[10px] text-slate-400">{destination.trips} trip{destination.trips === 1 ? '' : 's'}</p>
+              </div>
+            )
+          })}
+          <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-100 pt-4">
+            <span className="text-xs text-slate-400">Page {currentPage} of {totalPages}</span>
+            <button type="button" onClick={() => setPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
+            <button type="button" onClick={() => setPage(Math.min(totalPages, currentPage + 1))} disabled={currentPage === totalPages} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40">Next</button>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-6 grid min-h-[240px] place-items-center rounded-xl bg-slate-50 p-6 text-center text-sm text-slate-400">{query ? `No destinations match “${query}”.` : 'No destination carbon data matches the current filters.'}</div>
+      )}
     </div>
   )
 }
