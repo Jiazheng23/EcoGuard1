@@ -38,7 +38,7 @@ export async function markEarlyWarningsRead(userId, alertIds) {
 
 export function subscribeToEarlyWarnings(onChange) {
   const channel = supabase
-    .channel('early-warning-notifications')
+    .channel(`early-warning-notifications-${crypto.randomUUID()}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'early_warning_alerts' }, onChange)
     .subscribe()
   return () => { void supabase.removeChannel(channel) }

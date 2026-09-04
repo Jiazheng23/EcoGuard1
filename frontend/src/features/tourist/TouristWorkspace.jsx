@@ -123,7 +123,7 @@ export default function TouristWorkspace() {
       ) : page === "achievements" ? (
         <TouristAchievements user={user} profile={profile} />
       ) : page === "monitoring" ? (
-        <EcologicalMonitoring onNavigate={handleNavigate} />
+        <EcologicalMonitoring onNavigate={handleNavigate} user={user} />
       ) : page === "profile" ? (
         <TouristProfile
           user={user}

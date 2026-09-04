@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Bell, CheckCheck } from 'lucide-react'
 import { listEarlyWarningNotifications, markEarlyWarningsRead, subscribeToEarlyWarnings } from '../services/notificationService'
+import { listActiveAdvisories, subscribeToAdvisories } from '../services/advisoryService'
 
 const roleNotifications = {
   tourist: [
@@ -24,8 +25,10 @@ export default function NotificationMenu({ role = 'tourist', userId, onNavigate,
   const storageKey = `ecoguard-notifications-read:${userId || role}`
   const [readIds, setReadIds] = useState(() => readStoredIds(storageKey))
   const [earlyWarnings, setEarlyWarnings] = useState([])
+  const [advisories, setAdvisories] = useState([])
   const containerRef = useRef(null)
   const notifications = useMemo(() => [
+    ...(role === 'tourist' ? advisories.map((advisory) => ({ id: `advisory-${advisory.id}`, title: advisory.title, detail: `${advisory.ecological_locations?.name || 'Destination'}: ${advisory.safety_instructions}`, page: 'monitoring', severity: 'warning' })) : []),
     ...earlyWarnings.map((alert) => ({
       id: `alert-${alert.id}`,
       alertId: alert.id,
@@ -36,7 +39,7 @@ export default function NotificationMenu({ role = 'tourist', userId, onNavigate,
       severity: alert.severity,
     })),
     ...(roleNotifications[role] || roleNotifications.tourist),
-  ], [earlyWarnings, role])
+  ], [advisories, earlyWarnings, role])
   const unreadCount = notifications.filter((item) => item.alertId ? !item.read : !readIds.includes(item.id)).length
   const accentClasses = accent === 'blue' ? 'hover:bg-blue-50 hover:text-blue-700' : 'hover:bg-green-50 hover:text-green-700'
 
@@ -69,6 +72,15 @@ export default function NotificationMenu({ role = 'tourist', userId, onNavigate,
     }
   }, [userId])
 
+  useEffect(() => {
+    if (role !== 'tourist') return undefined
+    let active = true
+    const load = () => listActiveAdvisories().then((rows) => { if (active) setAdvisories(rows) }).catch(() => { if (active) setAdvisories([]) })
+    void load()
+    const unsubscribe = subscribeToAdvisories(load)
+    return () => { active = false; unsubscribe() }
+  }, [role])
+
   function storeReadIds(nextIds) {
     setReadIds(nextIds)
     window.localStorage.setItem(storageKey, JSON.stringify(nextIds))
@@ -87,7 +99,10 @@ export default function NotificationMenu({ role = 'tourist', userId, onNavigate,
     const unreadAlertIds = earlyWarnings.filter((alert) => !alert.read).map((alert) => alert.id)
     await markEarlyWarningsRead(userId, unreadAlertIds)
     setEarlyWarnings((current) => current.map((alert) => ({ ...alert, read: true })))
-    storeReadIds((roleNotifications[role] || roleNotifications.tourist).map((item) => item.id))
+    storeReadIds([
+      ...(roleNotifications[role] || roleNotifications.tourist).map((item) => item.id),
+      ...advisories.map((item) => `advisory-${item.id}`),
+    ])
   }
 
   return (

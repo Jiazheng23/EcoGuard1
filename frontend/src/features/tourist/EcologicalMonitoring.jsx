@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
   Calendar,
+  Camera,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
@@ -13,6 +15,7 @@ import {
   List,
   Map as MapIcon,
   MapPin,
+  Megaphone,
   Search,
   SlidersHorizontal,
   Trash2,
@@ -29,6 +32,8 @@ import {
 import 'leaflet/dist/leaflet.css'
 import { listEcologicalLocations, listTouristEnvironmentalIndicators, subscribeToEnvironmentalIndicators } from '../../services/locationService'
 import { isWestMalaysiaLocation } from '../../utils/westMalaysia'
+import { submitEnvironmentalIncident } from '../../services/incidentService'
+import { listActiveAdvisories, subscribeToAdvisories } from '../../services/advisoryService'
 
 const WEST_MALAYSIA_CENTER = [4.2105, 101.9758]
 const WEST_MALAYSIA_BOUNDS = [
@@ -283,7 +288,7 @@ function managedDestination(location, indicator, index) {
   }
 }
 
-export default function EcologicalMonitoring({ onNavigate }) {
+export default function EcologicalMonitoring({ onNavigate, user }) {
   const [view, setView] = useState('map')
   const [search, setSearch] = useState('')
   const [state, setState] = useState('All States')
@@ -293,6 +298,15 @@ export default function EcologicalMonitoring({ onNavigate }) {
   const [managedLocations, setManagedLocations] = useState([])
   const [managedIndicators, setManagedIndicators] = useState([])
   const [dataError, setDataError] = useState('')
+  const [advisories, setAdvisories] = useState([])
+
+  useEffect(() => {
+    let active = true
+    const load = () => listActiveAdvisories().then((rows) => { if (active) setAdvisories(rows) }).catch(() => { if (active) setAdvisories([]) })
+    void load()
+    const unsubscribe = subscribeToAdvisories(load)
+    return () => { active = false; unsubscribe() }
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -325,16 +339,17 @@ export default function EcologicalMonitoring({ onNavigate }) {
   }, [])
 
   const visibleDestinations = useMemo(() => {
-    if (!managedLocations.length) return destinations.filter(isWestMalaysiaLocation)
+    const advisoryMap = advisories.reduce((groups, item) => ({ ...groups, [String(item.location_id)]: [...(groups[String(item.location_id)] || []), item] }), {})
+    if (!managedLocations.length) return destinations.filter(isWestMalaysiaLocation).map((item) => ({ ...item, advisories: advisoryMap[String(item.id)] || [] }))
     const indicatorMap = Object.fromEntries(managedIndicators.map((item) => [String(item.location_id), item]))
     return managedLocations
       .filter(isWestMalaysiaLocation)
-      .map((location, index) => managedDestination(
+      .map((location, index) => ({ ...managedDestination(
         location,
         indicatorMap[String(location.id)],
         index,
-      ))
-  }, [managedIndicators, managedLocations])
+      ), advisories: advisoryMap[String(location.id)] || [] }))
+  }, [advisories, managedIndicators, managedLocations])
 
   const states = ['All States', ...new Set(visibleDestinations.map((item) => item.state))]
   const availableTypes = [...new Set(visibleDestinations.map((item) => item.type))]
@@ -376,6 +391,7 @@ export default function EcologicalMonitoring({ onNavigate }) {
         destination={selected}
         onBack={() => setSelected(null)}
         onNavigate={onNavigate}
+        user={user}
       />
     )
   }
@@ -586,6 +602,7 @@ function MapView({ destinations, onSelect }) {
                   <p>{destination.state}</p>
                   {!destination.sourceId && <p>Source: Prototype fallback data</p>}
                   <p>Warning: {destination.warning}</p>
+                  {!!destination.advisories?.length && <p><b>Active advisory:</b> {destination.advisories[0].title}</p>}
                   <p>Waste: {destination.waste}{destination.wasteDataSource === 'Automated sensor estimate' ? ' (sensor aggregate)' : ''}</p>
                   <button
                     type="button"
@@ -659,6 +676,7 @@ function DestinationCard({ destination, onSelect }) {
             color={wasteColor[destination.waste] || 'bg-slate-100 text-slate-600'}
           />
           {!destination.sourceId && <Badge icon={AlertTriangle} value="Prototype data" color="bg-violet-50 text-violet-700" />}
+          {!!destination.advisories?.length && <Badge icon={Megaphone} value={`${destination.advisories.length} active advisory`} color="bg-orange-50 text-orange-700" />}
         </div>
         <div className="mt-3 flex items-center justify-between text-xs">
           <span className="flex items-center gap-1 text-slate-400">
@@ -681,8 +699,9 @@ function Badge({ icon: Icon, value, color }) {
   )
 }
 
-function DestinationDetails({ destination, onBack, onNavigate }) {
+function DestinationDetails({ destination, onBack, onNavigate, user }) {
   const restricted = ['High Risk', 'Critical'].includes(destination.warning)
+  const [reportOpen, setReportOpen] = useState(false)
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -695,24 +714,27 @@ function DestinationDetails({ destination, onBack, onNavigate }) {
       </button>
 
       <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+        <div className="border-b border-slate-100 bg-slate-50 p-4 md:p-6">
+          {destination.images?.length ? <ImageSlideshow images={destination.images} locationName={destination.name} featured /> : <div className={`grid h-64 place-items-center rounded-2xl bg-gradient-to-br ${destination.gradient} text-white`}><div className="text-center"><MapPin className="mx-auto opacity-80" size={30} /><p className="mt-2 text-sm font-semibold">No gallery images available</p></div></div>}
+        </div>
         <div
-          className={`relative h-64 bg-gradient-to-br ${destination.gradient} bg-cover bg-center p-6 text-white`}
-          style={destination.wallpaper ? { backgroundImage: `url("${destination.wallpaper}")` } : undefined}
+          className="border-b border-slate-100 px-6 py-5 md:px-8 md:py-6"
         >
-          {destination.wallpaper && <span className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/25 to-slate-950/10" />}
-          <div className="relative">
-          <span className="rounded-full bg-white/20 px-2.5 py-1 text-xs font-semibold">
+          <div>
+          <span className="inline-flex rounded-full bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700">
             {destination.type}
           </span>
-          <h1 className="mt-4 text-3xl font-bold">{destination.name}</h1>
-          <p className="mt-1 flex items-center gap-1 text-sm text-white/80">
+          <h1 className="mt-3 text-3xl font-bold tracking-tight text-slate-900">{destination.name}</h1>
+          <p className="mt-2 flex items-center gap-1.5 text-sm font-medium text-slate-500">
             <MapPin size={15} /> {destination.state} · {destination.distance} from Kuala Lumpur
           </p>
+          <p className="mt-4 max-w-3xl text-sm leading-6 text-slate-600">{destination.description}</p>
           </div>
         </div>
 
         <div className="grid gap-6 p-6 lg:grid-cols-[1.4fr_1fr]">
           <div>
+            {destination.advisories?.map((advisory) => <div key={advisory.id} className="mb-5 rounded-2xl border border-orange-200 bg-orange-50 p-5 text-orange-950"><div className="flex gap-3"><Megaphone className="shrink-0 text-orange-600" size={21} /><div><p className="text-xs font-bold uppercase tracking-widest text-orange-600">Tourist advisory</p><h2 className="mt-1 font-bold">{advisory.title}</h2><p className="mt-2 text-sm"><b>Affected area:</b> {advisory.affected_area}</p><p className="mt-1 text-sm">{advisory.safety_instructions}</p><p className="mt-2 text-sm"><b>Recommended:</b> {advisory.recommended_visiting_time}</p><p className="mt-1 text-sm"><b>Alternative:</b> {advisory.alternative_location}</p><p className="mt-2 text-xs text-orange-700">Active until {new Date(advisory.expires_at).toLocaleString()}</p></div></div></div>)}
             {restricted && (
               <div className="mb-5 flex gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-red-800">
                 <AlertTriangle className="shrink-0" size={20} />
@@ -725,14 +747,7 @@ function DestinationDetails({ destination, onBack, onNavigate }) {
               </div>
             )}
 
-            <h2 className="font-bold text-slate-800">About this destination</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              {destination.description}
-            </p>
-
-            {!!destination.images?.length && <ImageSlideshow images={destination.images} locationName={destination.name} />}
-
-            <h2 className="mt-6 font-bold text-slate-800">Environmental condition</h2>
+            <div className="flex flex-wrap items-end justify-between gap-2"><div><p className="text-xs font-bold uppercase tracking-widest text-green-600">Live overview</p><h2 className="mt-1 text-lg font-bold text-slate-800">Environmental condition</h2></div><span className="text-xs text-slate-400">Updated {destination.update}</span></div>
             <div className="mt-3 grid grid-cols-2 gap-3">
               {destination.metrics.map(([metric, value]) => (
                 <div className="rounded-xl bg-slate-50 p-3" key={metric}>
@@ -750,8 +765,8 @@ function DestinationDetails({ destination, onBack, onNavigate }) {
             </div>
           </div>
 
-          <aside className="space-y-4">
-            <div className="rounded-xl border border-slate-100 p-4">
+          <aside className="space-y-4 lg:border-l lg:border-slate-100 lg:pl-6">
+            <div className="rounded-2xl border border-slate-200 p-5">
               <h2 className="font-bold text-slate-800">Current status</h2>
               <div className="mt-3 space-y-2">
                 <StatusRow label="Warning level" value={destination.warning} />
@@ -792,6 +807,10 @@ function DestinationDetails({ destination, onBack, onNavigate }) {
               {restricted ? 'Travel Not Recommended' : 'Calculate Trip to Here'}
             </button>
 
+            <button type="button" disabled={!destination.sourceId} onClick={() => setReportOpen(true)} title={!destination.sourceId ? 'Reporting is available for managed EcoGuard destinations.' : undefined} className="flex w-full items-center justify-center gap-2 rounded-xl border border-orange-200 bg-orange-50 py-3 text-sm font-semibold text-orange-700 hover:bg-orange-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400">
+              <Camera size={16} />Report Environmental Issue
+            </button>
+
             <button
               type="button"
               onClick={onBack}
@@ -802,14 +821,95 @@ function DestinationDetails({ destination, onBack, onNavigate }) {
           </aside>
         </div>
       </section>
+      {reportOpen && <IncidentReportDialog destination={destination} user={user} onClose={() => setReportOpen(false)} />}
     </div>
   )
 }
 
-function ImageSlideshow({ images, locationName }) {
+const incidentCategories = [
+  ['water_pollution', 'Water pollution'],
+  ['overflowing_rubbish', 'Overflowing rubbish'],
+  ['damaged_facilities_or_trail', 'Damaged facilities or trail'],
+  ['wildlife_disturbance', 'Wildlife disturbance'],
+  ['smoke_or_haze', 'Smoke or haze'],
+  ['overcrowding', 'Overcrowding'],
+]
+
+function IncidentReportDialog({ destination, user, onClose }) {
+  const [category, setCategory] = useState('')
+  const [description, setDescription] = useState('')
+  const [photo, setPhoto] = useState(null)
+  const [preview, setPreview] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [submitted, setSubmitted] = useState(false)
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    function closeOnEscape(event) {
+      if (event.key === 'Escape' && !saving) onClose()
+    }
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [onClose, saving])
+
+  function choosePhoto(file) {
+    if (preview) URL.revokeObjectURL(preview)
+    setPhoto(file || null)
+    setPreview(file ? URL.createObjectURL(file) : '')
+  }
+
+  async function submit(event) {
+    event.preventDefault()
+    if (!category || description.trim().length < 10 || !photo) {
+      setError('Choose a category, enter at least 10 characters, and attach a photo.')
+      return
+    }
+    setSaving(true); setError('')
+    try {
+      await submitEnvironmentalIncident({ locationId: destination.sourceId, locationName: destination.name, reporterId: user.id, category, description, photo })
+      setSubmitted(true)
+    } catch (submitError) { setError(submitError.message || 'Unable to submit the report.') }
+    finally { setSaving(false) }
+  }
+
+  return createPortal(<div className="fixed inset-0 z-[9999] grid place-items-center overflow-y-auto bg-slate-950/65 p-4" role="dialog" aria-modal="true" aria-labelledby="incident-report-title" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) onClose() }}>
+    <section className="my-6 w-full max-w-xl rounded-2xl bg-white p-5 shadow-2xl md:p-6">
+      <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-widest text-orange-600">Environmental incident</p><h2 id="incident-report-title" className="mt-1 text-xl font-bold text-slate-900">Report an issue</h2></div><button type="button" onClick={onClose} disabled={saving} aria-label="Close report form" className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={20} /></button></div>
+      {submitted ? <div className="py-8 text-center"><CheckCircle2 size={42} className="mx-auto text-emerald-500" /><h3 className="mt-4 text-lg font-bold text-slate-900">Report submitted</h3><p className="mt-2 text-sm leading-6 text-slate-500">Your report was routed to the administrator responsible for {destination.name}.</p><button type="button" onClick={onClose} className="mt-6 rounded-xl bg-green-600 px-5 py-2.5 text-sm font-bold text-white">Done</button></div> : <form onSubmit={submit} className="mt-5 space-y-4">
+        {error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+        <label className="block text-xs font-semibold text-slate-500">Location<input readOnly value={destination.name} className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-600" /></label>
+        <label className="block text-xs font-semibold text-slate-500">Issue category<select required value={category} onChange={(event) => setCategory(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-green-500"><option value="">Select a category</option>{incidentCategories.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+        <label className="block text-xs font-semibold text-slate-500">Description<textarea required minLength="10" maxLength="2000" rows="5" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Describe what you observed and where within the destination it occurred." className="mt-1 w-full resize-y rounded-xl border border-slate-200 p-3 text-sm font-normal leading-6 outline-none focus:border-green-500" /><span className="mt-1 block text-right text-[11px] text-slate-400">{description.length}/2000</span></label>
+        <label className="block rounded-xl border border-dashed border-slate-300 p-4 text-sm"><span className="font-semibold text-slate-700">Photo evidence</span><input required type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => choosePhoto(event.target.files?.[0])} className="mt-2 block w-full text-xs" /><span className="mt-1 block text-xs text-slate-400">JPG, PNG or WebP; maximum 10 MB.</span>{preview && <img src={preview} alt="Selected incident evidence preview" className="mt-3 max-h-52 w-full rounded-lg bg-slate-50 object-contain" />}</label>
+        <button type="submit" disabled={saving} className="w-full rounded-xl bg-orange-600 py-3 text-sm font-bold text-white hover:bg-orange-700 disabled:opacity-50">{saving ? 'Submitting report...' : 'Submit environmental report'}</button>
+      </form>}
+    </section>
+  </div>, document.body)
+}
+
+function ImageSlideshow({ images, locationName, featured = false }) {
   const [activeIndex, setActiveIndex] = useState(0)
   const [previewOpen, setPreviewOpen] = useState(false)
   const activeImage = images[activeIndex]
+
+  useEffect(() => {
+    if (!previewOpen) return undefined
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    function closeOnEscape(event) {
+      if (event.key === 'Escape') setPreviewOpen(false)
+    }
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [previewOpen])
 
   function previous() {
     setActiveIndex((current) => (current - 1 + images.length) % images.length)
@@ -819,14 +919,14 @@ function ImageSlideshow({ images, locationName }) {
     setActiveIndex((current) => (current + 1) % images.length)
   }
 
-  return <section className="mt-6">
+  return <section className={featured ? '' : 'mt-6'}>
     <div className="flex items-end justify-between gap-3">
       <div><h2 className="font-bold text-slate-800">Location gallery</h2><p className="mt-1 text-xs text-slate-400">Select a thumbnail or use the arrows to preview each image.</p></div>
       <span className="text-xs font-semibold text-slate-500">{activeIndex + 1} / {images.length}</span>
     </div>
-    <div className="group relative mt-3 overflow-hidden rounded-2xl bg-slate-950">
+    <div className="group relative mt-3 overflow-hidden rounded-2xl bg-slate-950 shadow-sm">
       <button type="button" onClick={() => setPreviewOpen(true)} className="block w-full" aria-label={`Preview ${locationName} image ${activeIndex + 1}`}>
-        <img src={activeImage} alt={`${locationName} ${activeIndex + 1}`} className="h-72 w-full object-contain sm:h-96" />
+        <img src={activeImage} alt={`${locationName} ${activeIndex + 1}`} className={`${featured ? 'h-72 sm:h-[30rem]' : 'h-72 sm:h-96'} w-full object-contain`} />
         <span className="absolute right-3 top-3 rounded-full bg-slate-950/65 p-2 text-white"><Expand size={17} /></span>
       </button>
       {images.length > 1 && <>
@@ -837,12 +937,12 @@ function ImageSlideshow({ images, locationName }) {
     {images.length > 1 && <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
       {images.map((url, index) => <button type="button" onClick={() => setActiveIndex(index)} className={`shrink-0 overflow-hidden rounded-lg border-2 ${index === activeIndex ? 'border-green-500' : 'border-transparent opacity-70 hover:opacity-100'}`} aria-label={`Show image ${index + 1}`} key={url}><img src={url} alt="" loading="lazy" className="h-16 w-24 object-cover" /></button>)}
     </div>}
-    {previewOpen && <div className="fixed inset-0 z-[3000] flex items-center justify-center bg-slate-950/95 p-4" role="dialog" aria-modal="true" aria-label={`${locationName} image preview`} onMouseDown={(event) => { if (event.target === event.currentTarget) setPreviewOpen(false) }} onKeyDown={(event) => { if (event.key === 'Escape') setPreviewOpen(false) }}>
-      <button type="button" onClick={() => setPreviewOpen(false)} aria-label="Close image preview" className="absolute right-5 top-5 rounded-full bg-white/10 p-2 text-white hover:bg-white/20"><X size={24} /></button>
-      <img src={activeImage} alt={`${locationName} ${activeIndex + 1}`} className="max-h-[88vh] max-w-full object-contain" />
+    {previewOpen && createPortal(<div className="fixed inset-0 z-[9999] flex h-dvh w-screen items-center justify-center overflow-hidden bg-slate-950" role="dialog" aria-modal="true" aria-label={`${locationName} image preview`} onMouseDown={(event) => { if (event.target === event.currentTarget) setPreviewOpen(false) }}>
+      <button type="button" onClick={() => setPreviewOpen(false)} aria-label="Close image preview" className="absolute right-4 top-4 z-20 rounded-full bg-slate-950/70 p-3 text-white shadow-lg ring-1 ring-white/20 hover:bg-slate-800"><X size={26} /></button>
+      <img src={activeImage} alt={`${locationName} ${activeIndex + 1}`} className="h-full w-full select-none object-contain" />
       {images.length > 1 && <><SlideshowButton label="Previous image" position="left-5" onClick={previous}><ChevronLeft size={28} /></SlideshowButton><SlideshowButton label="Next image" position="right-5" onClick={next}><ChevronRight size={28} /></SlideshowButton></>}
-      <span className="absolute bottom-5 rounded-full bg-white/10 px-3 py-1 text-sm font-semibold text-white">{activeIndex + 1} / {images.length}</span>
-    </div>}
+      <span className="absolute bottom-5 rounded-full bg-slate-950/70 px-3 py-1 text-sm font-semibold text-white ring-1 ring-white/20">{activeIndex + 1} / {images.length}</span>
+    </div>, document.body)}
   </section>
 }
 

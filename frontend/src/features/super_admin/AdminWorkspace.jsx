@@ -18,6 +18,8 @@ import Reports from './Reports'
 import WasteManagement from './WasteManagement'
 import AdminApplications from './AdminApplications'
 import SensorManagement from './SensorManagement'
+import IncidentManagement from './IncidentManagement'
+import AdvisoryManagement from './AdvisoryManagement'
 
 export default function AdminWorkspace({ requiredRole }) {
   const navigate = useNavigate()
@@ -202,6 +204,8 @@ export default function AdminWorkspace({ requiredRole }) {
     dashboard: <AdminDashboard {...sharedProps} onNavigate={setPage} />,
     locations: <EcologicalLocations {...sharedProps} />,
     sensors: <SensorManagement {...sharedProps} />,
+    incidents: <IncidentManagement {...sharedProps} />,
+    advisories: <AdvisoryManagement {...sharedProps} />,
     thresholds: <CrowdThresholds {...sharedProps} />,
     reports: <Reports {...sharedProps} />,
     applications: <AdminApplications />,
