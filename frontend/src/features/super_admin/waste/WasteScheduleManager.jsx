@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react'
 import { CalendarClock, Edit3, Plus, RefreshCw, Trash2, Truck } from 'lucide-react'
 import { cancelWasteSchedule } from '../../../services/wasteService'
 import WasteScheduleForm from './WasteScheduleForm'
+import TablePagination from '../../../components/TablePagination'
+import useTablePagination from '../../../hooks/useTablePagination'
 
 export default function WasteScheduleManager({ location, schedules, loading, onRefresh, onRecordCollection }) {
   const [editor, setEditor] = useState(null)
@@ -14,6 +16,7 @@ export default function WasteScheduleManager({ location, schedules, loading, onR
     const displayStatus = statusFor(schedule)
     return filter === 'all' || displayStatus === filter
   }), [filter, schedules])
+  const schedulePages = useTablePagination(visibleSchedules)
 
   async function scheduleSaved(_saved, editing) {
     await onRefresh()
@@ -60,7 +63,7 @@ export default function WasteScheduleManager({ location, schedules, loading, onR
           <table className="min-w-full text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-400"><tr><th className="px-5 py-3">Collection window</th><th className="px-5 py-3">Waste type</th><th className="px-5 py-3">Assigned team</th><th className="px-5 py-3">Status</th><th className="px-5 py-3">Notes</th><th className="px-5 py-3 text-right">Actions</th></tr></thead>
             <tbody className="divide-y divide-slate-100">
-              {visibleSchedules.map((schedule) => {
+              {schedulePages.pageItems.map((schedule) => {
                 const displayStatus = statusFor(schedule)
                 const canEdit = schedule.status === 'scheduled' && new Date(schedule.scheduled_for) > new Date()
                 const canAct = schedule.status === 'scheduled'
@@ -82,6 +85,7 @@ export default function WasteScheduleManager({ location, schedules, loading, onR
             </tbody>
           </table>
         </div>
+        {!loading && visibleSchedules.length > 0 && <TablePagination {...schedulePages} onPageChange={schedulePages.setPage} label="schedules" />}
         {loading && <p className="p-10 text-center text-sm text-slate-400">Loading collection schedules...</p>}
         {!loading && !visibleSchedules.length && <p className="p-10 text-center text-sm text-slate-400">{schedules.length ? 'No schedules match this status filter.' : 'No collection schedules have been saved for this location.'}</p>}
       </section>

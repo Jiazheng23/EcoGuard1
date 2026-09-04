@@ -27,6 +27,7 @@ import {
 } from 'lucide-react'
 import { listOwnTrips } from '../../services/tripService'
 import AchievementBadges from '../../components/AchievementBadges'
+import LoadingScreen from '../../components/LoadingScreen'
 import { getAchievementBadges } from '../../services/achievementService'
 import {
   formatCarbon,
@@ -142,12 +143,17 @@ export default function TouristDashboard({
   const earnedBadges = achievementBadges.filter((badge) => badge.earned).length
   const greeting = new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 18 ? 'Good afternoon' : 'Good evening'
 
+  if (loading) {
+    return <LoadingScreen label="Loading your dashboard..." />
+  }
+
   return (
     <div className="tourist-dashboard-page mx-auto flex max-w-6xl flex-col gap-5">
       {successMessage && (
         <div
           className="fixed inset-0 z-50 grid place-items-center bg-slate-900/35 p-4 backdrop-blur-[2px]"
           role="presentation"
+          onMouseDown={(event) => { if (event.target === event.currentTarget) onDismissMessage() }}
         >
           <section
             className="w-full max-w-md rounded-3xl border border-green-100 bg-white p-7 text-center shadow-2xl shadow-slate-900/20"

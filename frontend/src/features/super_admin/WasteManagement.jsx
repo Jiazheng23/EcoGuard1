@@ -13,6 +13,7 @@ import WasteCollectionForm from './waste/WasteCollectionForm'
 import WasteCollectionHistory from './waste/WasteCollectionHistory'
 import WasteOverview from './waste/WasteOverview'
 import WasteScheduleManager from './waste/WasteScheduleManager'
+import LoadingScreen from '../../components/LoadingScreen'
 
 export default function WasteManagement({ locations, metrics, loading, error, onDataChange, isSuperAdmin, profile, section = 'overview', onSectionChange, embedded = false }) {
   const [selectedId, setSelectedId] = useState('')
@@ -153,6 +154,10 @@ export default function WasteManagement({ locations, metrics, loading, error, on
       />
     ),
   }[section]
+
+  if (loading || wasteLoading) {
+    return <LoadingScreen tone="blue" label="Loading waste management..." />
+  }
 
   return (
     <div className={`${embedded ? '' : 'mx-auto max-w-6xl'} flex flex-col gap-6`}>

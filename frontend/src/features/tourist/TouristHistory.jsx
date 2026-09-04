@@ -4,6 +4,9 @@ import { AlertCircle, Award, CalendarDays, Check, ChevronDown, Cloud, Download, 
 import { listOwnTrips } from '../../services/tripService'
 import { formatCarbon, formatTransportFilterLabel, formatTripDate, getTripTransportFilterValue, getTripTransportLabel, numberValue } from '../../utils/tripAnalytics'
 import { downloadTripHistoryCsv, downloadTripHistoryPdf } from '../../utils/tripReport'
+import TablePagination from '../../components/TablePagination'
+import useTablePagination from '../../hooks/useTablePagination'
+import LoadingScreen from '../../components/LoadingScreen'
 
 const card = 'rounded-2xl border border-slate-100 bg-white shadow-sm'
 export default function TouristHistory({ user }) {
@@ -112,6 +115,7 @@ export default function TouristHistory({ user }) {
     const matchesDate = (!activeDateFrom || travelledTime >= fromTime) && (!activeDateTo || travelledTime <= toTime)
     return matchesMode && matchesQuery && matchesDate
   })
+  const tripPages = useTablePagination(filteredTrips)
 
   const invalidDateRange = dateMode === 'range' && Boolean(dateFrom && dateTo && dateFrom > dateTo)
   const exportableTrips = invalidDateRange ? [] : filteredTrips
@@ -139,6 +143,10 @@ export default function TouristHistory({ user }) {
   const transportModes = useMemo(() => [...new Set(
     trips.map(getTripTransportFilterValue).filter(Boolean),
   )].sort((left, right) => formatTransportFilterLabel(left).localeCompare(formatTransportFilterLabel(right))), [trips])
+
+  if (loading) {
+    return <LoadingScreen label="Loading trip history..." />
+  }
 
   return (
     <div className="tourist-history-page mx-auto flex max-w-6xl flex-col gap-6">
@@ -236,14 +244,12 @@ export default function TouristHistory({ user }) {
 
         {error ? (
           <div className="m-4 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-600"><AlertCircle size={17} className="mt-0.5 shrink-0" /><p>{error}</p></div>
-        ) : loading ? (
-          <div className="grid min-h-56 place-items-center text-sm text-slate-400">Loading trip history...</div>
         ) : invalidDateRange || filteredTrips.length === 0 ? (
           <div className="grid min-h-56 place-items-center px-6 text-center"><div><History className="mx-auto text-slate-300" size={34} /><p className="mt-3 font-semibold text-slate-700">No matching trips</p><p className="mt-1 text-sm text-slate-400">Saved carbon-calculator trips will appear here.</p></div></div>
         ) : (
           <>
             <div className="space-y-3 p-3 md:hidden">
-              {filteredTrips.map((trip) => <MobileTripCard key={trip.id} trip={trip} onOpen={() => setSelectedTrip(trip)} />)}
+              {tripPages.pageItems.map((trip) => <MobileTripCard key={trip.id} trip={trip} onOpen={() => setSelectedTrip(trip)} />)}
             </div>
             <div className="hidden overflow-x-auto md:block">
               <table className="w-full min-w-[760px] text-left text-sm">
@@ -251,7 +257,7 @@ export default function TouristHistory({ user }) {
                 <tr><th className="px-5 py-3 font-semibold">Date</th><th className="px-5 py-3 font-semibold">Journey</th><th className="px-5 py-3 font-semibold">Transport</th><th className="px-5 py-3 font-semibold">Distance</th><th className="px-5 py-3 font-semibold">Emission</th><th className="px-5 py-3 text-right font-semibold">Points</th></tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredTrips.map((trip) => (
+                {tripPages.pageItems.map((trip) => (
                   <tr data-transport={trip.transport_mode} key={trip.id} role="button" tabIndex={0} aria-label={`View trip from ${trip.starting_location} to ${trip.destination}`} onClick={() => setSelectedTrip(trip)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedTrip(trip) } }} className="cursor-pointer text-slate-600 transition hover:bg-green-50/60 focus-visible:bg-green-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-green-500">
                     <td className="whitespace-nowrap px-5 py-4"><span className="inline-flex items-center gap-2"><CalendarDays size={15} className="text-slate-400" />{formatTripDate(trip.travelled_at)}</span></td>
                     <td className="px-5 py-4"><p className="font-semibold text-slate-800">{trip.destination}</p><p className="mt-0.5 max-w-64 truncate text-xs text-slate-400">From {trip.starting_location}{trip.round_trip ? ' · Round trip' : ''}</p></td>
@@ -264,6 +270,7 @@ export default function TouristHistory({ user }) {
               </tbody>
               </table>
             </div>
+            <TablePagination {...tripPages} onPageChange={tripPages.setPage} label="trips" />
           </>
         )}
       </section>

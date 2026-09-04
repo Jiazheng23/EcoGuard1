@@ -1,0 +1,28 @@
+.ecoguard-loading-spinner {
+  animation: ecoguard-loading-spin 800ms linear infinite;
+  transform-origin: center;
+  will-change: transform;
+}
+
+/* Keep every Tailwind spinner two-dimensional even though the landing page has
+   its own decorative 3D animation with a similar name. */
+.animate-spin {
+  animation-name: ecoguard-loading-spin !important;
+  transform-origin: center;
+}
+
+@keyframes ecoguard-loading-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ecoguard-loading-spinner {
+    animation-duration: 1.6s;
+  }
+}

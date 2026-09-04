@@ -23,6 +23,7 @@ import {
   sensorReadingSummary,
   waterQualityLabel,
 } from '../../utils/sensorMetrics'
+import LoadingScreen from '../../components/LoadingScreen'
 
 export default function SensorManagement({
   locations,
@@ -85,6 +86,10 @@ export default function SensorManagement({
   }
 
   const sensor = sensorReadingSummary(selected, reading)
+
+  if (loading || controlLoading) {
+    return <LoadingScreen tone="blue" label="Loading sensor information..." />
+  }
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">

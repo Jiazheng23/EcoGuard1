@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { supabase } from '../../services/supabaseClient'
 import { getOwnProfile, listProfiles } from '../../services/profileService'
 import { listAllTrips } from '../../services/tripService'
@@ -23,10 +23,19 @@ import LocationDetailPage from '../location_admin/LocationDetailPage'
 import { tripMatchesEcologicalLocation } from '../../utils/tripAnalytics'
 import IncidentManagement from './IncidentManagement'
 import AdvisoryManagement from './AdvisoryManagement'
+import LoadingScreen from '../../components/LoadingScreen'
+
+const adminPages = new Set([
+  'dashboard', 'locations', 'location-detail', 'applications', 'sensors', 'incidents',
+  'advisories', 'thresholds', 'waste', 'waste-overview', 'waste-schedules',
+  'waste-history', 'analytics', 'reports', 'profile',
+])
 
 export default function AdminWorkspace({ requiredRole }) {
   const navigate = useNavigate()
-  const [page, setPage] = useState('dashboard')
+  const { page: routePage } = useParams()
+  const [workspaceSearchParams, setWorkspaceSearchParams] = useSearchParams()
+  const routeBase = requiredRole === 'location_admin' ? '/location_admin' : '/super_admin'
   const [user, setUser] = useState(null)
   const [profile, setProfile] = useState(null)
   const [profiles, setProfiles] = useState([])
@@ -39,7 +48,11 @@ export default function AdminWorkspace({ requiredRole }) {
   const [accessError, setAccessError] = useState('')
   const [dataLoading, setDataLoading] = useState(true)
   const [dataError, setDataError] = useState('')
-  const [reportTab, setReportTab] = useState('environment')
+  const reportTab = workspaceSearchParams.get('report') === 'waste' ? 'waste' : 'environment'
+  const requestedPage = adminPages.has(routePage) ? routePage : 'dashboard'
+  const page = profile?.role === 'location_admin' && ['locations', 'thresholds'].includes(requestedPage)
+    ? 'location-detail'
+    : requestedPage
 
   const refreshData = useCallback(async (scopeProfile) => {
     setDataLoading(true)
@@ -145,17 +158,32 @@ export default function AdminWorkspace({ requiredRole }) {
   }
 
   function handleNavigate(nextPage) {
+    let destinationPage = adminPages.has(nextPage) ? nextPage : 'dashboard'
+    let destinationSearch = ''
     if (nextPage === 'waste-analytics') {
-      setReportTab('waste')
-      setPage('reports')
-      return
+      destinationPage = 'reports'
+      destinationSearch = '?report=waste'
     }
-    if (profile?.role === 'location_admin' && ['locations', 'thresholds'].includes(nextPage)) {
-      setPage('location-detail')
-      return
+    if (profile?.role === 'location_admin' && ['locations', 'thresholds'].includes(destinationPage)) {
+      destinationPage = 'location-detail'
     }
-    setPage(nextPage)
+    if (destinationPage !== page || destinationSearch) {
+      navigate(`${routeBase}/${destinationPage}${destinationSearch}`)
+    }
   }
+
+  function handleReportTabChange(nextTab) {
+    const nextParams = new URLSearchParams(workspaceSearchParams)
+    if (nextTab === 'waste') nextParams.set('report', 'waste')
+    else nextParams.delete('report')
+    setWorkspaceSearchParams(nextParams)
+  }
+
+  useEffect(() => {
+    if (page !== routePage) {
+      navigate(`${routeBase}/${page}`, { replace: true })
+    }
+  }, [navigate, page, routeBase, routePage])
 
   const handleMetricCreated = useCallback((createdMetric) => {
     setMetrics((current) => [
@@ -176,7 +204,7 @@ export default function AdminWorkspace({ requiredRole }) {
   }, [handleMetricCreated, profile])
 
   if (loading) {
-    return <main className="admin-theme grid min-h-screen place-items-center bg-slate-50"><p className="text-sm font-medium text-slate-500">Loading administrator workspace...</p></main>
+    return <main className="admin-theme"><LoadingScreen fullScreen tone="blue" label="Loading administrator workspace..." /></main>
   }
 
   if (accessError || !profile) {
@@ -219,7 +247,7 @@ export default function AdminWorkspace({ requiredRole }) {
     <WasteManagement
       {...sharedProps}
       section={wasteSection}
-      onSectionChange={(nextSection) => setPage(`waste-${nextSection}`)}
+      onSectionChange={(nextSection) => handleNavigate(`waste-${nextSection}`)}
     />
   ) : ({
     dashboard: <AdminDashboard {...sharedProps} onNavigate={handleNavigate} />,
@@ -230,14 +258,16 @@ export default function AdminWorkspace({ requiredRole }) {
     advisories: <AdvisoryManagement {...sharedProps} />,
     thresholds: <CrowdThresholds {...sharedProps} />,
     analytics: <EnvironmentalAnalytics {...sharedProps} />,
-    reports: <ReportsHub {...sharedProps} activeTab={reportTab} onTabChange={setReportTab} />,
+    reports: <ReportsHub {...sharedProps} activeTab={reportTab} onTabChange={handleReportTabChange} />,
     applications: <AdminApplications />,
     profile: <AdminProfile user={user} profile={profile} onProfileChange={handleProfileChange} />,
   }[page])
 
   return (
     <AdminLayout activePage={page} onNavigate={handleNavigate} onLogout={handleLogout} user={user} profile={profile}>
-      {pageContent || <AdminDashboard {...sharedProps} onNavigate={handleNavigate} />}
+      {dataLoading
+        ? <LoadingScreen tone="blue" label="Loading administration data..." />
+        : pageContent || <AdminDashboard {...sharedProps} onNavigate={handleNavigate} />}
     </AdminLayout>
   )
 }

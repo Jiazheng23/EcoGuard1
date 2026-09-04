@@ -8,6 +8,8 @@ import {
 import WestMalaysiaLocationPicker from './WestMalaysiaLocationPicker'
 import { isWestMalaysiaCoordinate, isWestMalaysiaLocation } from '../../utils/westMalaysia'
 import { deleteLocationImages, MAX_GALLERY_IMAGES, uploadLocationImages } from '../../services/locationImageService'
+import TablePagination from '../../components/TablePagination'
+import useTablePagination from '../../hooks/useTablePagination'
 
 const locationTypes = ['Cultural Site', 'World Heritage Site', 'National Park', 'Tourist attractions', 'Geopark', 'Marine Park', 'Highland Reserve']
 const localImagePreviewUrls = new WeakMap()
@@ -70,6 +72,7 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
       return matchesQuery && matchesState && matchesType && matchesStatus
     })
   }, [query, showFilters, stateFilter, statusFilter, typeFilter, westMalaysiaLocations])
+  const locationPages = useTablePagination(filtered)
 
   const states = [...new Set(westMalaysiaLocations.map((item) => item.state))].sort()
   const types = [...new Set(westMalaysiaLocations.map((item) => item.location_type))].sort()
@@ -220,7 +223,7 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
           <table className="min-w-full text-left text-sm">
             <thead className="border-b border-slate-100 bg-slate-50 text-xs uppercase tracking-wide text-slate-400"><tr><th className="px-5 py-3">Location</th><th className="px-5 py-3">Type</th><th className="px-5 py-3">Coordinates</th><th className="px-5 py-3">Capacity</th><th className="px-5 py-3">Map status</th><th className="px-5 py-3 text-right">Actions</th></tr></thead>
             <tbody className="divide-y divide-slate-100">
-              {filtered.map((location) => (
+              {locationPages.pageItems.map((location) => (
                 <tr key={location.id} className="hover:bg-slate-50/60">
                   <td className="px-5 py-4"><div className="flex items-center gap-2.5">{location.wallpaper_url ? <img src={location.wallpaper_url} alt="" className="size-10 rounded-xl object-cover" /> : <span className="grid size-10 place-items-center rounded-xl bg-blue-50 text-blue-500"><MapPin size={16} /></span>}<div><p className="font-semibold text-slate-800">{location.name}</p><p className="text-xs text-slate-400">{location.state}</p></div></div></td>
                   <td className="px-5 py-4 text-slate-600">{location.location_type}</td>
@@ -233,6 +236,7 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
             </tbody>
           </table>
         </div>
+        {!loading && filtered.length > 0 && <TablePagination {...locationPages} onPageChange={locationPages.setPage} label="locations" />}
         {!loading && !filtered.length && <p className="p-10 text-center text-sm text-slate-400">No managed ecological locations found.</p>}
       </section>
 

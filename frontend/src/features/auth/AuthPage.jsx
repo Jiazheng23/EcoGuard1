@@ -16,6 +16,7 @@ import "./auth.css";
 import "./auth-layout-stability.css";
 import "./auth-overrides.css";
 import { hadPasswordRecoveryRedirect, supabase } from "../../services/supabaseClient";
+import LoadingScreen from "../../components/LoadingScreen";
 import {
   loginUser,
   registerUser,
@@ -189,13 +190,13 @@ export default function AuthPage({ initialMode }) {
         const accountRole = data.profile?.role || "tourist";
 
         if (accountRole === "super_admin") {
-          navigate("/super_admin/dashboard");
+          navigate("/super_admin/dashboard", { replace: true });
         } else if (accountRole === "location_admin") {
-          navigate("/location_admin/dashboard");
+          navigate("/location_admin/dashboard", { replace: true });
         } else if (accountRole === "pending_location_admin") {
-          navigate("/location_admin/application");
+          navigate("/location_admin/application", { replace: true });
         } else {
-          navigate("/tourist/dashboard");
+          navigate("/tourist/dashboard", { replace: true });
         }
 
         return;
@@ -210,10 +211,10 @@ export default function AuthPage({ initialMode }) {
         });
         if (role === 'location_admin') {
           await loginUser(cleanEmail, form.password)
-          navigate('/location_admin/application')
+          navigate('/location_admin/application', { replace: true })
           return
         }
-        navigate("/login");
+        navigate("/login", { replace: true });
       }
     } catch (error) {
       setMessage(error.message || "Authentication failed. Please try again.");
@@ -228,6 +229,10 @@ export default function AuthPage({ initialMode }) {
     forgot: ["Reset password", "Enter your email and we'll send a reset link"],
     reset: ["Create new password", "Choose a secure password for your EcoGuard account"],
   }[mode];
+
+  if (mode === "reset" && recoveryStatus === "checking") {
+    return <LoadingScreen fullScreen label="Checking your password reset link..." />;
+  }
 
   return (
     <main className={`auth-page auth-page--${mode}`}>

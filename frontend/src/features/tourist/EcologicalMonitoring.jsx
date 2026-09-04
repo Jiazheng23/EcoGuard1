@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   AlertTriangle,
   ArrowLeft,
@@ -16,6 +17,7 @@ import {
   Map as MapIcon,
   MapPin,
   Megaphone,
+  Plus,
   Search,
   SlidersHorizontal,
   Trash2,
@@ -34,6 +36,7 @@ import { listEcologicalLocations, listTouristEnvironmentalIndicators, subscribeT
 import { isWestMalaysiaLocation } from '../../utils/westMalaysia'
 import { submitEnvironmentalIncident } from '../../services/incidentService'
 import { listActiveAdvisories, subscribeToAdvisories } from '../../services/advisoryService'
+import LoadingScreen from '../../components/LoadingScreen'
 
 const WEST_MALAYSIA_CENTER = [4.2105, 101.9758]
 const WEST_MALAYSIA_BOUNDS = [
@@ -289,16 +292,19 @@ function managedDestination(location, indicator, index) {
 }
 
 export default function EcologicalMonitoring({ onNavigate, user }) {
+  const navigate = useNavigate()
+  const routeLocation = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [view, setView] = useState('map')
   const [search, setSearch] = useState('')
   const [state, setState] = useState('All States')
   const [warning, setWarning] = useState('All Warnings')
   const [selectedTypes, setSelectedTypes] = useState([])
-  const [selected, setSelected] = useState(null)
   const [managedLocations, setManagedLocations] = useState([])
   const [managedIndicators, setManagedIndicators] = useState([])
   const [dataError, setDataError] = useState('')
   const [advisories, setAdvisories] = useState([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let active = true
@@ -326,6 +332,8 @@ export default function EcologicalMonitoring({ onNavigate, user }) {
         else setDataError(`${indicatorsResult.reason?.message || 'Aggregate environmental indicators are unavailable.'} Apply the latest ecological monitoring migration.`)
       } catch (loadError) {
         if (active) setDataError(`${loadError.message || 'Managed locations are unavailable.'} Showing prototype fallback data.`)
+      } finally {
+        if (active) setLoading(false)
       }
     }
     loadManagedLocations()
@@ -350,6 +358,10 @@ export default function EcologicalMonitoring({ onNavigate, user }) {
         index,
       ), advisories: advisoryMap[String(location.id)] || [] }))
   }, [advisories, managedIndicators, managedLocations])
+  const selectedLocationId = searchParams.get('location')
+  const selected = selectedLocationId
+    ? visibleDestinations.find((item) => String(item.id) === selectedLocationId) || null
+    : null
 
   const states = ['All States', ...new Set(visibleDestinations.map((item) => item.state))]
   const availableTypes = [...new Set(visibleDestinations.map((item) => item.type))]
@@ -385,11 +397,31 @@ export default function EcologicalMonitoring({ onNavigate, user }) {
     setSelectedTypes([])
   }
 
+  function openDestination(destination) {
+    const nextParams = new URLSearchParams(searchParams)
+    nextParams.set('location', String(destination.id))
+    setSearchParams(nextParams, { state: { ...routeLocation.state, ecoMonitoringDetail: true } })
+  }
+
+  function closeDestination() {
+    if (routeLocation.state?.ecoMonitoringDetail) {
+      navigate(-1)
+      return
+    }
+    const nextParams = new URLSearchParams(searchParams)
+    nextParams.delete('location')
+    setSearchParams(nextParams, { replace: true })
+  }
+
+  if (loading) {
+    return <LoadingScreen label="Loading ecological destinations..." />
+  }
+
   if (selected) {
     return (
       <DestinationDetails
         destination={selected}
-        onBack={() => setSelected(null)}
+        onBack={closeDestination}
         onNavigate={onNavigate}
         user={user}
       />
@@ -495,7 +527,7 @@ export default function EcologicalMonitoring({ onNavigate, user }) {
       </p>
 
       {view === 'map' && (
-        <MapView destinations={filtered} onSelect={setSelected} />
+        <MapView destinations={filtered} onSelect={openDestination} />
       )}
 
       <div
@@ -508,7 +540,7 @@ export default function EcologicalMonitoring({ onNavigate, user }) {
         {filtered.map((item) => (
           <DestinationCard
             destination={item}
-            onSelect={() => setSelected(item)}
+            onSelect={() => openDestination(item)}
             key={item.id}
           />
         ))}
@@ -602,7 +634,8 @@ function MapView({ destinations, onSelect }) {
                   <p>{destination.state}</p>
                   {!destination.sourceId && <p>Source: Prototype fallback data</p>}
                   <p>Warning: {destination.warning}</p>
-                  {!!destination.advisories?.length && <p><b>Active advisory:</b> {destination.advisories[0].title}</p>}
+                  {destination.advisories?.length === 1 && <p><b>Active advisory:</b> {destination.advisories[0].title}</p>}
+                  {destination.advisories?.length > 1 && <div className="mt-2 rounded-lg bg-orange-50 p-2 text-orange-800"><b>{destination.advisories.length} active advisories</b><p className="mt-1 text-xs">Open the location details to read all safety guidance.</p></div>}
                   <p>Waste: {destination.waste}{destination.wasteDataSource === 'Automated sensor estimate' ? ' (sensor aggregate)' : ''}</p>
                   <button
                     type="button"
@@ -642,12 +675,12 @@ function DestinationCard({ destination, onSelect }) {
     <button
       type="button"
       onClick={onSelect}
-      className="tourist-destination-card overflow-hidden rounded-2xl border border-slate-100 bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+      className="tourist-destination-card flex h-full flex-col overflow-hidden rounded-2xl border border-slate-100 bg-white p-0 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
     >
       <div
-        className={`relative flex h-32 items-end justify-between overflow-hidden bg-gradient-to-br ${destination.gradient} p-3`}
-        style={destination.wallpaper ? { backgroundImage: `url("${destination.wallpaper}")`, backgroundPosition: 'center', backgroundSize: 'cover' } : undefined}
+        className={`relative flex h-32 w-full shrink-0 items-end justify-between overflow-hidden bg-gradient-to-br ${destination.gradient} p-3`}
       >
+        {destination.wallpaper && <img src={destination.wallpaper} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full object-cover object-center" />}
         {destination.wallpaper && <span className="absolute inset-0 bg-gradient-to-t from-slate-950/75 via-slate-950/10 to-transparent" />}
         <span className={`relative rounded-full px-2 py-0.5 text-xs font-semibold ${typeColor[destination.type] || 'bg-emerald-50 text-emerald-700'}`}>
           {destination.type}
@@ -657,7 +690,7 @@ function DestinationCard({ destination, onSelect }) {
         </span>
       </div>
 
-      <div className="p-3">
+      <div className="flex w-full flex-1 flex-col p-3">
         <h2 className="font-bold text-slate-800">{destination.name}</h2>
         <div className="mt-2 flex flex-wrap gap-1.5">
           <Badge
@@ -678,7 +711,7 @@ function DestinationCard({ destination, onSelect }) {
           {!destination.sourceId && <Badge icon={AlertTriangle} value="Prototype data" color="bg-violet-50 text-violet-700" />}
           {!!destination.advisories?.length && <Badge icon={Megaphone} value={`${destination.advisories.length} active advisory`} color="bg-orange-50 text-orange-700" />}
         </div>
-        <div className="mt-3 flex items-center justify-between text-xs">
+        <div className="mt-auto flex items-center justify-between pt-3 text-xs">
           <span className="flex items-center gap-1 text-slate-400">
             <Clock3 size={12} /> {destination.update}
           </span>
@@ -732,9 +765,9 @@ function DestinationDetails({ destination, onBack, onNavigate, user }) {
           </div>
         </div>
 
-        <div className="grid gap-6 p-6 lg:grid-cols-[1.4fr_1fr]">
-          <div>
-            {destination.advisories?.map((advisory) => <div key={advisory.id} className="mb-5 rounded-2xl border border-orange-200 bg-orange-50 p-5 text-orange-950"><div className="flex gap-3"><Megaphone className="shrink-0 text-orange-600" size={21} /><div><p className="text-xs font-bold uppercase tracking-widest text-orange-600">Tourist advisory</p><h2 className="mt-1 font-bold">{advisory.title}</h2><p className="mt-2 text-sm"><b>Affected area:</b> {advisory.affected_area}</p><p className="mt-1 text-sm">{advisory.safety_instructions}</p><p className="mt-2 text-sm"><b>Recommended:</b> {advisory.recommended_visiting_time}</p><p className="mt-1 text-sm"><b>Alternative:</b> {advisory.alternative_location}</p><p className="mt-2 text-xs text-orange-700">Active until {new Date(advisory.expires_at).toLocaleString()}</p></div></div></div>)}
+        <div className="grid min-w-0 max-w-full gap-6 overflow-hidden p-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+          <div className="min-w-0 max-w-full overflow-hidden">
+            <div className="min-w-0 max-w-full overflow-hidden" style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}><AdvisoryCarousel advisories={destination.advisories || []} /></div>
             {restricted && (
               <div className="mb-5 flex gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-red-800">
                 <AlertTriangle className="shrink-0" size={20} />
@@ -779,12 +812,12 @@ function DestinationDetails({ destination, onBack, onNavigate, user }) {
               </div>
             </div>
 
-            {destination.aggregateOnly && (
+            {/* {destination.aggregateOnly && (
               <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm leading-6 text-violet-800">
                 <b>Tourist aggregate view</b>
                 <p className="mt-1">Waste source: {destination.wasteDataSource}. Exact quantities, collection schedules, history, staff assignments, and internal notes remain available only to authorized administrators.</p>
               </div>
-            )}
+            )} */}
 
             {!destination.sourceId && (
               <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm leading-6 text-violet-800">
@@ -826,20 +859,34 @@ function DestinationDetails({ destination, onBack, onNavigate, user }) {
   )
 }
 
+function AdvisoryCarousel({ advisories }) {
+  const [index, setIndex] = useState(0)
+  if (!advisories.length) return null
+  const advisory = advisories[index] || advisories[0]
+  const move = (amount) => setIndex((current) => (current + amount + advisories.length) % advisories.length)
+
+  return <section className="mb-5 flex h-80 flex-col overflow-hidden rounded-2xl border border-orange-200 bg-orange-50 text-orange-950"><header className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-orange-200 px-5 py-3"><div className="flex items-center gap-2"><Megaphone className="text-orange-600" size={19} /><p className="text-xs font-bold uppercase tracking-widest text-orange-600">Tourist advisory</p></div><div className="flex items-center gap-2"><span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-orange-700">{advisory.ecological_locations?.name || 'Destination'}</span>{advisories.length > 1 && <><span className="text-xs font-semibold text-orange-700">{index + 1} / {advisories.length}</span><button type="button" onClick={() => move(-1)} aria-label="Previous advisory" className="grid size-8 place-items-center rounded-full border border-orange-200 bg-white text-orange-700 hover:bg-orange-100"><ChevronLeft size={17} /></button><button type="button" onClick={() => move(1)} aria-label="Next advisory" className="grid size-8 place-items-center rounded-full border border-orange-200 bg-white text-orange-700 hover:bg-orange-100"><ChevronRight size={17} /></button></>}</div></header><div className="min-h-0 flex-1 overflow-y-auto p-5"><h2 className="text-lg font-bold">{advisory.title}</h2><div className="mt-4 grid gap-3 sm:grid-cols-2"><AdvisoryDetail label="Affected area" value={advisory.affected_area || 'Not provided'} /><AdvisoryDetail label="Recommended visiting time" value={advisory.recommended_visiting_time || 'Not provided'} /></div><div className="mt-3"><AdvisoryDetail label="Safety instructions" value={advisory.safety_instructions || 'Not provided'} /></div>{advisory.alternative_location && advisory.alternative_location !== 'No alternative specified' && <div className="mt-3"><AdvisoryDetail label="Alternative location" value={advisory.alternative_location} /></div>}<p className="mt-4 text-xs text-orange-700">Active from {new Date(advisory.starts_at).toLocaleString()} until {new Date(advisory.expires_at).toLocaleString()}</p></div></section>
+}
+
+function AdvisoryDetail({ label, value }) {
+  return <div className="min-w-0 max-w-full overflow-hidden rounded-xl bg-white/70 p-3"><p className="text-[11px] font-bold uppercase tracking-wide text-orange-600">{label}</p><p className="mt-1 max-w-full whitespace-pre-wrap text-sm leading-6" style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{value}</p></div>
+}
+
 const incidentCategories = [
-  ['water_pollution', 'Water pollution'],
   ['overflowing_rubbish', 'Overflowing rubbish'],
   ['damaged_facilities_or_trail', 'Damaged facilities or trail'],
   ['wildlife_disturbance', 'Wildlife disturbance'],
   ['smoke_or_haze', 'Smoke or haze'],
-  ['overcrowding', 'Overcrowding'],
+  ['other', 'Other'],
 ]
 
 function IncidentReportDialog({ destination, user, onClose }) {
+  const photoInputRef = useRef(null)
   const [category, setCategory] = useState('')
+  const [customCategory, setCustomCategory] = useState('')
   const [description, setDescription] = useState('')
-  const [photo, setPhoto] = useState(null)
-  const [preview, setPreview] = useState('')
+  const [photos, setPhotos] = useState([])
+  const [previews, setPreviews] = useState([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [submitted, setSubmitted] = useState(false)
@@ -857,36 +904,44 @@ function IncidentReportDialog({ destination, user, onClose }) {
     }
   }, [onClose, saving])
 
-  function choosePhoto(file) {
-    if (preview) URL.revokeObjectURL(preview)
-    setPhoto(file || null)
-    setPreview(file ? URL.createObjectURL(file) : '')
+  function choosePhotos(files) {
+    const selected = Array.from(files || [])
+    if (!selected.length) return
+    setPhotos((current) => [...current, ...selected])
+    setPreviews((current) => [...current, ...selected.map((file) => URL.createObjectURL(file))])
+  }
+
+  function removePhoto(index) {
+    URL.revokeObjectURL(previews[index])
+    setPhotos((current) => current.filter((_, itemIndex) => itemIndex !== index))
+    setPreviews((current) => current.filter((_, itemIndex) => itemIndex !== index))
   }
 
   async function submit(event) {
     event.preventDefault()
-    if (!category || description.trim().length < 10 || !photo) {
-      setError('Choose a category, enter at least 10 characters, and attach a photo.')
+    if (!category || (category === 'other' && customCategory.trim().length < 3) || description.trim().length < 10 || !photos.length) {
+      setError('Choose a category, enter at least 10 characters, and attach at least one photo.')
       return
     }
     setSaving(true); setError('')
     try {
-      await submitEnvironmentalIncident({ locationId: destination.sourceId, locationName: destination.name, reporterId: user.id, category, description, photo })
+      await submitEnvironmentalIncident({ locationId: destination.sourceId, locationName: destination.name, reporterId: user.id, category, customCategory, description, photos })
       setSubmitted(true)
     } catch (submitError) { setError(submitError.message || 'Unable to submit the report.') }
     finally { setSaving(false) }
   }
 
   return createPortal(<div className="fixed inset-0 z-[9999] grid place-items-center overflow-y-auto bg-slate-950/65 p-4" role="dialog" aria-modal="true" aria-labelledby="incident-report-title" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) onClose() }}>
-    <section className="my-6 w-full max-w-xl rounded-2xl bg-white p-5 shadow-2xl md:p-6">
-      <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-widest text-orange-600">Environmental incident</p><h2 id="incident-report-title" className="mt-1 text-xl font-bold text-slate-900">Report an issue</h2></div><button type="button" onClick={onClose} disabled={saving} aria-label="Close report form" className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={20} /></button></div>
-      {submitted ? <div className="py-8 text-center"><CheckCircle2 size={42} className="mx-auto text-emerald-500" /><h3 className="mt-4 text-lg font-bold text-slate-900">Report submitted</h3><p className="mt-2 text-sm leading-6 text-slate-500">Your report was routed to the administrator responsible for {destination.name}.</p><button type="button" onClick={onClose} className="mt-6 rounded-xl bg-green-600 px-5 py-2.5 text-sm font-bold text-white">Done</button></div> : <form onSubmit={submit} className="mt-5 space-y-4">
+    <section className={submitted ? 'relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl' : 'flex h-[calc(100dvh-2rem)] max-h-[760px] min-h-0 w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-white p-5 shadow-2xl md:p-6'}>
+      {!submitted && <div className="flex shrink-0 items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-widest text-green-600">Environmental incident</p><h2 id="incident-report-title" className="mt-1 text-xl font-bold text-slate-900">Report an issue</h2></div><button type="button" onClick={onClose} disabled={saving} aria-label="Close report form" className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={20} /></button></div>}
+      {submitted ? <div className="py-5 text-center"><button type="button" onClick={onClose} aria-label="Close confirmation" className="absolute right-4 top-4 rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={19} /></button><span className="mx-auto grid size-14 place-items-center rounded-full bg-emerald-50"><CheckCircle2 size={34} className="text-emerald-500" /></span><p className="mt-5 text-xs font-bold uppercase tracking-widest text-green-600">Environmental incident</p><h3 className="mt-2 text-xl font-bold text-slate-900">Report submitted</h3><p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-slate-500">Your report was routed to the administrator responsible for {destination.name}.</p><button type="button" onClick={onClose} className="mt-6 rounded-xl bg-green-600 px-6 py-2.5 text-sm font-bold text-white hover:bg-green-700">Done</button></div> : <form onSubmit={submit} className="mt-5 min-h-0 space-y-4 overflow-y-auto pr-1">
         {error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
         <label className="block text-xs font-semibold text-slate-500">Location<input readOnly value={destination.name} className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-600" /></label>
         <label className="block text-xs font-semibold text-slate-500">Issue category<select required value={category} onChange={(event) => setCategory(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-green-500"><option value="">Select a category</option>{incidentCategories.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+        {category === 'other' && <label className="block text-xs font-semibold text-slate-500">Custom issue category<input required minLength="3" maxLength="80" value={customCategory} onChange={(event) => setCustomCategory(event.target.value)} placeholder="Enter the type of environmental issue" className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal text-slate-700 outline-none focus:border-green-500" /></label>}
         <label className="block text-xs font-semibold text-slate-500">Description<textarea required minLength="10" maxLength="2000" rows="5" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Describe what you observed and where within the destination it occurred." className="mt-1 w-full resize-y rounded-xl border border-slate-200 p-3 text-sm font-normal leading-6 outline-none focus:border-green-500" /><span className="mt-1 block text-right text-[11px] text-slate-400">{description.length}/2000</span></label>
-        <label className="block rounded-xl border border-dashed border-slate-300 p-4 text-sm"><span className="font-semibold text-slate-700">Photo evidence</span><input required type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => choosePhoto(event.target.files?.[0])} className="mt-2 block w-full text-xs" /><span className="mt-1 block text-xs text-slate-400">JPG, PNG or WebP; maximum 10 MB.</span>{preview && <img src={preview} alt="Selected incident evidence preview" className="mt-3 max-h-52 w-full rounded-lg bg-slate-50 object-contain" />}</label>
-        <button type="submit" disabled={saving} className="w-full rounded-xl bg-orange-600 py-3 text-sm font-bold text-white hover:bg-orange-700 disabled:opacity-50">{saving ? 'Submitting report...' : 'Submit environmental report'}</button>
+        <div className="rounded-xl border border-slate-200 p-4 text-sm"><div className="flex items-center justify-between gap-3"><span className="font-semibold text-slate-700">Photo evidence</span><span className="text-xs text-slate-400">JPG, PNG or WebP · 10 MB each</span></div><input ref={photoInputRef} type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={(event) => { choosePhotos(event.target.files); event.target.value = '' }} className="hidden" /><div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">{previews.map((url, index) => <div key={url} className="relative overflow-hidden rounded-xl border border-orange-200 bg-orange-50"><img src={url} alt={`Selected incident evidence ${index + 1}`} className="h-28 w-full object-cover" /><span className="pointer-events-none absolute bottom-1 left-1 rounded bg-orange-600 px-2 py-1 text-[10px] font-bold text-white">Image {index + 1}</span><button type="button" onClick={() => removePhoto(index)} aria-label={`Remove image ${index + 1}`} className="absolute right-1 top-1 rounded-full bg-white/95 p-1.5 text-red-500 shadow hover:bg-red-50"><X size={14} /></button></div>)}<button type="button" onClick={() => photoInputRef.current?.click()} className="flex min-h-28 flex-col items-center justify-center rounded-xl border-2 border-dashed border-orange-200 bg-orange-50/50 text-orange-600 hover:border-orange-400 hover:bg-orange-50"><Plus size={22} /><span className="mt-1 font-semibold">Add images</span><span className="text-[10px] text-orange-400">Select one or many</span></button></div>{!photos.length && <p className="mt-2 text-xs text-slate-400">At least one photo is required.</p>}</div>
+        <button type="submit" disabled={saving} className="sticky bottom-0 w-full rounded-xl bg-green-600 py-3 text-sm font-bold text-white shadow-lg shadow-green-900/10 hover:bg-green-700 disabled:opacity-50">{saving ? 'Submitting report...' : 'Submit environmental report'}</button>
       </form>}
     </section>
   </div>, document.body)

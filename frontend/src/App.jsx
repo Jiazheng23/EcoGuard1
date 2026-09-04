@@ -16,9 +16,9 @@ export default function App() {
         <Route path="/register" element={<AuthPage key="register" initialMode="register" />} />
         <Route path="/forgot-password" element={<AuthPage key="forgot" initialMode="forgot" />} />
         <Route path="/reset-password" element={<AuthPage key="reset" initialMode="reset" />} />
-        <Route path="/tourist/dashboard" element={<TouristWorkspace />} />
-        <Route path="/super_admin/dashboard" element={<AdminWorkspace />} />
-        <Route path="/location_admin/dashboard" element={<LocationAdminWorkspace />} />
+        <Route path="/tourist/:page" element={<TouristWorkspace />} />
+        <Route path="/super_admin/:page" element={<AdminWorkspace requiredRole="super_admin" />} />
+        <Route path="/location_admin/:page" element={<LocationAdminWorkspace />} />
         <Route path="/location_admin/pending" element={<PendingApprovalPage />} />
         <Route path="/location_admin/application" element={<LocationAdminApplicationPage />} />
         <Route path="/admin/dashboard" element={<Navigate to="/location_admin/dashboard" replace />} />

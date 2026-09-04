@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../services/supabaseClient";
 import { getOwnProfile, profileFromUser } from "../../services/profileService";
 
@@ -10,11 +10,22 @@ import CarbonCalculator from "./CarbonCalculator";
 import TouristProfile from "./TouristProfile";
 import TouristHistory from "./TouristHistory";
 import TouristAchievements from "./TouristAchievements";
+import LoadingScreen from "../../components/LoadingScreen";
+
+const touristPages = new Set(["dashboard", "carbon", "history", "achievements", "monitoring", "profile"]);
+
+function administratorWorkspace(profile) {
+  if (profile?.role === "super_admin") return "/super_admin/dashboard";
+  if (profile?.role === "location_admin") return "/location_admin/dashboard";
+  if (profile?.role === "pending_location_admin") return "/location_admin/application";
+  return "";
+}
 
 export default function TouristWorkspace() {
   const navigate = useNavigate();
+  const { page: routePage } = useParams();
 
-  const [page, setPage] = useState("dashboard");
+  const page = touristPages.has(routePage) ? routePage : "dashboard";
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -22,16 +33,28 @@ export default function TouristWorkspace() {
   const [dashboardMessage, setDashboardMessage] = useState("");
 
   function handleNavigate(nextPage, options = {}) {
+    const destinationPage = touristPages.has(nextPage) ? nextPage : "dashboard";
     if (nextPage !== "dashboard") {
       setDashboardMessage("");
     }
     if (nextPage === "carbon") {
       setCalculatorDestination(options.destination || null);
     }
-    setPage(nextPage);
+    if (destinationPage !== page) {
+      navigate(`/tourist/${destinationPage}`);
+    }
   }
 
   useEffect(() => {
+    if (!touristPages.has(routePage)) {
+      navigate("/tourist/dashboard", { replace: true });
+      return;
+    }
+  }, [navigate, routePage]);
+
+  useEffect(() => {
+    let active = true;
+
     async function loadUser() {
       const {
         data: { user: loggedInUser },
@@ -43,15 +66,23 @@ export default function TouristWorkspace() {
         return;
       }
 
-      setUser(loggedInUser);
-
+      let currentProfile;
       try {
-        setProfile(await getOwnProfile(loggedInUser));
+        currentProfile = await getOwnProfile(loggedInUser);
       } catch (profileError) {
         console.error("Profile loading failed:", profileError.message);
-        setProfile(profileFromUser(loggedInUser));
+        currentProfile = profileFromUser(loggedInUser);
       }
 
+      if (!active) return;
+      const adminRoute = administratorWorkspace(currentProfile);
+      if (adminRoute) {
+        navigate(adminRoute, { replace: true });
+        return;
+      }
+
+      setUser(loggedInUser);
+      setProfile(currentProfile);
       setLoading(false);
     }
 
@@ -60,19 +91,29 @@ export default function TouristWorkspace() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!active) return;
       if (!session?.user) {
         navigate("/login", { replace: true });
         return;
       }
 
-      setUser(session.user);
       getOwnProfile(session.user)
-        .then(setProfile)
-        .catch(() => setProfile(profileFromUser(session.user)));
-      setLoading(false);
+        .catch(() => profileFromUser(session.user))
+        .then((currentProfile) => {
+          if (!active) return;
+          const adminRoute = administratorWorkspace(currentProfile);
+          if (adminRoute) {
+            navigate(adminRoute, { replace: true });
+            return;
+          }
+          setUser(session.user);
+          setProfile(currentProfile);
+          setLoading(false);
+        });
     });
 
     return () => {
+      active = false;
       subscription.unsubscribe();
     };
   }, [navigate]);
@@ -94,7 +135,7 @@ export default function TouristWorkspace() {
 
     setDashboardMessage(`Eco Score changed by ${formattedPoints}.`);
     setCalculatorDestination(null);
-    setPage("dashboard");
+    navigate("/tourist/dashboard");
 
     if (!user) return;
 
@@ -107,9 +148,7 @@ export default function TouristWorkspace() {
 
   if (loading) {
     return (
-      <div className="grid min-h-screen place-items-center bg-slate-50">
-        <p className="text-sm text-slate-500">Loading your account...</p>
-      </div>
+      <LoadingScreen fullScreen label="Loading your account..." />
     );
   }
 

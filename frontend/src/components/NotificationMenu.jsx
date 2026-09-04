@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Bell, CheckCheck } from 'lucide-react'
 import { listEarlyWarningNotifications, markEarlyWarningsRead, subscribeToEarlyWarnings } from '../services/notificationService'
 import { listActiveAdvisories, subscribeToAdvisories } from '../services/advisoryService'
+import { listReporterIncidentUpdates, subscribeToIncidents } from '../services/incidentService'
 
 const roleNotifications = {
   tourist: [
@@ -26,8 +27,10 @@ export default function NotificationMenu({ role = 'tourist', userId, onNavigate,
   const [readIds, setReadIds] = useState(() => readStoredIds(storageKey))
   const [earlyWarnings, setEarlyWarnings] = useState([])
   const [advisories, setAdvisories] = useState([])
+  const [incidentUpdates, setIncidentUpdates] = useState([])
   const containerRef = useRef(null)
   const notifications = useMemo(() => [
+    ...(role === 'tourist' ? incidentUpdates.map(incidentNotification) : []),
     ...(role === 'tourist' ? advisories.map((advisory) => ({ id: `advisory-${advisory.id}`, title: advisory.title, detail: `${advisory.ecological_locations?.name || 'Destination'}: ${advisory.safety_instructions}`, page: 'monitoring', severity: 'warning' })) : []),
     ...earlyWarnings.map((alert) => ({
       id: `alert-${alert.id}`,
@@ -39,7 +42,7 @@ export default function NotificationMenu({ role = 'tourist', userId, onNavigate,
       severity: alert.severity,
     })),
     ...(roleNotifications[role] || roleNotifications.tourist),
-  ], [advisories, earlyWarnings, role])
+  ], [advisories, earlyWarnings, incidentUpdates, role])
   const unreadCount = notifications.filter((item) => item.alertId ? !item.read : !readIds.includes(item.id)).length
   const accentClasses = accent === 'blue' ? 'hover:bg-blue-50 hover:text-blue-700' : 'hover:bg-green-50 hover:text-green-700'
 
@@ -81,6 +84,15 @@ export default function NotificationMenu({ role = 'tourist', userId, onNavigate,
     return () => { active = false; unsubscribe() }
   }, [role])
 
+  useEffect(() => {
+    if (role !== 'tourist' || !userId) return undefined
+    let active = true
+    const load = () => listReporterIncidentUpdates(userId).then((rows) => { if (active) setIncidentUpdates(rows) }).catch(() => { if (active) setIncidentUpdates([]) })
+    void load()
+    const unsubscribe = subscribeToIncidents(load)
+    return () => { active = false; unsubscribe() }
+  }, [role, userId])
+
   function storeReadIds(nextIds) {
     setReadIds(nextIds)
     window.localStorage.setItem(storageKey, JSON.stringify(nextIds))
@@ -102,6 +114,7 @@ export default function NotificationMenu({ role = 'tourist', userId, onNavigate,
     storeReadIds([
       ...(roleNotifications[role] || roleNotifications.tourist).map((item) => item.id),
       ...advisories.map((item) => `advisory-${item.id}`),
+      ...incidentUpdates.map((item) => incidentNotification(item).id),
     ])
   }
 
@@ -121,13 +134,39 @@ export default function NotificationMenu({ role = 'tourist', userId, onNavigate,
           <div className="max-h-80 overflow-y-auto p-2">
             {notifications.map((item) => {
               const unread = item.alertId ? !item.read : !readIds.includes(item.id)
-              return <button key={item.id} type="button" role="menuitem" onClick={() => openNotification(item)} className={`flex w-full gap-3 rounded-xl p-3 text-left transition ${accentClasses}`}><span className={`mt-1 size-2 shrink-0 rounded-full ${unread ? item.severity === 'critical' ? 'bg-red-600' : item.severity === 'warning' ? 'bg-orange-500' : 'bg-amber-400' : 'bg-slate-200'}`} /><span><b className="block text-sm text-slate-700">{item.title}</b><span className="mt-1 block text-xs leading-5 text-slate-500">{item.detail}</span></span></button>
+              return <button key={item.id} type="button" role="menuitem" onClick={() => openNotification(item)} className={`flex w-full gap-3 rounded-xl p-3 text-left transition ${accentClasses}`}><span className={`mt-1 size-2 shrink-0 rounded-full ${unread ? item.severity === 'critical' ? 'bg-red-600' : item.severity === 'warning' ? 'bg-orange-500' : item.severity === 'success' ? 'bg-emerald-500' : 'bg-amber-400' : 'bg-slate-200'}`} /><span className="min-w-0"><b className="block text-sm text-slate-700">{item.title}</b><span className="mt-1 block text-xs leading-5 text-slate-500">{item.detail}</span></span></button>
             })}
           </div>
         </section>
       )}
     </div>
   )
+}
+
+function incidentNotification(incident) {
+  const location = incident.ecological_locations?.name || 'the reported destination'
+  const version = incident.closed_at || incident.reviewed_at || incident.updated_at || incident.status
+  if (incident.status === 'closed') return {
+    id: `incident-${incident.id}-closed-${version}`,
+    title: 'Your environmental report was resolved',
+    detail: `${location}: The location administrator completed the response and it was approved by a super administrator.`,
+    page: 'monitoring',
+    severity: 'success',
+  }
+  if (incident.status === 'rejected') return {
+    id: `incident-${incident.id}-rejected-${version}`,
+    title: 'Your environmental report was not verified',
+    detail: `${location}: ${incident.rejection_reason || 'The report was found to be invalid or duplicated.'}`,
+    page: 'monitoring',
+    severity: 'critical',
+  }
+  return {
+    id: `incident-${incident.id}-verified-${version}`,
+    title: 'Your environmental report was verified',
+    detail: `${location}: The administrator confirmed the issue and is preparing a response.`,
+    page: 'monitoring',
+    severity: 'info',
+  }
 }
 
 function readStoredIds(storageKey) {

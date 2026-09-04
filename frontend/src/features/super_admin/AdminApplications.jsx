@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Check, ExternalLink, FileText, RefreshCw, Search, X } from 'lucide-react'
 import { decideAdminApplication, listAdminApplications } from '../../services/adminApplicationService'
+import TablePagination from '../../components/TablePagination'
+import useTablePagination from '../../hooks/useTablePagination'
+import LoadingScreen from '../../components/LoadingScreen'
 
 const statusOptions = [
   { value: 'all', label: 'All statuses' },
@@ -70,6 +73,7 @@ export default function AdminApplications() {
       return matchesStatus && matchesSearch
     })
   }, [applications, query, statusFilter])
+  const applicationPages = useTablePagination(filteredApplications)
 
   async function decide(id, decision) {
     setMessage('')
@@ -87,6 +91,10 @@ export default function AdminApplications() {
     } finally {
       setDecidingId(null)
     }
+  }
+
+  if (loading) {
+    return <LoadingScreen tone="blue" label="Loading applications..." />
   }
 
   return (
@@ -118,9 +126,7 @@ export default function AdminApplications() {
           </label>
         </div>
 
-        {loading ? (
-          <p className="p-10 text-center text-sm text-slate-400">Loading applications...</p>
-        ) : filteredApplications.length ? (
+        {filteredApplications.length ? (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[980px] text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-400">
@@ -134,7 +140,7 @@ export default function AdminApplications() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredApplications.map((item) => (
+                {applicationPages.pageItems.map((item) => (
                   <tr key={item.id} className="transition hover:bg-slate-50/70">
                     <td className="px-5 py-4">
                       <p className="font-semibold text-slate-800">{item.profiles?.full_name || 'Unnamed applicant'}</p>
@@ -169,7 +175,7 @@ export default function AdminApplications() {
           </div>
         )}
 
-        {!loading && applications.length > 0 && <div className="border-t border-slate-100 px-5 py-3 text-xs text-slate-400">Showing {filteredApplications.length} of {applications.length} applications</div>}
+        {!loading && filteredApplications.length > 0 && <TablePagination {...applicationPages} onPageChange={applicationPages.setPage} label="applications" />}
       </section>
     </div>
   )

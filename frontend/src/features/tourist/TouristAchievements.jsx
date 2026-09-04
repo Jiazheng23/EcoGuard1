@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { AlertCircle, Award, Check, LoaderCircle } from 'lucide-react'
 import { listOwnTrips } from '../../services/tripService'
 import AchievementBadgeIcon from '../../components/AchievementBadgeIcon'
+import LoadingScreen from '../../components/LoadingScreen'
 import { getAchievementBadges } from '../../services/achievementService'
 
 const card = 'rounded-2xl border border-slate-100 bg-white p-5 shadow-sm'
@@ -30,6 +31,10 @@ export default function TouristAchievements({ user, profile }) {
 
   const badges = useMemo(() => getAchievementBadges(trips, profile), [profile, trips])
   const earnedCount = badges.filter((badge) => badge.earned).length
+
+  if (loading) {
+    return <LoadingScreen label="Loading your achievements..." />
+  }
 
   return (
     <div className="tourist-achievements-page mx-auto flex max-w-5xl flex-col gap-5">

@@ -2,9 +2,12 @@ import { useMemo } from 'react'
 import { ClipboardList, Plus, RefreshCw } from 'lucide-react'
 import { filterWasteCollections } from '../../../utils/wasteAnalytics'
 import WasteCollectionFilters from './WasteCollectionFilters'
+import TablePagination from '../../../components/TablePagination'
+import useTablePagination from '../../../hooks/useTablePagination'
 
 export default function WasteCollectionHistory({ location, collections, filters, onFiltersChange, loading, onRefresh, onCreateCollection }) {
   const filteredCollections = useMemo(() => filterWasteCollections(collections, filters), [collections, filters])
+  const collectionPages = useTablePagination(filteredCollections)
 
   return (
     <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
@@ -24,7 +27,7 @@ export default function WasteCollectionHistory({ location, collections, filters,
         <table className="min-w-full text-left text-sm">
           <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-400"><tr><th className="px-5 py-3">Collected at</th><th className="px-5 py-3">Type</th><th className="px-5 py-3">Total</th><th className="px-5 py-3">Recycled</th><th className="px-5 py-3">Landfill</th><th className="px-5 py-3">Source</th><th className="px-5 py-3">Status</th><th className="px-5 py-3">Notes</th></tr></thead>
           <tbody className="divide-y divide-slate-100">
-            {filteredCollections.map((record) => (
+            {collectionPages.pageItems.map((record) => (
               <tr key={record.id}>
                 <td className="whitespace-nowrap px-5 py-4"><p className="font-semibold text-slate-700">{formatDate(record.collected_at)}</p><p className="mt-0.5 text-[11px] text-slate-400">{record.schedule_id ? `Schedule #${record.schedule_id}` : 'Unscheduled'}</p></td>
                 <td className="px-5 py-4 capitalize text-slate-600">{record.waste_type}</td>
@@ -39,6 +42,7 @@ export default function WasteCollectionHistory({ location, collections, filters,
           </tbody>
         </table>
       </div>
+      {!loading && filteredCollections.length > 0 && <TablePagination {...collectionPages} onPageChange={collectionPages.setPage} label="records" />}
       {loading && <p className="p-10 text-center text-sm text-slate-400">Loading collection history...</p>}
       {!loading && !filteredCollections.length && <p className="p-10 text-center text-sm text-slate-400">{collections.length ? 'No collection records match the selected filters.' : 'No collection history is available for this location.'}</p>}
     </section>
