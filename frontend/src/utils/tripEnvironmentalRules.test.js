@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   CAR_POWERTRAINS,
   calculateTripEnvironmentalImpact,
+  getMixedRouteEmissionFactorG,
   recommendedModeForDistance,
 } from './tripEnvironmentalRules.js'
 
@@ -32,6 +33,8 @@ test('uses the supplied passenger-kilometre emission factors', () => {
     }).carbonEmissionKg,
     4.16,
   )
+  assert.equal(calculateTripEnvironmentalImpact({ mode: 'mrt', distanceKm: 10 }).factorG, 70)
+  assert.equal(calculateTripEnvironmentalImpact({ mode: 'mrt', distanceKm: 10 }).carbonEmissionKg, 0.7)
 })
 
 test('supports petrol and electricity within the single car choice', () => {
@@ -50,6 +53,22 @@ test('supports petrol and electricity within the single car choice', () => {
   assert.equal(petrolCar.carbonEmissionKg, 13.55)
   assert.equal(electricCar.factorG, 92.45)
   assert.equal(electricCar.carbonEmissionKg, 9.25)
+})
+
+test('calculates a distance-weighted factor for mixed transport legs', () => {
+  const factor = getMixedRouteEmissionFactorG([
+    { transportLabel: 'Car', distanceKm: 2 },
+    { transportLabel: 'LRT', distanceKm: 6 },
+    { transportLabel: 'Bus', distanceKm: 2 },
+    { transportLabel: 'Walk', distanceKm: 1 },
+  ])
+
+  assert.equal(Number(factor.toFixed(2)), 71.07)
+  assert.equal(calculateTripEnvironmentalImpact({
+    mode: 'mixed',
+    distanceKm: 11,
+    factorGOverride: factor,
+  }).carbonEmissionKg, 0.78)
 })
 
 test('rewards short clean trips and the recommended choice', () => {

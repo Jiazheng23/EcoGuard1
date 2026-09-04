@@ -31,12 +31,14 @@ export async function reverseMalaysiaLocation(lat, lng) {
 export async function calculateMalaysiaRoute(
   origin,
   destination,
+  mode = 'car',
 ) {
   const params = new URLSearchParams({
     originLat: String(origin.lat),
     originLng: String(origin.lng),
     destinationLat: String(destination.lat),
     destinationLng: String(destination.lng),
+    mode,
   })
 
   return request(`/api/maps/route?${params.toString()}`)

@@ -10,7 +10,12 @@ export default function WasteCollectionHistory({ location, collections, filters,
   const collectionPages = useTablePagination(filteredCollections)
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+    <div className="flex flex-col gap-4">
+      <section className="flex items-center gap-4 rounded-2xl border border-green-100 bg-green-50/70 p-4 shadow-sm">
+        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-white text-green-600"><ClipboardList size={19} /></span>
+        <div><p className="text-xs font-medium text-slate-500">Collection records</p><p className="mt-1 text-xl font-bold text-slate-800">{loading ? 'Loading...' : collections.length}</p><p className="mt-0.5 text-xs text-slate-400">Persisted records for {location?.name || 'the selected location'}</p></div>
+      </section>
+      <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-5">
         <div><h2 className="flex items-center gap-2 font-bold text-slate-800"><ClipboardList size={18} className="text-green-500" />Collection history</h2><p className="mt-1 text-xs text-slate-400">Immutable persisted collection records for {location?.name || 'the selected location'}.</p></div>
         <div className="flex flex-wrap gap-2">
@@ -45,7 +50,8 @@ export default function WasteCollectionHistory({ location, collections, filters,
       {!loading && filteredCollections.length > 0 && <TablePagination {...collectionPages} onPageChange={collectionPages.setPage} label="records" />}
       {loading && <p className="p-10 text-center text-sm text-slate-400">Loading collection history...</p>}
       {!loading && !filteredCollections.length && <p className="p-10 text-center text-sm text-slate-400">{collections.length ? 'No collection records match the selected filters.' : 'No collection history is available for this location.'}</p>}
-    </section>
+      </section>
+    </div>
   )
 }
 

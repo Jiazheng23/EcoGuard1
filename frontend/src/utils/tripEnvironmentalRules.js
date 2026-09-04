@@ -19,6 +19,7 @@ export const CAR_POWERTRAIN_OPTIONS = [
 export const TRANSPORT_EMISSION_FACTORS_G = {
   motorcycle: 41.57,
   bus: 45.45,
+  mrt: 70,
   walking: 0,
   bicycle: 0,
 }
@@ -48,11 +49,14 @@ export function calculateTripEnvironmentalImpact({
   passengers = 1,
   roundTrip = false,
   carPowertrain = CAR_POWERTRAINS.petrol,
+  factorGOverride,
 }) {
   const distance = positiveNumber(distanceKm)
   const passengerCount = Math.max(1, Math.trunc(positiveNumber(passengers) || 1))
   const distanceMultiplier = roundTrip ? 2 : 1
-  const factorG = getEmissionFactorG(mode, carPowertrain)
+  const factorG = Number.isFinite(Number(factorGOverride))
+    ? Math.max(0, Number(factorGOverride))
+    : getEmissionFactorG(mode, carPowertrain)
   const carbonEmissionKg = roundToTwo((factorG * distance * distanceMultiplier) / 1000)
   const totalEmissionKg = roundToTwo(carbonEmissionKg * passengerCount)
   const recommendation = recommendedModeForDistance(distance)
@@ -80,6 +84,30 @@ export function calculateTripEnvironmentalImpact({
   }
 }
 
+export function getMixedRouteEmissionFactorG(
+  legs = [],
+  carPowertrain = CAR_POWERTRAINS.petrol,
+) {
+  let totalDistanceKm = 0
+  let totalEmissionG = 0
+
+  for (const leg of legs) {
+    const distanceKm = positiveNumber(leg.distanceKm)
+    const label = String(leg.transportLabel || leg.mode || '').toLowerCase()
+    let mode = 'walking'
+
+    if (label.includes('car')) mode = 'car'
+    else if (label.includes('bus') || label.includes('coach')) mode = 'bus'
+    else if (/(lrt|mrt|rail|subway|tram|metro|monorail)/.test(label)) mode = 'mrt'
+    else if (label.includes('bike') || label.includes('bicycle')) mode = 'bicycle'
+
+    totalDistanceKm += distanceKm
+    totalEmissionG += distanceKm * getEmissionFactorG(mode, carPowertrain)
+  }
+
+  return totalDistanceKm > 0 ? totalEmissionG / totalDistanceKm : 0
+}
+
 function getModeDistancePoints(mode, distanceKm) {
   switch (mode) {
     case 'walking':
@@ -87,6 +115,9 @@ function getModeDistancePoints(mode, distanceKm) {
     case 'bicycle':
       return distanceKm <= 10 ? 5 : 2
     case 'bus':
+      return distanceKm <= 10 ? 3 : 1
+    case 'mrt':
+    case 'mixed':
       return distanceKm <= 10 ? 3 : 1
     case 'motorcycle':
       return distanceKm <= 10 ? 1 : 0

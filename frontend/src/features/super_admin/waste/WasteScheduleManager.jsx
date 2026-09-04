@@ -16,6 +16,9 @@ export default function WasteScheduleManager({ location, schedules, loading, onR
     const displayStatus = statusFor(schedule)
     return filter === 'all' || displayStatus === filter
   }), [filter, schedules])
+  const nextSchedule = useMemo(() => [...schedules]
+    .filter((schedule) => statusFor(schedule) === 'scheduled' && new Date(schedule.scheduled_for) > new Date())
+    .sort((left, right) => new Date(left.scheduled_for) - new Date(right.scheduled_for))[0], [schedules])
   const schedulePages = useTablePagination(visibleSchedules)
 
   async function scheduleSaved(_saved, editing) {
@@ -45,6 +48,14 @@ export default function WasteScheduleManager({ location, schedules, loading, onR
 
   return (
     <>
+      <section className="mb-4 flex items-center gap-4 rounded-2xl border border-blue-100 bg-blue-50/70 p-4 shadow-sm">
+        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-white text-blue-500"><CalendarClock size={19} /></span>
+        <div>
+          <p className="text-xs font-medium text-slate-500">Next collection</p>
+          <p className="mt-1 font-bold text-slate-800">{loading ? 'Loading...' : nextSchedule ? formatDate(nextSchedule.scheduled_for) : 'Not scheduled'}</p>
+          <p className="mt-0.5 text-xs text-slate-400">{nextSchedule?.assigned_team || 'No upcoming collection window'}</p>
+        </div>
+      </section>
       <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-5">
           <div><h2 className="flex items-center gap-2 font-bold text-slate-800"><CalendarClock size={18} className="text-blue-500" />Collection schedules</h2><p className="mt-1 text-xs text-slate-400">Plan non-overlapping collection windows for {location?.name || 'the selected location'}. Cancelled schedules are retained, not deleted.</p></div>

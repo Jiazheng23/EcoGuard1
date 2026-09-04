@@ -31,6 +31,7 @@ import LoadingScreen from '../../components/LoadingScreen'
 import { getAchievementBadges } from '../../services/achievementService'
 import {
   formatCarbon,
+  formatEcoPoints,
   formatTripDate,
   getDailySeries,
   getMonthlySeries,
@@ -210,7 +211,7 @@ export default function TouristDashboard({
 
       <section className="tourist-dashboard-stats grid grid-cols-2 gap-4 lg:grid-cols-4">
         {[
-          ['Eco Score', ecoScore, '/ 100', `${analytics.ecoPoints >= 0 ? '+' : ''}${analytics.ecoPoints} trip points`, 'text-green-500'],
+          ['Eco Score', ecoScore, '/ 100', `${formatEcoPoints(analytics.ecoPoints)} pts from recorded trips`, 'text-green-500'],
           ["Today's Emission", analytics.todayEmission.toFixed(1), 'kg CO₂', 'From saved trips today', 'text-blue-500'],
           ['Monthly Emission', analytics.monthlyEmission.toFixed(1), 'kg CO₂', 'Current calendar month', 'text-violet-500'],
           ['Badges Earned', earnedBadges, `/ ${achievementBadges.length}`, `${achievementBadges.length - earnedBadges} still available`, 'text-amber-500'],
@@ -309,7 +310,7 @@ export default function TouristDashboard({
                   </div>
                   <div className="text-right text-xs">
                     <b className="text-slate-700">{formatCarbon(trip.carbon_emission)}</b>
-                    <p className={numberValue(trip.eco_points) >= 0 ? 'text-green-600' : 'text-red-500'}>{numberValue(trip.eco_points) > 0 ? '+' : ''}{trip.eco_points} pts</p>
+                    <p className={numberValue(trip.eco_points) >= 0 ? 'text-green-600' : 'text-red-500'}>{formatEcoPoints(trip.eco_points)} pts</p>
                   </div>
                 </div>
               )

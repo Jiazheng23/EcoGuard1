@@ -2,6 +2,7 @@ import { supabase, supabaseAdmin } from '../services/supabase.js'
 
 const allowedDocumentTypes = new Set(['application/pdf', 'image/jpeg', 'image/png'])
 const maxDocumentBytes = 5 * 1024 * 1024
+const duplicateLocationRadiusMeters = 150
 const stateAliases = new Map([
   ['pulau pinang', 'Penang'],
   ['federal territory of kuala lumpur', 'Kuala Lumpur'],
@@ -14,6 +15,87 @@ const stateAliases = new Map([
 function normalizeState(value) {
   const state = String(value || '').trim()
   return stateAliases.get(state.toLowerCase()) || state
+}
+
+function normalizeLocationText(value) {
+  return String(value || '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+}
+
+function distanceInMeters(firstLatitude, firstLongitude, secondLatitude, secondLongitude) {
+  const toRadians = (degrees) => degrees * Math.PI / 180
+  const earthRadiusMeters = 6371000
+  const latitudeDelta = toRadians(secondLatitude - firstLatitude)
+  const longitudeDelta = toRadians(secondLongitude - firstLongitude)
+  const a = Math.sin(latitudeDelta / 2) ** 2
+    + Math.cos(toRadians(firstLatitude)) * Math.cos(toRadians(secondLatitude))
+    * Math.sin(longitudeDelta / 2) ** 2
+  return 2 * earthRadiusMeters * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+function isSameLocation(candidate, existing) {
+  const candidateName = normalizeLocationText(candidate.name)
+  const candidateAddress = normalizeLocationText(candidate.address)
+  const existingName = normalizeLocationText(existing.name)
+  const existingAddress = normalizeLocationText(existing.description)
+  const sameText = Boolean(existingName && (
+    candidateName === existingName
+    || candidateAddress === existingName
+    || (existingName.length >= 5 && candidateAddress.includes(existingName))
+    || (candidateName.length >= 5 && existingAddress.includes(candidateName))
+    || (existingAddress && candidateAddress === existingAddress)
+  ))
+  const coordinatesMatch = [candidate.latitude, candidate.longitude, existing.latitude, existing.longitude]
+    .every((value) => Number.isFinite(Number(value)))
+    && distanceInMeters(
+      Number(candidate.latitude),
+      Number(candidate.longitude),
+      Number(existing.latitude),
+      Number(existing.longitude),
+    ) <= duplicateLocationRadiusMeters
+  return sameText || coordinatesMatch
+}
+
+async function findUnavailableCustomLocation(custom, excludedApplicationId) {
+  const { data: assignedProfiles, error: assignedError } = await supabaseAdmin
+    .from('profiles')
+    .select('location_id')
+    .not('location_id', 'is', null)
+  if (assignedError) throw assignedError
+
+  const assignedIds = new Set((assignedProfiles || []).map((row) => Number(row.location_id)))
+  const { data: existingLocations, error: locationsError } = await supabaseAdmin
+    .from('ecological_locations')
+    .select('id, name, description, latitude, longitude, is_active')
+  if (locationsError) throw locationsError
+  const existingLocation = (existingLocations || []).find((location) => isSameLocation(custom, location))
+  if (existingLocation) {
+    return {
+      kind: assignedIds.has(Number(existingLocation.id)) ? 'assigned' : 'existing',
+      name: existingLocation.name,
+      isActive: existingLocation.is_active,
+    }
+  }
+
+  let pendingQuery = supabaseAdmin
+    .from('location_admin_applications')
+    .select('id, requested_location_name, requested_location_address, requested_latitude, requested_longitude')
+    .eq('status', 'pending')
+    .is('requested_location_id', null)
+  if (excludedApplicationId) pendingQuery = pendingQuery.neq('id', excludedApplicationId)
+  const { data: pendingApplications, error: pendingError } = await pendingQuery
+  if (pendingError) throw pendingError
+  const reservation = (pendingApplications || []).find((application) => isSameLocation(custom, {
+    name: application.requested_location_name,
+    description: application.requested_location_address,
+    latitude: application.requested_latitude,
+    longitude: application.requested_longitude,
+  }))
+  return reservation ? { kind: 'pending', name: reservation.requested_location_name } : null
 }
 
 function requireAdminClient(res) {
@@ -190,19 +272,23 @@ export async function register(req, res) {
 export async function listUnassignedLocations(req, res) {
   const user = await requirePendingLocationAdmin(req, res)
   if (!user) return
-  const { data: ownApplication } = await supabaseAdmin.from('location_admin_applications')
-    .select('id, status').eq('user_id', user.id).maybeSingle()
+  const { data: ownApplication, error: applicationError } = await supabaseAdmin.from('location_admin_applications')
+    .select('id, status, rejection_reason').eq('user_id', user.id).maybeSingle()
+  if (applicationError) return res.status(400).json({ error: applicationError.message })
   const { data, error } = await supabaseAdmin.from('ecological_locations')
     .select('id, name, state').eq('is_active', true).order('name')
   if (error) return res.status(400).json({ error: error.message })
-  const { data: assigned } = await supabaseAdmin.from('profiles').select('location_id')
-    .eq('role', 'location_admin').not('location_id', 'is', null)
-  const { data: reserved } = await supabaseAdmin.from('location_admin_applications')
+  const { data: assigned, error: assignedError } = await supabaseAdmin.from('profiles').select('location_id')
+    .not('location_id', 'is', null)
+  if (assignedError) return res.status(400).json({ error: assignedError.message })
+  const { data: reserved, error: reservedError } = await supabaseAdmin.from('location_admin_applications')
     .select('requested_location_id').eq('status', 'pending').not('requested_location_id', 'is', null)
+  if (reservedError) return res.status(400).json({ error: reservedError.message })
   const unavailable = new Set([...(assigned || []), ...(reserved || [])].map((row) => Number(row.location_id || row.requested_location_id)))
   return res.json({
     hasApplication: Boolean(ownApplication),
     applicationStatus: ownApplication?.status || null,
+    rejectionReason: ownApplication?.rejection_reason || null,
     locations: (data || []).filter((row) => !unavailable.has(Number(row.id))),
   })
 }
@@ -234,9 +320,34 @@ export async function submitAdminApplication(req, res) {
     return res.status(409).json({ error: 'You already have an active application.' })
   }
   if (method === 'existing') {
-    const { data: conflict } = await supabaseAdmin.from('profiles').select('id').eq('location_id', locationId).maybeSingle()
-    const { data: reservation } = await supabaseAdmin.from('location_admin_applications').select('id').eq('requested_location_id', locationId).eq('status', 'pending').maybeSingle()
+    const { data: location } = await supabaseAdmin.from('ecological_locations').select('id').eq('id', locationId).eq('is_active', true).maybeSingle()
+    if (!location) return res.status(404).json({ error: 'That location does not exist or is inactive.' })
+    const { data: conflict, error: conflictError } = await supabaseAdmin.from('profiles').select('id').eq('location_id', locationId).limit(1).maybeSingle()
+    if (conflictError) return res.status(400).json({ error: conflictError.message })
+    let reservationQuery = supabaseAdmin.from('location_admin_applications').select('id').eq('requested_location_id', locationId).eq('status', 'pending')
+    if (previous?.id) reservationQuery = reservationQuery.neq('id', previous.id)
+    const { data: reservation } = await reservationQuery.limit(1).maybeSingle()
     if (conflict || reservation) return res.status(409).json({ error: 'That location is no longer available. Please choose another.' })
+  } else {
+    try {
+      const conflict = await findUnavailableCustomLocation(custom, previous?.id)
+      if (conflict) {
+        const reason = conflict.kind === 'assigned'
+          ? 'already has a location administrator. Please request a different location.'
+          : conflict.kind === 'existing' && conflict.isActive
+            ? 'already exists in EcoGuard. Choose it from “Available location” instead of creating it again.'
+            : conflict.kind === 'existing'
+              ? 'already exists in EcoGuard but is inactive. Please contact a super administrator.'
+              : 'already has an application awaiting review. Please request a different location.'
+        return res.status(409).json({
+          error: `${conflict.name || 'That location'} ${reason}`,
+          code: 'LOCATION_UNAVAILABLE',
+        })
+      }
+    } catch (error) {
+      respondToAdminClientError(res, error)
+      return
+    }
   }
   const safeName = document.name.replace(/[^a-zA-Z0-9._-]/g, '_')
   const documentPath = `${user.id}/${Date.now()}-${safeName}`
@@ -261,12 +372,19 @@ export async function submitAdminApplication(req, res) {
         status: 'pending',
         reviewed_by: null,
         reviewed_at: null,
+        rejection_reason: null,
         created_at: new Date().toISOString(),
       }).eq('id', previous.id).eq('status', 'rejected')
     : supabaseAdmin.from('location_admin_applications').insert(payload)
   const { error } = await applicationQuery.select('id').single()
   if (error) {
     await supabaseAdmin.storage.from('company-documents').remove([documentPath])
+    if (error.code === '23505') {
+      return res.status(409).json({
+        error: 'That location was just requested by another applicant. Please choose another.',
+        code: 'LOCATION_UNAVAILABLE',
+      })
+    }
     return res.status(400).json({ error: error.message })
   }
   if (previous?.company_document_path) {
@@ -284,19 +402,40 @@ export async function listAdminApplications(req, res) {
   if (!await requireSuperAdmin(req, res)) return
   const { data, error } = await supabaseAdmin
     .from('location_admin_applications')
-    .select('*, profiles!location_admin_applications_user_id_fkey(full_name), ecological_locations!location_admin_applications_requested_location_id_fkey(name)')
+    .select('id, user_id, requested_location_id, requested_location_name, requested_location_address, requested_latitude, requested_longitude, requested_state, location_method, company_document_name, status, rejection_reason, reviewed_by, reviewed_at, created_at, profiles!location_admin_applications_user_id_fkey(full_name), ecological_locations!location_admin_applications_requested_location_id_fkey(name)')
     .order('created_at', { ascending: false })
   if (error) return res.status(400).json({ error: error.message })
-  const applications = await Promise.all((data || []).map(async (item) => {
-    const { data: signed } = await supabaseAdmin.storage
-      .from('company-documents').createSignedUrl(item.company_document_path, 600)
-    return { ...item, documentUrl: signed?.signedUrl || null }
-  }))
   res.set('Cache-Control', 'private, no-store')
   return res.json({
-    applications,
+    applications: data || [],
     authRoleSynchronized: Boolean(req.authRoleSynchronized),
   })
+}
+
+export async function getAdminApplicationDocumentUrl(req, res) {
+  if (!await requireSuperAdmin(req, res)) return
+  const applicationId = Number(req.params.id)
+  if (!Number.isInteger(applicationId) || applicationId < 1) {
+    return res.status(400).json({ error: 'A valid application is required.' })
+  }
+
+  const { data: application, error: applicationError } = await supabaseAdmin
+    .from('location_admin_applications')
+    .select('company_document_path')
+    .eq('id', applicationId)
+    .maybeSingle()
+  if (applicationError) return res.status(400).json({ error: applicationError.message })
+  if (!application?.company_document_path) return res.status(404).json({ error: 'Application document not found.' })
+
+  const { data: signed, error: signedUrlError } = await supabaseAdmin.storage
+    .from('company-documents')
+    .createSignedUrl(application.company_document_path, 600)
+  if (signedUrlError || !signed?.signedUrl) {
+    return res.status(400).json({ error: signedUrlError?.message || 'Could not open the application document.' })
+  }
+
+  res.set('Cache-Control', 'private, no-store')
+  return res.json({ documentUrl: signed.signedUrl, expiresIn: 600 })
 }
 
 export async function decideAdminApplication(req, res) {
@@ -304,8 +443,15 @@ export async function decideAdminApplication(req, res) {
   if (!reviewer) return
   const applicationId = Number(req.params.id)
   const decision = req.body?.decision
+  const rejectionReason = String(req.body?.rejectionReason || '').trim()
   if (!Number.isInteger(applicationId) || !['approved', 'rejected'].includes(decision)) {
     return res.status(400).json({ error: 'A valid application and decision are required.' })
+  }
+  if (decision === 'rejected' && !rejectionReason) {
+    return res.status(400).json({ error: 'A rejection reason is required.' })
+  }
+  if (rejectionReason.length > 500) {
+    return res.status(400).json({ error: 'The rejection reason must be 500 characters or fewer.' })
   }
   const { data: application, error } = await supabaseAdmin
     .from('location_admin_applications').select('*')
@@ -314,7 +460,7 @@ export async function decideAdminApplication(req, res) {
 
   if (decision === 'rejected') {
     const { error: rejectionError } = await supabaseAdmin.from('location_admin_applications')
-      .update({ status: 'rejected', reviewed_by: reviewer.id, reviewed_at: new Date().toISOString() })
+      .update({ status: 'rejected', rejection_reason: rejectionReason, reviewed_by: reviewer.id, reviewed_at: new Date().toISOString() })
       .eq('id', applicationId).eq('status', 'pending')
     if (rejectionError) return res.status(400).json({ error: rejectionError.message })
     return res.json({ success: true, status: 'rejected' })
@@ -323,7 +469,36 @@ export async function decideAdminApplication(req, res) {
   const role = 'location_admin'
   let locationId = application.requested_location_id
   let createdLocationId = null
+  if (locationId) {
+    const { data: assignedLocation, error: assignmentError } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .eq('location_id', locationId)
+      .neq('id', application.user_id)
+      .limit(1)
+      .maybeSingle()
+    if (assignmentError) return res.status(400).json({ error: assignmentError.message })
+    if (assignedLocation) {
+      return res.status(409).json({ error: 'This location already has an administrator. Reject the application and ask the applicant to choose another location.' })
+    }
+  }
   if (!locationId) {
+    try {
+      const conflict = await findUnavailableCustomLocation({
+        name: application.requested_location_name,
+        address: application.requested_location_address,
+        latitude: application.requested_latitude,
+        longitude: application.requested_longitude,
+      }, application.id)
+      if (conflict) {
+        return res.status(409).json({
+          error: `${conflict.name || 'This location'} is no longer available. Reject this application and ask the applicant to choose another location.`,
+        })
+      }
+    } catch (conflictError) {
+      respondToAdminClientError(res, conflictError)
+      return
+    }
     const { data: location, error: locationError } = await supabaseAdmin.from('ecological_locations').insert({
       name: application.requested_location_name,
       state: application.requested_state || 'Kuala Lumpur',
@@ -343,6 +518,9 @@ export async function decideAdminApplication(req, res) {
     .update({ role, location_id: locationId }).eq('id', application.user_id)
   if (profileError) {
     if (createdLocationId) await supabaseAdmin.from('ecological_locations').delete().eq('id', createdLocationId)
+    if (profileError.code === '23505') {
+      return res.status(409).json({ error: 'This location already has an administrator. Reject the application and ask the applicant to choose another location.' })
+    }
     return res.status(400).json({ error: profileError.message })
   }
   const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(application.user_id, {

@@ -34,7 +34,6 @@ const navItems = [
     label: 'Waste',
     page: 'waste',
     children: [
-      { label: 'Overview', page: 'waste-overview' },
       { label: 'Collection Schedules', page: 'waste-schedules' },
       { label: 'Collection History', page: 'waste-history' },
     ],
@@ -52,7 +51,6 @@ const pageLabels = {
   advisories: 'Tourist Advisories',
   thresholds: 'Crowd Thresholds',
   waste: 'Waste Management',
-  'waste-overview': 'Waste / Overview',
   'waste-schedules': 'Waste / Collection Schedules',
   'waste-history': 'Waste / Collection History',
   analytics: 'Environmental Analytics',

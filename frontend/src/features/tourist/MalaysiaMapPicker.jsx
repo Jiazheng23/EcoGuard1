@@ -76,6 +76,7 @@ export default function MalaysiaMapPicker({
   onJourneyChange,
   initialDestination = null,
   lockDestination = false,
+  mode = 'car',
 }) {
   const callbackRef = useRef(onJourneyChange)
 
@@ -116,13 +117,14 @@ export default function MalaysiaMapPicker({
         const route = await calculateMalaysiaRoute(
           origin,
           destination,
+          mode,
         )
 
         if (controller.signal.aborted) return
 
         setRouteCoordinates(route.coordinates)
         setMessage(
-          `Route found: ${route.distanceKm} km, approximately ${route.durationMinutes} minutes.`,
+          `${routeModeLabel(mode)} route found: ${route.distanceKm} km, approximately ${route.durationMinutes} minutes.`,
         )
 
         callbackRef.current?.({
@@ -130,6 +132,7 @@ export default function MalaysiaMapPicker({
           destination,
           distanceKm: route.distanceKm,
           durationMinutes: route.durationMinutes,
+          routeLegs: route.legs || [],
         })
       } catch (routeError) {
         if (controller.signal.aborted) return
@@ -142,6 +145,7 @@ export default function MalaysiaMapPicker({
           destination,
           distanceKm: 0,
           durationMinutes: 0,
+          routeLegs: [],
         })
       } finally {
         if (!controller.signal.aborted) {
@@ -153,7 +157,7 @@ export default function MalaysiaMapPicker({
     loadRoute()
 
     return () => controller.abort()
-  }, [origin, destination])
+  }, [origin, destination, mode])
 
   function selectLocation(location) {
     setSearchResults([])
@@ -172,6 +176,7 @@ export default function MalaysiaMapPicker({
         destination: lockDestination ? destination : null,
         distanceKm: 0,
         durationMinutes: 0,
+        routeLegs: [],
       })
     } else {
       setDestination(location)
@@ -244,6 +249,7 @@ export default function MalaysiaMapPicker({
       destination: initialDestination,
       distanceKm: 0,
       durationMinutes: 0,
+      routeLegs: [],
     })
   }
 
@@ -467,4 +473,8 @@ export default function MalaysiaMapPicker({
       )}
     </section>
   )
+}
+
+function routeModeLabel(mode) {
+  return ({ car: 'Driving', motorcycle: 'Driving', bicycle: 'Cycling', walking: 'Walking', bus: 'Bus', mrt: 'LRT / MRT', mixed: 'Mixed Transport' })[mode] || 'Selected'
 }

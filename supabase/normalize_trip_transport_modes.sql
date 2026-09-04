@@ -29,10 +29,10 @@ set transport_mode = case lower(btrim(coalesce(transport_mode, '')))
   when 'motor cycle' then 'motorcycle'
 
   when 'bus' then 'bus'
-  when 'mrt' then 'bus'
-  when 'lrt' then 'bus'
-  when 'mrt/lrt' then 'bus'
-  when 'mrt / lrt' then 'bus'
+  when 'mrt' then 'mrt'
+  when 'lrt' then 'mrt'
+  when 'mrt/lrt' then 'mrt'
+  when 'mrt / lrt' then 'mrt'
   when 'train' then 'bus'
   when 'ets' then 'bus'
   when 'ets train' then 'bus'
@@ -60,10 +60,10 @@ where transport_mode is distinct from case lower(btrim(coalesce(transport_mode, 
   when 'motorbike' then 'motorcycle'
   when 'motor cycle' then 'motorcycle'
   when 'bus' then 'bus'
-  when 'mrt' then 'bus'
-  when 'lrt' then 'bus'
-  when 'mrt/lrt' then 'bus'
-  when 'mrt / lrt' then 'bus'
+  when 'mrt' then 'mrt'
+  when 'lrt' then 'mrt'
+  when 'mrt/lrt' then 'mrt'
+  when 'mrt / lrt' then 'mrt'
   when 'train' then 'bus'
   when 'ets' then 'bus'
   when 'ets train' then 'bus'
@@ -87,7 +87,7 @@ alter table public.trips
   add constraint trips_supported_transport_mode_check
   check (
     transport_mode is not null
-    and transport_mode in ('car', 'motorcycle', 'bus', 'walking', 'bicycle')
+    and transport_mode in ('car', 'motorcycle', 'bus', 'mrt', 'walking', 'bicycle')
   ) not valid;
 
 alter table public.trips
@@ -95,7 +95,7 @@ alter table public.trips
 
 commit;
 
--- Verification: this should return exactly the five supported modes (or fewer
+-- Verification: this should return exactly the six supported modes (or fewer
 -- when a mode has no trips), and unsupported_trip_count should be zero.
 select transport_mode, count(*) as trip_count
 from public.trips
@@ -105,4 +105,4 @@ order by transport_mode;
 select count(*) as unsupported_trip_count
 from public.trips
 where transport_mode is null
-   or transport_mode not in ('car', 'motorcycle', 'bus', 'walking', 'bicycle');
+   or transport_mode not in ('car', 'motorcycle', 'bus', 'mrt', 'walking', 'bicycle');

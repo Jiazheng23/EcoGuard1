@@ -3,20 +3,23 @@ function numberValue(value) {
   return Number.isFinite(number) ? number : 0
 }
 
-function bucketFor(value, dateRange) {
+function bucketFor(value, granularity) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return null
 
   let bucketDate
   let format
-  if (dateRange === 'all') {
+  if (granularity === 'month') {
     bucketDate = new Date(date.getFullYear(), date.getMonth(), 1)
     format = { month: 'short', year: '2-digit' }
-  } else if (Number(dateRange) > 30) {
+  } else if (granularity === 'week') {
     bucketDate = new Date(date.getFullYear(), date.getMonth(), date.getDate())
     const day = bucketDate.getDay() || 7
     bucketDate.setDate(bucketDate.getDate() - day + 1)
     format = { day: '2-digit', month: 'short' }
+  } else if (granularity === 'hour') {
+    bucketDate = new Date(date.getFullYear(), date.getMonth(), date.getDate(), date.getHours())
+    format = { hour: '2-digit', minute: '2-digit' }
   } else {
     bucketDate = new Date(date.getFullYear(), date.getMonth(), date.getDate())
     format = { day: '2-digit', month: 'short' }
@@ -29,10 +32,23 @@ function bucketFor(value, dateRange) {
   }
 }
 
-function metricBuckets(metrics, dateRange) {
+function metricBuckets(metrics, requestedGranularity) {
+  const timestamps = (metrics || [])
+    .map((metric) => new Date(metric.recorded_at).getTime())
+    .filter(Number.isFinite)
+  const spanDays = timestamps.length > 1
+    ? (Math.max(...timestamps) - Math.min(...timestamps)) / (24 * 60 * 60 * 1000)
+    : 0
+  const validRequestedGranularity = ['hour', 'day', 'week', 'month'].includes(requestedGranularity)
+    ? requestedGranularity
+    : null
+  const granularity = validRequestedGranularity || (spanDays <= 2 ? 'hour'
+    : spanDays <= 45 ? 'day'
+      : spanDays <= 180 ? 'week'
+        : 'month')
   const buckets = new Map()
   for (const metric of metrics || []) {
-    const bucket = bucketFor(metric.recorded_at, dateRange)
+    const bucket = bucketFor(metric.recorded_at, granularity)
     if (!bucket) continue
     if (!buckets.has(bucket.key)) buckets.set(bucket.key, { ...bucket, rows: [] })
     buckets.get(bucket.key).rows.push(metric)
@@ -40,25 +56,25 @@ function metricBuckets(metrics, dateRange) {
   return [...buckets.values()].sort((a, b) => a.timestamp - b.timestamp)
 }
 
-export function buildVisitorDensitySeries(metrics = [], locations = [], dateRange = 'all') {
+export function buildVisitorDensitySeries(metrics = [], locations = [], granularity) {
   const capacityByLocation = Object.fromEntries(
     locations.map((location) => [String(location.id), Math.max(1, numberValue(location.max_capacity))]),
   )
 
-  return metricBuckets(metrics, dateRange).map((bucket) => {
+  return metricBuckets(metrics, granularity).map((bucket) => {
     const locationReadings = new Map()
     for (const row of bucket.rows) {
       const id = String(row.location_id)
-      const current = locationReadings.get(id) || { visitors: 0, count: 0 }
-      current.visitors += numberValue(row.crowd_count)
-      current.count += 1
-      locationReadings.set(id, current)
+      const current = locationReadings.get(id)
+      const currentTime = new Date(current?.recorded_at || 0).getTime()
+      const candidateTime = new Date(row.recorded_at || 0).getTime()
+      if (!current || candidateTime >= currentTime) locationReadings.set(id, row)
     }
 
     let visitors = 0
     let capacity = 0
     for (const [locationId, reading] of locationReadings) {
-      visitors += reading.visitors / reading.count
+      visitors += numberValue(reading.crowd_count)
       capacity += capacityByLocation[locationId] || 1
     }
 
@@ -96,8 +112,8 @@ export function buildLocationDensity(metrics = [], locations = []) {
   }).filter((item) => item.hasReading).sort((a, b) => b.visitors - a.visitors)
 }
 
-export function buildEnvironmentalTrend(metrics = [], dateRange = 'all') {
-  return metricBuckets(metrics, dateRange).map((bucket) => {
+export function buildEnvironmentalTrend(metrics = [], granularity) {
+  return metricBuckets(metrics, granularity).map((bucket) => {
     const count = bucket.rows.length || 1
     return {
       period: bucket.label,

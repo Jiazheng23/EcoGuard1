@@ -175,7 +175,7 @@ export default function TouristWorkspace() {
           onTripSaved={handleTripSaved}
         />
       ) : page === "history" ? (
-        <TouristHistory user={user} />
+        <TouristHistory user={user} profile={profile} />
       ) : page === "achievements" ? (
         <TouristAchievements user={user} profile={profile} />
       ) : page === "monitoring" ? (

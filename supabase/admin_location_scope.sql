@@ -53,6 +53,11 @@ alter table public.profiles
   ) not valid;
 
 create index if not exists profiles_location_id_idx on public.profiles(location_id);
+-- One physical location can be managed by only one approved location admin.
+-- The partial index leaves tourist, pending, and super-admin profiles unaffected.
+create unique index if not exists profiles_one_location_admin_per_location_idx
+  on public.profiles(location_id)
+  where role = 'location_admin';
 create index if not exists crowd_thresholds_location_id_idx on public.crowd_thresholds(location_id);
 create index if not exists location_metrics_location_id_idx on public.location_metrics(location_id);
 
@@ -100,6 +105,7 @@ create table if not exists public.location_admin_applications (
     check (location_method in ('existing', 'search', 'address')),
   company_document_path text not null,
   company_document_name text not null,
+  rejection_reason text,
   status text not null default 'pending'
     check (status in ('pending', 'approved', 'rejected')),
   reviewed_by uuid,
@@ -120,7 +126,16 @@ alter table public.location_admin_applications
   add column if not exists requested_latitude double precision,
   add column if not exists requested_longitude double precision,
   add column if not exists requested_state text,
+  add column if not exists rejection_reason text,
   add column if not exists location_method text not null default 'existing';
+
+alter table public.location_admin_applications
+  drop constraint if exists location_admin_applications_rejection_reason_check;
+alter table public.location_admin_applications
+  add constraint location_admin_applications_rejection_reason_check check (
+    status <> 'rejected'
+    or (rejection_reason is not null and char_length(trim(rejection_reason)) between 1 and 500)
+  ) not valid;
 
 alter table public.location_admin_applications
   drop constraint if exists location_admin_applications_location_request_check;
@@ -141,6 +156,12 @@ alter table public.location_admin_applications
 
 create index if not exists location_admin_applications_status_idx
   on public.location_admin_applications(status, created_at desc);
+
+-- Prevent two active applications from reserving the same existing location,
+-- including requests that arrive at the same time.
+create unique index if not exists location_admin_applications_one_pending_location_idx
+  on public.location_admin_applications(requested_location_id)
+  where status = 'pending' and requested_location_id is not null;
 
 -- Repair accounts rejected by the legacy flow, which incorrectly converted
 -- applicants into tourists. Rejected applicants remain gated and may resubmit.

@@ -92,15 +92,22 @@ export async function listLocationMetrics({ limit = 500 } = {}) {
   return data || []
 }
 
-export async function listEnvironmentalMetricHistory({ limit = 5000 } = {}) {
-  const { data, error } = await supabase
-    .from('environmental_metric_history')
-    .select('*')
-    .order('recorded_at', { ascending: false })
-    .limit(limit)
+export async function listEnvironmentalMetricHistory({ limit = 50000, pageSize = 1000 } = {}) {
+  const rows = []
+  while (rows.length < limit) {
+    const requestedSize = Math.min(pageSize, limit - rows.length)
+    const { data, error } = await supabase
+      .from('environmental_metric_history')
+      .select('*')
+      .order('recorded_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(rows.length, rows.length + requestedSize - 1)
 
-  throwIfError(error)
-  return data || []
+    throwIfError(error)
+    rows.push(...(data || []))
+    if (!data || data.length < requestedSize) break
+  }
+  return rows
 }
 
 export function subscribeToEnvironmentalMetricHistory(onChange) {
@@ -193,7 +200,7 @@ function normalizeMetric(values) {
     water_quality_score: clamp(Number(values.water_quality_score) || 0, 0, 100),
     temperature_c: values.temperature_c === '' || values.temperature_c == null
       ? null
-      : Number(values.temperature_c),
+      : clamp(Number(values.temperature_c), 23, 36),
     source: values.source || 'simulated',
     recorded_at: new Date().toISOString(),
   }
@@ -265,9 +272,21 @@ export function createSimulatedMetric(location, previous) {
     crowd_count: drift(baseline.crowd_count, Math.max(2, Number(location.max_capacity) * 0.012), 0, Number(location.max_capacity)),
     waste_kg: waste,
     recycled_kg: recycled,
-    air_quality_index: drift(baseline.air_quality_index, 2, 0, 500),
-    water_quality_score: drift(baseline.water_quality_score, 0.7, 0, 100, 1),
-    temperature_c: drift(baseline.temperature_c ?? 27, 0.25, -10, 55, 1),
+    air_quality_index: Math.round(clamp(
+      Number(baseline.air_quality_index ?? 65) * 0.75 + 65 * 0.25 + (Math.random() * 16 - 8),
+      25,
+      180,
+    )),
+    water_quality_score: Number(clamp(
+      Number(baseline.water_quality_score ?? 82) * 0.75 + 82 * 0.25 + (Math.random() * 4 - 2),
+      55,
+      98,
+    ).toFixed(1)),
+    temperature_c: Number(clamp(
+      Number(baseline.temperature_c ?? 29) * 0.65 + 29 * 0.35 + (Math.random() * 1.2 - 0.6),
+      23,
+      36,
+    ).toFixed(1)),
     source: 'simulated',
   }
 }

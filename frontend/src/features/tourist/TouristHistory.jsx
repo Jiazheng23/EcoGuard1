@@ -2,14 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertCircle, Award, CalendarDays, Check, ChevronDown, Cloud, Download, History, Leaf, MapPin, Navigation, RefreshCw, Route, Search, SlidersHorizontal, Users, X } from 'lucide-react'
 import { listOwnTrips } from '../../services/tripService'
-import { formatCarbon, formatTransportFilterLabel, formatTripDate, getTripTransportFilterValue, getTripTransportLabel, numberValue } from '../../utils/tripAnalytics'
+import { formatCarbon, formatEcoPoints, formatTransportFilterLabel, formatTripDate, getTripTransportFilterValue, getTripTransportLabel, numberValue } from '../../utils/tripAnalytics'
 import { downloadTripHistoryCsv, downloadTripHistoryPdf } from '../../utils/tripReport'
 import TablePagination from '../../components/TablePagination'
 import useTablePagination from '../../hooks/useTablePagination'
 import LoadingScreen from '../../components/LoadingScreen'
 
 const card = 'rounded-2xl border border-slate-100 bg-white shadow-sm'
-export default function TouristHistory({ user }) {
+export default function TouristHistory({ user, profile }) {
   const [trips, setTrips] = useState([])
   const [query, setQuery] = useState('')
   const [mode, setMode] = useState('all')
@@ -176,7 +176,7 @@ export default function TouristHistory({ user }) {
       <section className="grid gap-4 sm:grid-cols-3">
         <SummaryCard label="Recorded Trips" value={trips.length} detail="Saved journeys" icon={History} />
         <SummaryCard label="Total Distance" value={`${summary.distance.toFixed(1)} km`} detail="Across all trips" icon={MapPin} />
-        <SummaryCard label="Eco Points" value={summary.points.toLocaleString()} detail={`${formatCarbon(summary.emission)} recorded`} icon={Leaf} />
+        <SummaryCard label="Eco Score" value={`${numberValue(profile?.eco_score ?? 50).toLocaleString()} / 100`} detail={`${formatEcoPoints(summary.points)} pts from recorded trips`} icon={Leaf} />
       </section>
 
       <section className={`${card} tourist-history-table relative overflow-visible`}>
@@ -370,11 +370,6 @@ function DetailItem({ icon: Icon, label, value, tone = 'slate' }) {
   const green = tone === 'green'
   const red = tone === 'red'
   return <div className={`flex min-w-0 items-center gap-2 rounded-xl border p-2.5 ${green ? 'border-green-100 bg-green-50' : red ? 'border-red-100 bg-red-50' : 'border-slate-100 bg-slate-50'}`}><span className={`grid size-8 shrink-0 place-items-center rounded-lg ${green ? 'bg-white text-green-600' : red ? 'bg-white text-red-600' : 'bg-white text-slate-500'}`}><Icon size={15} /></span><div className="min-w-0"><p className="text-[10px] font-medium text-slate-400">{label}</p><p className={`mt-0.5 break-words text-xs font-bold leading-snug ${green ? 'text-green-700' : red ? 'text-red-700' : 'text-slate-800'}`}>{value}</p></div></div>
-}
-
-function formatEcoPoints(value) {
-  const points = numberValue(value)
-  return `${points > 0 ? '+' : ''}${points.toLocaleString()}`
 }
 
 function CoordinateItem({ label, value }) {
