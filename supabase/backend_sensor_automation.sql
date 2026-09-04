@@ -61,7 +61,8 @@ begin
       next_recycled := next_waste * (0.25 + random() * 0.55);
       next_air_quality := round(30 + random() * 90);
       next_water_quality := 65 + random() * 33;
-      next_temperature := 24 + random() * 10;
+      -- Keep simulated Malaysian outdoor temperatures in a realistic range.
+      next_temperature := 25 + random() * 8;
 
       insert into public.location_metrics (
         location_id,
@@ -89,7 +90,7 @@ begin
         0,
         least(
           capacity_value,
-          current_metric.crowd_count + (random() * 2 - 1) * greatest(2, capacity_value * 0.08)
+          current_metric.crowd_count + (random() * 2 - 1) * greatest(2, capacity_value * 0.012)
         )
       ));
       next_waste := greatest(
@@ -106,9 +107,20 @@ begin
           current_metric.recycled_kg::double precision + (random() * 2 - 1) * greatest(0.22, capacity_value * 0.0007)
         )
       );
-      next_air_quality := round(greatest(0, least(500, current_metric.air_quality_index + (random() * 24 - 12))));
-      next_water_quality := greatest(0, least(100, current_metric.water_quality_score::double precision + (random() * 8 - 4)));
-      next_temperature := greatest(-10, least(55, coalesce(current_metric.temperature_c::double precision, 27) + (random() * 2 - 1)));
+      next_air_quality := round(greatest(25, least(180,
+        current_metric.air_quality_index * 0.75 + 65 * 0.25 + (random() * 16 - 8)
+      )));
+      next_water_quality := greatest(55, least(98,
+        current_metric.water_quality_score::double precision * 0.75 + 82 * 0.25 + (random() * 4 - 2)
+      ));
+      -- Use mean reversion instead of an unbounded random walk. The hard bounds
+      -- also bring any existing exaggerated value (for example 47.8 C) back
+      -- into range on the next five-minute refresh.
+      next_temperature := greatest(23, least(36,
+        coalesce(current_metric.temperature_c::double precision, 29) * 0.65
+        + 29 * 0.35
+        + (random() * 1.2 - 0.6)
+      ));
 
       update public.location_metrics
       set crowd_count = next_crowd,

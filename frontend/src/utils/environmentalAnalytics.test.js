@@ -13,7 +13,7 @@ const locations = [
   { id: 2, name: 'Penang Hill', max_capacity: 200 },
 ]
 
-test('visitor density averages repeated readings per location before combining locations', () => {
+test('visitor density uses hourly periods when readings only span one day', () => {
   const rows = [
     { location_id: 1, crowd_count: 40, recorded_at: '2026-08-20T08:00:00Z' },
     { location_id: 1, crowd_count: 60, recorded_at: '2026-08-20T09:00:00Z' },
@@ -21,9 +21,36 @@ test('visitor density averages repeated readings per location before combining l
   ]
 
   const result = buildVisitorDensitySeries(rows, locations, '30')
+  assert.equal(result.length, 2)
+  assert.equal(result[0].visitors, 40)
+  assert.equal(result[1].visitors, 160)
+  assert.equal(result[1].occupancy, 53.3)
+  assert.equal(result[1].readingCount, 2)
+  assert.equal(result[1].locationCount, 2)
+})
+
+test('visitor density uses daily periods when readings span several days', () => {
+  const rows = [
+    { location_id: 1, crowd_count: 40, recorded_at: '2026-08-20T08:00:00Z' },
+    { location_id: 1, crowd_count: 70, recorded_at: '2026-08-24T09:00:00Z' },
+  ]
+
+  const result = buildVisitorDensitySeries(rows, locations, '30')
+  assert.equal(result.length, 2)
+  assert.match(result[0].period, /20 Aug/)
+  assert.match(result[1].period, /24 Aug/)
+})
+
+test('visitor density follows the date-filter granularity instead of the data span', () => {
+  const rows = [
+    { location_id: 1, crowd_count: 40, recorded_at: '2026-09-04T08:00:00Z' },
+    { location_id: 1, crowd_count: 60, recorded_at: '2026-09-04T09:00:00Z' },
+  ]
+
+  const result = buildVisitorDensitySeries(rows, locations, 'day')
   assert.equal(result.length, 1)
-  assert.equal(result[0].visitors, 150)
-  assert.equal(result[0].occupancy, 50)
+  assert.equal(result[0].visitors, 60)
+  assert.match(result[0].period, /04 Sept/)
 })
 
 test('location density keeps the latest sensor reading for each location', () => {

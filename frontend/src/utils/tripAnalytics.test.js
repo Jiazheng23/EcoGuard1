@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { formatTransportFilterLabel, formatTransportModeLabel, getTripTransportFilterValue, getTripTransportLabel, tripMatchesEcologicalLocation } from './tripAnalytics.js'
+import { formatEcoPoints, formatTransportFilterLabel, formatTransportModeLabel, getTripTransportFilterValue, getTripTransportLabel, tripMatchesEcologicalLocation } from './tripAnalytics.js'
+
+test('formats trip eco-point changes consistently', () => {
+  assert.equal(formatEcoPoints(4), '+4')
+  assert.equal(formatEcoPoints(0), '0')
+  assert.equal(formatEcoPoints(-2), '-2')
+})
 
 test('labels car trips with their saved power source', () => {
   assert.equal(

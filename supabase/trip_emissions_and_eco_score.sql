@@ -89,6 +89,7 @@ as $$
       when 'over_5000cc' then 45.45::numeric
       else null::numeric
     end
+    when 'mrt' then 70::numeric
     when 'walking' then 0::numeric
     when 'bicycle' then 0::numeric
     else null::numeric
@@ -123,6 +124,7 @@ as $$
       when 'walking' then case when distance_km_value <= 2 then 5 else 2 end
       when 'bicycle' then case when distance_km_value <= 10 then 5 else 2 end
       when 'bus' then case when distance_km_value <= 10 then 3 else 1 end
+      when 'mrt' then case when distance_km_value <= 10 then 3 else 1 end
       when 'motorcycle' then case when distance_km_value <= 10 then 1 else 0 end
       when 'car' then case when distance_km_value <= 10 then -4 else -6 end
       else 0
@@ -152,7 +154,7 @@ declare
 begin
   new.transport_mode := lower(btrim(new.transport_mode));
 
-  if new.transport_mode not in ('car', 'motorcycle', 'bus', 'walking', 'bicycle') then
+  if new.transport_mode not in ('car', 'motorcycle', 'bus', 'mrt', 'walking', 'bicycle') then
     raise check_violation using message = 'Unsupported transport mode.';
   end if;
 

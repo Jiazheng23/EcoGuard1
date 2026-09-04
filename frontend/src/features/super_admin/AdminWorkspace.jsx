@@ -12,7 +12,7 @@ import {
 import AdminDashboard from './AdminDashboard'
 import AdminLayout from './AdminLayout'
 import AdminProfile from './AdminProfile'
-import CrowdThresholds from './CrowdThresholds'
+import ThresholdsHub from './ThresholdsHub'
 import EcologicalLocations from './EcologicalLocations'
 import EnvironmentalAnalytics from './EnvironmentalAnalytics'
 import ReportsHub from './ReportsHub'
@@ -150,7 +150,7 @@ export default function AdminWorkspace({ requiredRole }) {
       setPage('reports')
       return
     }
-    if (profile?.role === 'location_admin' && ['locations', 'thresholds'].includes(nextPage)) {
+    if (profile?.role === 'location_admin' && nextPage === 'locations') {
       setPage('location-detail')
       return
     }
@@ -209,8 +209,8 @@ export default function AdminWorkspace({ requiredRole }) {
   }
 
   const wasteSections = {
-    waste: 'overview',
-    'waste-overview': 'overview',
+    waste: 'schedules',
+    'waste-overview': 'schedules',
     'waste-schedules': 'schedules',
     'waste-history': 'history',
   }
@@ -228,7 +228,7 @@ export default function AdminWorkspace({ requiredRole }) {
     sensors: <SensorManagement {...sharedProps} />,
     incidents: <IncidentManagement {...sharedProps} />,
     advisories: <AdvisoryManagement {...sharedProps} />,
-    thresholds: <CrowdThresholds {...sharedProps} />,
+    thresholds: <ThresholdsHub {...sharedProps} />,
     analytics: <EnvironmentalAnalytics {...sharedProps} />,
     reports: <ReportsHub {...sharedProps} activeTab={reportTab} onTabChange={setReportTab} />,
     applications: <AdminApplications />,

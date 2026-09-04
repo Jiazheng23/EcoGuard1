@@ -1,24 +1,20 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
-import { latestMetricsByLocation } from '../../services/locationService'
 import {
   listWasteCollections,
   listWasteReportExports,
   listWasteSchedules,
-  listWasteThresholds,
 } from '../../services/wasteService'
 import { DEFAULT_WASTE_COLLECTION_FILTERS } from '../../utils/wasteAnalytics'
 import WasteAnalytics from './waste/WasteAnalytics'
 import WasteCollectionForm from './waste/WasteCollectionForm'
 import WasteCollectionHistory from './waste/WasteCollectionHistory'
-import WasteOverview from './waste/WasteOverview'
 import WasteScheduleManager from './waste/WasteScheduleManager'
 
-export default function WasteManagement({ locations, metrics, loading, error, onDataChange, isSuperAdmin, profile, section = 'overview', onSectionChange, embedded = false }) {
+export default function WasteManagement({ locations, loading, error, onDataChange, isSuperAdmin, profile, section = 'schedules', onSectionChange, embedded = false }) {
   const [selectedId, setSelectedId] = useState('')
   const [schedules, setSchedules] = useState([])
   const [collections, setCollections] = useState([])
-  const [thresholds, setThresholds] = useState([])
   const [exportAudits, setExportAudits] = useState([])
   const [collectionFilters, setCollectionFilters] = useState(() => ({ ...DEFAULT_WASTE_COLLECTION_FILTERS }))
   const [wasteLoading, setWasteLoading] = useState(true)
@@ -30,15 +26,13 @@ export default function WasteManagement({ locations, metrics, loading, error, on
     setWasteLoading(true)
     setWasteError('')
     try {
-      const [scheduleRows, collectionRows, thresholdRows, exportRows] = await Promise.all([
+      const [scheduleRows, collectionRows, exportRows] = await Promise.all([
         listWasteSchedules(),
         listWasteCollections(),
-        listWasteThresholds(),
         listWasteReportExports(),
       ])
       setSchedules(scheduleRows)
       setCollections(collectionRows)
-      setThresholds(thresholdRows)
       setExportAudits(exportRows)
     } catch (loadError) {
       setWasteError(loadError.message || 'Unable to load operational waste data.')
@@ -52,14 +46,12 @@ export default function WasteManagement({ locations, metrics, loading, error, on
     Promise.all([
       listWasteSchedules(),
       listWasteCollections(),
-      listWasteThresholds(),
       listWasteReportExports(),
     ])
-      .then(([scheduleRows, collectionRows, thresholdRows, exportRows]) => {
+      .then(([scheduleRows, collectionRows, exportRows]) => {
         if (!active) return
         setSchedules(scheduleRows)
         setCollections(collectionRows)
-        setThresholds(thresholdRows)
         setExportAudits(exportRows)
       })
       .catch((loadError) => {
@@ -78,11 +70,6 @@ export default function WasteManagement({ locations, metrics, loading, error, on
   const selected = isSuperAdmin
     ? locations.find((item) => String(item.id) === String(selectedId)) || locations[0] || null
     : locations.find((item) => String(item.id) === assignedLocationId) || locations[0] || null
-  const latest = useMemo(() => latestMetricsByLocation(metrics), [metrics])
-  const thresholdMap = useMemo(
-    () => Object.fromEntries(thresholds.map((item) => [String(item.location_id), item])),
-    [thresholds],
-  )
   const selectedSchedules = selected
     ? schedules.filter((item) => String(item.location_id) === String(selected.id))
     : []
@@ -110,17 +97,6 @@ export default function WasteManagement({ locations, metrics, loading, error, on
   }
 
   const content = {
-    overview: selected ? (
-      <WasteOverview
-        location={selected}
-        baseline={latest[String(selected.id)]}
-        threshold={thresholdMap[String(selected.id)]}
-        schedules={selectedSchedules}
-        collections={selectedCollections}
-        loading={loading || wasteLoading}
-        onThresholdSaved={refreshWasteData}
-      />
-    ) : null,
     schedules: (
       <WasteScheduleManager
         location={selected}

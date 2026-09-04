@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Area,
   AreaChart,
@@ -16,6 +16,8 @@ import {
 import {
   Activity,
   AlertTriangle,
+  CalendarDays,
+  ChevronDown,
   Clock3,
   CloudSun,
   History,
@@ -24,6 +26,7 @@ import {
   Thermometer,
   Users,
   Waves,
+  X,
 } from 'lucide-react'
 import {
   listEnvironmentalMetricHistory,
@@ -55,14 +58,34 @@ export default function EnvironmentalAnalytics({
 }) {
   const [query, setQuery] = useState('')
   const [locationFilter, setLocationFilter] = useState('all')
-  const [dateRange, setDateRange] = useState('all')
-  const [referenceTime] = useState(() => Date.now())
+  const [dateMode, setDateMode] = useState('range')
+  const [customRange, setCustomRange] = useState({ start: '', end: '' })
+  const [selectedMonth, setSelectedMonth] = useState('')
+  const [selectedYear, setSelectedYear] = useState('')
+  const [dateFilterOpen, setDateFilterOpen] = useState(false)
+  const dateFilterRef = useRef(null)
   const [history, setHistory] = useState([])
   const [historyAvailable, setHistoryAvailable] = useState(null)
+  const [showAllWarnings, setShowAllWarnings] = useState(false)
   const needle = query.trim().toLowerCase()
-  const startTimestamp = dateRange === 'all'
-    ? null
-    : referenceTime - Number(dateRange) * 24 * 60 * 60 * 1000
+  const selectedRange = useMemo(
+    () => getSelectedRange(dateMode, customRange, selectedMonth, selectedYear),
+    [customRange, dateMode, selectedMonth, selectedYear],
+  )
+
+  useEffect(() => {
+    function closeDateFilter(event) {
+      if (event.type === 'keydown' && event.key !== 'Escape') return
+      if (event.type === 'pointerdown' && dateFilterRef.current?.contains(event.target)) return
+      setDateFilterOpen(false)
+    }
+    document.addEventListener('pointerdown', closeDateFilter)
+    document.addEventListener('keydown', closeDateFilter)
+    return () => {
+      document.removeEventListener('pointerdown', closeDateFilter)
+      document.removeEventListener('keydown', closeDateFilter)
+    }
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -79,7 +102,7 @@ export default function EnvironmentalAnalytics({
           setHistory((current) => [
             createdRow,
             ...current.filter((row) => String(row.id) !== String(createdRow.id)),
-          ].slice(0, 5000))
+          ].slice(0, 50000))
         })
       } catch {
         if (!active) return
@@ -108,21 +131,24 @@ export default function EnvironmentalAnalytics({
   )
   const analyticsMetrics = history.length ? history : metrics
   const filteredMetrics = useMemo(() => analyticsMetrics.filter((metric) => {
-    const matchesDate = !startTimestamp || new Date(metric.recorded_at).getTime() >= startTimestamp
+    const recordedAt = new Date(metric.recorded_at).getTime()
+    const matchesDate = Number.isFinite(recordedAt)
+      && (!selectedRange.start || recordedAt >= selectedRange.start)
+      && (!selectedRange.end || recordedAt <= selectedRange.end)
     return matchesDate && visibleLocationIds.has(String(metric.location_id))
-  }), [analyticsMetrics, startTimestamp, visibleLocationIds])
+  }), [analyticsMetrics, selectedRange, visibleLocationIds])
 
   const visitorDensity = useMemo(
-    () => buildVisitorDensitySeries(filteredMetrics, filteredLocations, dateRange),
-    [dateRange, filteredLocations, filteredMetrics],
+    () => buildVisitorDensitySeries(filteredMetrics, filteredLocations, selectedRange.granularity),
+    [filteredLocations, filteredMetrics, selectedRange.granularity],
   )
   const locationDensity = useMemo(
     () => buildLocationDensity(filteredMetrics, filteredLocations),
     [filteredLocations, filteredMetrics],
   )
   const environmentalTrend = useMemo(
-    () => buildEnvironmentalTrend(filteredMetrics, dateRange),
-    [dateRange, filteredMetrics],
+    () => buildEnvironmentalTrend(filteredMetrics, selectedRange.granularity),
+    [filteredMetrics, selectedRange.granularity],
   )
   const summary = useMemo(
     () => getEnvironmentalSummary(filteredMetrics, visitorDensity),
@@ -132,12 +158,20 @@ export default function EnvironmentalAnalytics({
     () => buildCurrentEnvironmentalWarnings(filteredMetrics, filteredLocations, thresholds),
     [filteredLocations, filteredMetrics, thresholds],
   )
+  const warningsByLatest = useMemo(
+    () => [...warnings].sort((a, b) => new Date(b.recordedAt || 0).getTime() - new Date(a.recordedAt || 0).getTime()),
+    [warnings],
+  )
+  const visibleWarnings = showAllWarnings ? warningsByLatest : warningsByLatest.slice(0, 3)
   const peak = summary.peakPeriod
 
   function resetFilters() {
     setQuery('')
     setLocationFilter('all')
-    setDateRange('all')
+    setDateMode('range')
+    setCustomRange({ start: '', end: '' })
+    setSelectedMonth('')
+    setSelectedYear('')
   }
 
   return (
@@ -162,7 +196,7 @@ export default function EnvironmentalAnalytics({
 
       <section className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
         {isSuperAdmin ? (
-          <div className="grid gap-3 md:grid-cols-[1fr_220px_170px_auto]">
+          <div className="grid gap-3 md:grid-cols-[1fr_220px_auto_auto]">
             <label className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
               <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search location, state or type" className="w-full rounded-xl border border-slate-200 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-blue-500" />
@@ -171,8 +205,8 @@ export default function EnvironmentalAnalytics({
               <option value="all">All ecological locations</option>
               {locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
             </select>
-            <PeriodSelect value={dateRange} onChange={setDateRange} />
-            {(query || locationFilter !== 'all' || dateRange !== 'all') && <button type="button" onClick={resetFilters} className="rounded-xl px-3 py-2.5 text-sm font-semibold text-blue-600 hover:bg-blue-50">Reset</button>}
+            <PeriodFilter ref={dateFilterRef} mode={dateMode} onModeChange={setDateMode} range={customRange} onRangeChange={setCustomRange} month={selectedMonth} onMonthChange={setSelectedMonth} year={selectedYear} onYearChange={setSelectedYear} open={dateFilterOpen} onOpenChange={setDateFilterOpen} selectedRange={selectedRange} />
+            {(query || locationFilter !== 'all' || selectedRange.hasFilter) && <button type="button" onClick={resetFilters} className="rounded-xl px-3 py-2.5 text-sm font-semibold text-blue-600 hover:bg-blue-50">Reset</button>}
           </div>
         ) : (
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -180,7 +214,7 @@ export default function EnvironmentalAnalytics({
               <p className="text-sm font-semibold text-slate-700">Assigned-location analytics</p>
               <p className="mt-0.5 text-xs text-slate-400">Only readings for your assigned ecological location are included</p>
             </div>
-            <PeriodSelect value={dateRange} onChange={setDateRange} />
+            <PeriodFilter ref={dateFilterRef} mode={dateMode} onModeChange={setDateMode} range={customRange} onRangeChange={setCustomRange} month={selectedMonth} onMonthChange={setSelectedMonth} year={selectedYear} onYearChange={setSelectedYear} open={dateFilterOpen} onOpenChange={setDateFilterOpen} selectedRange={selectedRange} />
           </div>
         )}
         <div className="mt-2 flex flex-wrap justify-end gap-3 text-xs text-slate-400">
@@ -304,7 +338,7 @@ export default function EnvironmentalAnalytics({
           <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${warnings.length ? 'border-red-200 bg-red-50 text-red-700' : 'border-green-200 bg-green-50 text-green-700'}`}>{warnings.length ? `${warnings.length} active` : 'No active warning'}</span>
         </div>
         <div className="mt-4 grid gap-3 lg:grid-cols-2">
-          {warnings.slice(0, 8).map((warning) => (
+          {visibleWarnings.map((warning) => (
             <div key={warning.key} className={`rounded-xl border p-4 ${severityStyle[warning.severity] || severityStyle.caution}`}>
               <div className="flex items-start gap-3">
                 <AlertTriangle size={17} className="mt-0.5 shrink-0" />
@@ -317,21 +351,66 @@ export default function EnvironmentalAnalytics({
             </div>
           ))}
         </div>
+        {warnings.length > 3 && (
+          <div className="mt-4 flex justify-center border-t border-slate-100 pt-4">
+            <button type="button" onClick={() => setShowAllWarnings((current) => !current)} className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100">
+              {showAllWarnings ? 'Show less' : `Show all (${warnings.length})`}
+            </button>
+          </div>
+        )}
         {!warnings.length && <EmptyState text="No current reading exceeds an environmental or crowd threshold." compact />}
       </article>
     </div>
   )
 }
 
-function PeriodSelect({ value, onChange }) {
+function PeriodFilter({ ref, mode, onModeChange, range, onRangeChange, month, onMonthChange, year, onYearChange, open, onOpenChange, selectedRange }) {
   return (
-    <select aria-label="Analytics period" value={value} onChange={(event) => onChange(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-600 outline-none focus:border-blue-500">
-      <option value="7">Last 7 days</option>
-      <option value="30">Last 30 days</option>
-      <option value="90">Last 90 days</option>
-      <option value="all">All recorded data</option>
-    </select>
+    <div ref={ref} className="relative">
+      <button type="button" onClick={() => onOpenChange(!open)} aria-haspopup="dialog" aria-expanded={open} className={`flex w-full min-w-52 items-center gap-2 rounded-xl border px-3 py-2.5 text-sm transition ${selectedRange.hasFilter ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-600'} hover:border-blue-400`}>
+        <CalendarDays size={16} /><span className="min-w-0 flex-1 truncate text-left font-medium">{selectedRange.label}</span><ChevronDown size={15} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div role="dialog" aria-label="Filter analytics by date" className="absolute right-0 z-30 mt-2 w-[min(22rem,calc(100vw-2rem))] rounded-2xl border border-slate-100 bg-white p-4 shadow-xl">
+          <div className="grid grid-cols-3 rounded-xl bg-slate-100 p-1">
+            {['range', 'month', 'year'].map((item) => <button key={item} type="button" onClick={() => onModeChange(item)} className={`rounded-lg px-2 py-2 text-xs font-semibold capitalize ${mode === item ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>{item}</button>)}
+          </div>
+          <div className="mt-4">
+            {mode === 'range' ? (
+              <div className="grid grid-cols-2 gap-3">
+                <label><span className="mb-1 block text-xs font-semibold text-slate-500">From</span><input type="date" value={range.start} max={range.end || undefined} onChange={(event) => onRangeChange((current) => ({ ...current, start: event.target.value }))} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500" /></label>
+                <label><span className="mb-1 block text-xs font-semibold text-slate-500">To</span><input type="date" value={range.end} min={range.start || undefined} onChange={(event) => onRangeChange((current) => ({ ...current, end: event.target.value }))} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500" /></label>
+              </div>
+            ) : mode === 'month' ? (
+              <label><span className="mb-1 block text-xs font-semibold text-slate-500">Choose month</span><input type="month" value={month} onChange={(event) => onMonthChange(event.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500" /></label>
+            ) : (
+              <label><span className="mb-1 block text-xs font-semibold text-slate-500">Choose year</span><input type="number" min="2000" max="2100" placeholder="e.g. 2026" value={year} onChange={(event) => onYearChange(event.target.value.replace(/\D/g, '').slice(0, 4))} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500" /></label>
+            )}
+          </div>
+          <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
+            <button type="button" disabled={!selectedRange.hasFilter} onClick={() => { onRangeChange({ start: '', end: '' }); onMonthChange(''); onYearChange('') }} className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-700 disabled:opacity-40"><X size={13} /> Clear</button>
+            <button type="button" onClick={() => onOpenChange(false)} className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700">Done</button>
+          </div>
+        </div>
+      )}
+    </div>
   )
+}
+
+function getSelectedRange(mode, range, month, year) {
+  const validYear = /^\d{4}$/.test(year) && Number(year) >= 2000 && Number(year) <= 2100
+  const monthEnd = month ? new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate() : null
+  const from = mode === 'range' ? range.start : mode === 'month' && month ? `${month}-01` : mode === 'year' && validYear ? `${year}-01-01` : ''
+  const to = mode === 'range' ? range.end : mode === 'month' && month ? `${month}-${monthEnd}` : mode === 'year' && validYear ? `${year}-12-31` : ''
+  const label = mode === 'month' && month ? new Date(`${month}-01T00:00:00`).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }) : mode === 'year' && validYear ? year : from || to ? `${from || 'Any'} – ${to || 'Any'}` : 'Any date'
+  const start = from ? new Date(`${from}T00:00:00`).getTime() : null
+  const end = to ? new Date(`${to}T23:59:59.999`).getTime() : null
+  const spanDays = start && end ? (end - start) / (24 * 60 * 60 * 1000) : null
+  const granularity = mode === 'year' && validYear ? 'month'
+    : mode === 'month' && month ? 'day'
+      : spanDays != null ? spanDays <= 2 ? 'hour' : spanDays <= 45 ? 'day' : spanDays <= 180 ? 'week' : 'month'
+        : undefined
+  return { start, end, hasFilter: Boolean(from || to), label, granularity }
 }
 
 function SummaryRow({ label, value }) {

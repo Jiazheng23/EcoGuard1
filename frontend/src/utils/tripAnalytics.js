@@ -53,6 +53,11 @@ export function numberValue(value) {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
+export function formatEcoPoints(value) {
+  const points = numberValue(value)
+  return `${points > 0 ? '+' : ''}${points.toLocaleString()}`
+}
+
 export function formatCarbon(value, digits = 1) {
   return `${numberValue(value).toFixed(digits)} kg CO₂`
 }

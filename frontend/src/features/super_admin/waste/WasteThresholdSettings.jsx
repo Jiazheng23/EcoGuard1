@@ -9,7 +9,7 @@ const DEFAULT_THRESHOLDS = {
   critical_kg: 75,
 }
 
-export default function WasteThresholdSettings({ location, threshold, onSaved }) {
+export default function WasteThresholdSettings({ location, threshold, onSaved, embedded = false }) {
   const [values, setValues] = useState(() => ({
     location_id: location.id,
     moderate_kg: threshold?.moderate_kg ?? DEFAULT_THRESHOLDS.moderate_kg,
@@ -47,7 +47,7 @@ export default function WasteThresholdSettings({ location, threshold, onSaved })
   }
 
   return (
-    <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+    <section className={embedded ? 'rounded-xl bg-slate-50 p-4' : 'rounded-2xl border border-slate-100 bg-white p-5 shadow-sm'}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="flex items-center gap-2 font-bold text-slate-800"><SlidersHorizontal size={18} className="text-amber-500" />Waste alert thresholds</h2>

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Bar,
   BarChart,
@@ -13,17 +13,21 @@ import {
   Bike,
   Bus,
   Car,
+  Check,
   Footprints,
   Leaf,
   MapPin,
   Navigation,
+  Train,
   TrendingDown,
 } from 'lucide-react'
 import { createTrip } from '../../services/tripService'
+import { calculateMalaysiaRoute } from '../../services/mapService'
 import {
   CAR_POWERTRAINS,
   CAR_POWERTRAIN_OPTIONS,
   calculateTripEnvironmentalImpact,
+  getMixedRouteEmissionFactorG,
   recommendedModeForDistance,
 } from '../../utils/tripEnvironmentalRules'
 import MalaysiaMapPicker from './MalaysiaMapPicker'
@@ -32,6 +36,8 @@ const modes = [
   { id: 'car', label: 'Car', icon: Car, color: '#ef4444', tip: 'Choose petrol or electricity to use the correct car emission factor.' },
   { id: 'motorcycle', label: 'Motorcycle', icon: Bike, color: '#f97316', tip: 'Petrol motorcycles emit 41.57 g CO₂e per passenger-km.' },
   { id: 'bus', label: 'Bus', icon: Bus, color: '#f59e0b', tip: 'Diesel buses are the recommended motorised option for longer routes.' },
+  { id: 'mrt', label: 'LRT / MRT', icon: Train, color: '#22c55e', tip: 'Transit rail uses 70 g CO₂e/passenger-km.' },
+  { id: 'mixed', label: 'Mixed', icon: Navigation, color: '#8b5cf6', tip: 'Combines car access, walking, bus, LRT and MRT when available.' },
   { id: 'walking', label: 'Walking', icon: Footprints, color: '#14b8a6', tip: 'Walking produces no direct transport emissions.' },
   { id: 'bicycle', label: 'Bicycle', icon: Bike, color: '#0ea5e9', tip: 'Cycling produces no direct transport emissions.' },
 ]
@@ -66,16 +72,25 @@ export default function CarbonCalculator({
   const [isSaving, setIsSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState('')
   const [saveError, setSaveError] = useState('')
+  const [routeUpdating, setRouteUpdating] = useState(false)
+  const [routeLegs, setRouteLegs] = useState([])
+  const [routeError, setRouteError] = useState('')
 
   const mode = modes.find((item) => item.id === modeId)
+  const isPublicTransport = ['bus', 'mrt', 'mixed'].includes(modeId)
   const km = Math.max(0, Number(distance) || 0)
   const pax = 1
+  const mixedFactorG = useMemo(
+    () => getMixedRouteEmissionFactorG(routeLegs, carPowertrain),
+    [routeLegs, carPowertrain],
+  )
   const environmentalImpact = calculateTripEnvironmentalImpact({
     mode: modeId,
     distanceKm: km,
     passengers: pax,
     roundTrip,
     carPowertrain,
+    factorGOverride: modeId === 'mixed' ? mixedFactorG : undefined,
   })
   const perPassenger = environmentalImpact.carbonEmissionKg
   const total = environmentalImpact.totalEmissionKg
@@ -85,7 +100,7 @@ export default function CarbonCalculator({
   const comparison = useMemo(
     () =>
       modes
-        .filter((item) => !['walking', 'bicycle'].includes(item.id))
+        .filter((item) => !['walking', 'bicycle', 'mixed'].includes(item.id))
         .map((item) => ({
           name: item.label,
           emission: calculateTripEnvironmentalImpact({
@@ -108,30 +123,89 @@ export default function CarbonCalculator({
     carPowertrain,
   }).carbonEmissionKg
 
+  useEffect(() => {
+    if (step !== 2 || !journeyCoordinates.origin || !journeyCoordinates.destination) return
+    const controller = new AbortController()
+
+    async function refreshRouteForMode() {
+      setRouteUpdating(true)
+      setRouteError('')
+
+      try {
+        const route = await calculateMalaysiaRoute(
+          journeyCoordinates.origin,
+          journeyCoordinates.destination,
+          modeId,
+        )
+        if (!controller.signal.aborted) {
+          setDistance(String(route.distanceKm || 0))
+          setRouteLegs(route.legs || [])
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setDistance('0')
+          setRouteLegs([])
+          setRouteError(error.message || 'Unable to calculate this transport route.')
+        }
+      } finally {
+        if (!controller.signal.aborted) setRouteUpdating(false)
+      }
+    }
+
+    refreshRouteForMode()
+    return () => controller.abort()
+  }, [modeId, step, journeyCoordinates])
+
   function handleJourneyChange({
     origin: selectedOrigin,
     destination: selectedDestination,
     distanceKm,
+    routeLegs: selectedRouteLegs = [],
   }) {
     setOrigin(selectedOrigin?.name || '')
     setDestination(selectedDestination?.name || '')
     setDistance(String(distanceKm || 0))
+    setRouteLegs(selectedRouteLegs)
     setJourneyCoordinates({
       origin: selectedOrigin,
       destination: selectedDestination,
     })
     setSaveMessage('')
     setSaveError('')
+    setRouteError('')
     if (distanceKm > 0) {
       const recommendation = recommendedModeForDistance(distanceKm)
       setRecommendedModeId(recommendation)
-      setModeId(recommendation)
     }
+  }
+
+  function startNewCalculation() {
+    setStep(1)
+    setModeId('car')
+    setRecommendedModeId(null)
+    setDistance('0')
+    setRoundTrip(false)
+    setOrigin('')
+    setDestination(initialDestination?.name || '')
+    setJourneyCoordinates({
+      origin: null,
+      destination: initialDestination,
+    })
+    setRouteError('')
+    setRouteUpdating(false)
+    setRouteLegs([])
+    setSaveMessage('')
+    setSaveError('')
   }
 
   async function saveTrip() {
     setSaveMessage('')
     setSaveError('')
+
+    if (modeId === 'mixed') {
+      setSaveError('Mixed routes are calculated only and are not saved to trip history.')
+      return
+    }
 
     if (!user) {
       setSaveError('You must be logged in to save a trip.')
@@ -208,6 +282,7 @@ export default function CarbonCalculator({
             onJourneyChange={handleJourneyChange}
             initialDestination={initialDestination}
             lockDestination={Boolean(initialDestination)}
+            mode="car"
           />
           <button
             type="button"
@@ -245,12 +320,12 @@ export default function CarbonCalculator({
               iconClass="text-orange-500"
             />
 
-            <ReadOnlyNumberField label="Route Distance" value={distance} />
+            <ReadOnlyNumberField label={routeUpdating ? 'Updating Route Distance...' : 'Route Distance'} value={distance} />
 
             <button
               type="button"
               onClick={() => setRoundTrip((current) => !current)}
-              className="flex items-center gap-3 text-sm text-slate-600"
+              className="mt-2 flex items-center gap-3 text-sm text-slate-600"
             >
               <span
                 className={`relative h-5 w-10 rounded-full transition ${
@@ -268,13 +343,21 @@ export default function CarbonCalculator({
           </section>
 
           <section className={`${card} sm:p-6`}>
-            <h2 className="mb-3 font-bold text-slate-800">Transport Mode</h2>
+            <div className="mb-3 flex items-end justify-between gap-3">
+              <div>
+                <h2 className="font-bold text-slate-800">Transport Mode</h2>
+                <p className="mt-0.5 text-xs text-slate-400">Choose how you want to travel</p>
+              </div>
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                {modes.length} options
+              </span>
+            </div>
             {recommendedModeId && (
               <p className="mb-3 rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-700">
                 Recommended for this {km.toFixed(1)} km route: <b>{modes.find((item) => item.id === recommendedModeId)?.label}</b>. You may choose another mode below.
               </p>
             )}
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-4">
               {modes.map((item) => {
                 const Icon = item.icon
                 const active = item.id === modeId
@@ -283,10 +366,16 @@ export default function CarbonCalculator({
                   <button
                     type="button"
                     onClick={() => {
+                      if (item.id !== modeId && journeyCoordinates.origin && journeyCoordinates.destination) {
+                        setDistance('0')
+                        setRouteLegs([])
+                        setRouteUpdating(true)
+                      }
                       setModeId(item.id)
                       setSaveMessage('')
+                      setRouteError('')
                     }}
-                    className="flex min-h-20 flex-col items-center justify-center gap-1 rounded-xl border-2 p-2 text-xs"
+                    className="group relative flex min-h-24 flex-col items-center justify-center gap-2 overflow-hidden rounded-xl border-2 p-3 text-xs transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-sm"
                     style={{
                       borderColor: active ? item.color : '#f1f5f9',
                       color: active ? item.color : '#64748b',
@@ -294,12 +383,28 @@ export default function CarbonCalculator({
                     }}
                     key={item.id}
                   >
-                    <Icon size={17} />
-                    <span>{item.label}</span>
+                    {active && (
+                      <span
+                        className="absolute right-2 top-2 grid size-4 place-items-center rounded-full text-white"
+                        style={{ backgroundColor: item.color }}
+                      >
+                        <Check size={10} strokeWidth={3} />
+                      </span>
+                    )}
+                    <span
+                      className="grid size-9 place-items-center rounded-full transition group-hover:scale-105"
+                      style={{ backgroundColor: active ? `${item.color}1f` : '#eef2f7' }}
+                    >
+                      <Icon size={18} />
+                    </span>
+                    <span className="text-center font-semibold leading-tight">{item.label}</span>
                   </button>
                 )
               })}
             </div>
+            <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
+              <b style={{ color: mode.color }}>{mode.label}:</b> {mode.tip}
+            </p>
 
             {modeId === 'car' && (
               <fieldset className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3">
@@ -326,12 +431,65 @@ export default function CarbonCalculator({
                         key={option.id}
                       >
                         <b className="block">{option.label}</b>
-                        {option.factorG} g CO₂e / passenger-km
+                        {option.factorG} g CO₂e/passenger-km
                       </button>
                     )
                   })}
                 </div>
               </fieldset>
+            )}
+
+            {isPublicTransport && (
+              <div className="mt-4">
+                {routeUpdating ? (
+                  <p className="rounded-xl bg-amber-50 p-3 text-xs font-medium text-amber-700">Finding the public-transport journey...</p>
+                ) : routeError ? (
+                  <p className="rounded-xl bg-red-50 p-3 text-xs font-medium text-red-600" role="alert">{routeError}</p>
+                ) : routeLegs.length > 0 ? (
+                  <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                    <div className="border-b border-slate-200 bg-white px-3 py-2">
+                      <p className="text-xs font-bold text-slate-700">Journey directions</p>
+                      <p className="mt-0.5 text-[11px] text-slate-400">Follow these legs in order</p>
+                    </div>
+                    <ol className="divide-y divide-slate-200">
+                      {routeLegs.map((leg, index) => {
+                        const walking = leg.mode === 'walk' || leg.mode === 'foot'
+                        const rail = ['rail', 'subway', 'tram', 'metro', 'monorail'].includes(leg.mode)
+                        const driving = leg.mode === 'car'
+                        const LegIcon = walking ? Footprints : rail ? Train : driving ? Car : Bus
+                        const vehicle = leg.transportLabel || (rail ? 'LRT / MRT' : driving ? 'Car' : 'Bus')
+                        const label = walking ? 'Walk' : `${vehicle}${leg.route ? ` ${leg.route}` : ''}`
+
+                        return (
+                          <li className="flex gap-3 px-3 py-3" key={`${leg.mode}-${leg.route || 'leg'}-${index}`}>
+                            <span className={`grid size-8 shrink-0 place-items-center rounded-full ${walking ? 'bg-teal-100 text-teal-700' : 'bg-amber-100 text-amber-700'}`}>
+                              <LegIcon size={15} />
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center justify-between gap-1">
+                                <b className="text-xs text-slate-700">{index + 1}. {label}</b>
+                                <span className="text-[11px] text-slate-400">{leg.distanceKm.toFixed(2)} km · {leg.durationMinutes} min</span>
+                              </div>
+                              <p className="mt-1 truncate text-[11px] text-slate-500">{leg.from || 'Selected origin'} → {leg.to || 'Selected destination'}</p>
+                              {!walking && leg.headsign && <p className="mt-0.5 text-[11px] text-amber-700">Towards {leg.headsign}</p>}
+                            </div>
+                          </li>
+                        )
+                      })}
+                    </ol>
+                  </div>
+                ) : null}
+                <p className="mt-2 text-[11px] leading-5 text-slate-400">
+                  Routes provided by{' '}
+                  <a className="font-semibold text-green-700 underline" href="https://transitous.org/sources/" target="_blank" rel="noreferrer">
+                    Transitous and its data sources
+                  </a>.
+                </p>
+              </div>
+            )}
+
+            {!isPublicTransport && routeError && (
+              <p className="mt-4 rounded-xl bg-red-50 p-3 text-xs font-medium text-red-600" role="alert">{routeError}</p>
             )}
           </section>
 
@@ -386,7 +544,7 @@ export default function CarbonCalculator({
               />
               <ResultItem
                 label="Emission Factor"
-                value={`${environmentalImpact.factorG} g/pax-km`}
+                value={`${environmentalImpact.factorG} g CO₂e/passenger-km`}
                 color="#64748b"
               />
             </div>
@@ -422,7 +580,7 @@ export default function CarbonCalculator({
               </p>
             </div>
 
-            {!['bus', 'walking', 'bicycle'].includes(modeId) &&
+            {!['bus', 'mrt', 'mixed', 'walking', 'bicycle'].includes(modeId) &&
               km > 0 && (
                 <div className="mt-4 flex items-center justify-between rounded-xl border border-blue-200 bg-blue-50 p-3.5">
                   <p className="text-sm text-blue-700">
@@ -454,22 +612,35 @@ export default function CarbonCalculator({
                 </p>
               )}
 
-              <button
-                type="button"
-                onClick={saveTrip}
-                disabled={
-                  isSaving ||
-                  !user ||
-                  !journeyCoordinates.origin ||
-                  !journeyCoordinates.destination ||
-                  km <= 0
-                }
-                className="w-full rounded-xl bg-green-500 py-3 text-sm font-semibold text-white transition hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {isSaving
-                  ? 'Saving Trip...'
-                  : `Save Trip (${formatSignedPoints(ecoPoints)} Eco Score)`}
-              </button>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={startNewCalculation}
+                  className="rounded-xl border border-green-600 bg-white px-4 py-3 text-sm font-semibold text-green-700 transition hover:bg-green-50"
+                >
+                  Calculate New Trip
+                </button>
+
+                <button
+                  type="button"
+                  onClick={saveTrip}
+                  disabled={
+                    isSaving ||
+                    modeId === 'mixed' ||
+                    !user ||
+                    !journeyCoordinates.origin ||
+                    !journeyCoordinates.destination ||
+                    km <= 0
+                  }
+                  className="rounded-xl bg-green-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {modeId === 'mixed'
+                    ? 'Mixed Route — Calculation Only'
+                    : isSaving
+                    ? 'Saving Trip...'
+                    : `Save Trip — Optional (${formatSignedPoints(ecoPoints)} Eco Score)`}
+                </button>
+              </div>
             </div>
           </section>
 
