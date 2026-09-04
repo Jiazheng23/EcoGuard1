@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { AlertTriangle, Check, ChevronDown, ExternalLink, FileText, RefreshCw, Search, X } from 'lucide-react'
-import { decideAdminApplication, listAdminApplications } from '../../services/adminApplicationService'
+import { AlertTriangle, Check, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, FileText, RefreshCw, Search, X } from 'lucide-react'
+import { decideAdminApplication, getAdminApplicationDocumentUrl, listAdminApplications } from '../../services/adminApplicationService'
 
 const statusOptions = [
   { value: 'all', label: 'All statuses' },
@@ -23,6 +23,8 @@ const rejectionReasons = [
   'The requested location information is incomplete or inaccurate.',
 ]
 
+const applicationsPerPage = 5
+
 export default function AdminApplications() {
   const [applications, setApplications] = useState([])
   const [query, setQuery] = useState('')
@@ -34,6 +36,8 @@ export default function AdminApplications() {
   const [rejectingApplication, setRejectingApplication] = useState(null)
   const [rejectionPreset, setRejectionPreset] = useState('')
   const [rejectionReason, setRejectionReason] = useState('')
+  const [openingDocumentId, setOpeningDocumentId] = useState(null)
+  const [currentPage, setCurrentPage] = useState(1)
 
   async function refresh(clearMessage = true) {
     setLoading(true)
@@ -82,6 +86,13 @@ export default function AdminApplications() {
     })
   }, [applications, query, statusFilter])
 
+  const totalPages = Math.max(1, Math.ceil(filteredApplications.length / applicationsPerPage))
+  const displayPage = Math.min(currentPage, totalPages)
+  const paginatedApplications = useMemo(() => {
+    const start = (displayPage - 1) * applicationsPerPage
+    return filteredApplications.slice(start, start + applicationsPerPage)
+  }, [displayPage, filteredApplications])
+
   async function decide(id, decision, reason = '') {
     setMessage('')
     setDecidingId(id)
@@ -112,6 +123,27 @@ export default function AdminApplications() {
     setMessage('')
   }
 
+  async function openDocument(application) {
+    const previewWindow = window.open('about:blank', '_blank')
+    if (previewWindow) previewWindow.opener = null
+    setOpeningDocumentId(application.id)
+    setMessage('')
+    try {
+      const documentUrl = await getAdminApplicationDocumentUrl(application.id)
+      if (previewWindow) previewWindow.location.replace(documentUrl)
+      else {
+        const openedWindow = window.open(documentUrl, '_blank', 'noopener,noreferrer')
+        if (!openedWindow) throw new Error('Your browser blocked the document window. Allow pop-ups for EcoGuard and try again.')
+      }
+    } catch (error) {
+      previewWindow?.close()
+      setMessageType('error')
+      setMessage(error.message)
+    } finally {
+      setOpeningDocumentId(null)
+    }
+  }
+
   return (
     <div className="mx-auto max-w-7xl">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -131,11 +163,11 @@ export default function AdminApplications() {
           <label className="relative min-w-0 flex-1">
             <span className="sr-only">Search applications</span>
             <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search applicant, location, document, or status" className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-3 text-sm text-slate-700 outline-none focus:border-blue-500" />
+            <input value={query} onChange={(event) => { setQuery(event.target.value); setCurrentPage(1) }} placeholder="Search applicant, location, document, or status" className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-3 text-sm text-slate-700 outline-none focus:border-blue-500" />
           </label>
           <label>
             <span className="sr-only">Filter application status</span>
-            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-500 sm:w-48">
+            <select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setCurrentPage(1) }} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-500 sm:w-48">
               {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </label>
@@ -157,18 +189,17 @@ export default function AdminApplications() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredApplications.map((item) => (
+                {paginatedApplications.map((item) => (
                   <tr key={item.id} className="transition hover:bg-slate-50/70">
                     <td className="px-5 py-4">
                       <p className="font-semibold text-slate-800">{item.profiles?.full_name || 'Unnamed applicant'}</p>
                     </td>
                     <td className="px-5 py-4 text-slate-600"><p className="font-medium">{item.ecological_locations?.name || item.requested_location_name || item.requested_location_id}</p>{item.requested_location_address && <p className="mt-1 max-w-xs text-xs text-slate-400">{item.requested_location_address}</p>}</td>
                     <td className="px-5 py-4">
-                      {item.documentUrl ? (
-                        <a href={item.documentUrl} target="_blank" rel="noreferrer" className="inline-flex max-w-56 items-center gap-1.5 text-blue-600 hover:text-blue-700">
-                          <FileText size={15} className="shrink-0" /><span className="truncate">{item.company_document_name}</span><ExternalLink size={13} className="shrink-0" />
-                        </a>
-                      ) : <span className="text-slate-600">{item.company_document_name}</span>}
+                      <p className="max-w-56 truncate text-xs text-slate-500" title={item.company_document_name}>{item.company_document_name}</p>
+                      <button type="button" onClick={() => openDocument(item)} disabled={openingDocumentId === item.id} className="mt-1.5 inline-flex items-center gap-1.5 text-left text-sm font-semibold text-blue-600 hover:text-blue-700 disabled:cursor-wait disabled:opacity-50">
+                        <FileText size={15} className="shrink-0" /><span>{openingDocumentId === item.id ? 'Opening...' : 'View document'}</span><ExternalLink size={13} className="shrink-0" />
+                      </button>
                     </td>
                     <td className="whitespace-nowrap px-5 py-4 text-slate-600" title={item.created_at}>{formatApplicationDate(item.created_at)}</td>
                     <td className="px-5 py-4"><span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold capitalize ring-1 ring-inset ${statusStyles[item.status] || 'bg-slate-50 text-slate-600 ring-slate-100'}`}>{item.status}</span></td>
@@ -192,7 +223,7 @@ export default function AdminApplications() {
           </div>
         )}
 
-        {!loading && applications.length > 0 && <div className="border-t border-slate-100 px-5 py-3 text-xs text-slate-400">Showing {filteredApplications.length} of {applications.length} applications</div>}
+        {!loading && applications.length > 0 && <div className="flex flex-col gap-3 border-t border-slate-100 px-5 py-3 sm:flex-row sm:items-center sm:justify-between"><p className="text-xs text-slate-400">Showing {filteredApplications.length ? (displayPage - 1) * applicationsPerPage + 1 : 0}–{Math.min(displayPage * applicationsPerPage, filteredApplications.length)} of {filteredApplications.length} matching applications</p><nav className="flex items-center justify-end gap-2" aria-label="Application pagination"><button type="button" onClick={() => setCurrentPage(Math.max(1, displayPage - 1))} disabled={displayPage === 1} className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-35" aria-label="Previous page"><ChevronLeft size={16} /></button><span className="min-w-20 text-center text-xs font-semibold text-slate-600">Page {displayPage} of {totalPages}</span><button type="button" onClick={() => setCurrentPage(Math.min(totalPages, displayPage + 1))} disabled={displayPage === totalPages} className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-35" aria-label="Next page"><ChevronRight size={16} /></button></nav></div>}
       </section>
 
       {rejectingApplication && createPortal(<RejectionDialog

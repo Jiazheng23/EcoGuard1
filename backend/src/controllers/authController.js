@@ -402,19 +402,40 @@ export async function listAdminApplications(req, res) {
   if (!await requireSuperAdmin(req, res)) return
   const { data, error } = await supabaseAdmin
     .from('location_admin_applications')
-    .select('*, profiles!location_admin_applications_user_id_fkey(full_name), ecological_locations!location_admin_applications_requested_location_id_fkey(name)')
+    .select('id, user_id, requested_location_id, requested_location_name, requested_location_address, requested_latitude, requested_longitude, requested_state, location_method, company_document_name, status, rejection_reason, reviewed_by, reviewed_at, created_at, profiles!location_admin_applications_user_id_fkey(full_name), ecological_locations!location_admin_applications_requested_location_id_fkey(name)')
     .order('created_at', { ascending: false })
   if (error) return res.status(400).json({ error: error.message })
-  const applications = await Promise.all((data || []).map(async (item) => {
-    const { data: signed } = await supabaseAdmin.storage
-      .from('company-documents').createSignedUrl(item.company_document_path, 600)
-    return { ...item, documentUrl: signed?.signedUrl || null }
-  }))
   res.set('Cache-Control', 'private, no-store')
   return res.json({
-    applications,
+    applications: data || [],
     authRoleSynchronized: Boolean(req.authRoleSynchronized),
   })
+}
+
+export async function getAdminApplicationDocumentUrl(req, res) {
+  if (!await requireSuperAdmin(req, res)) return
+  const applicationId = Number(req.params.id)
+  if (!Number.isInteger(applicationId) || applicationId < 1) {
+    return res.status(400).json({ error: 'A valid application is required.' })
+  }
+
+  const { data: application, error: applicationError } = await supabaseAdmin
+    .from('location_admin_applications')
+    .select('company_document_path')
+    .eq('id', applicationId)
+    .maybeSingle()
+  if (applicationError) return res.status(400).json({ error: applicationError.message })
+  if (!application?.company_document_path) return res.status(404).json({ error: 'Application document not found.' })
+
+  const { data: signed, error: signedUrlError } = await supabaseAdmin.storage
+    .from('company-documents')
+    .createSignedUrl(application.company_document_path, 600)
+  if (signedUrlError || !signed?.signedUrl) {
+    return res.status(400).json({ error: signedUrlError?.message || 'Could not open the application document.' })
+  }
+
+  res.set('Cache-Control', 'private, no-store')
+  return res.json({ documentUrl: signed.signedUrl, expiresIn: 600 })
 }
 
 export async function decideAdminApplication(req, res) {
