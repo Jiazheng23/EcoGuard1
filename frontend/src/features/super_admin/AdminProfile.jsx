@@ -3,6 +3,7 @@ import { AlertCircle, CalendarDays, CheckCircle2, Mail, Phone, Save, ShieldCheck
 import { supabase } from '../../services/supabaseClient'
 import { updateOwnProfile } from '../../services/profileService'
 import ProfileAvatarUploader from '../profile/ProfileAvatarUploader'
+import { isValidMalaysianPhone, MALAYSIAN_PHONE_ERROR } from '../../utils/malaysianPhone'
 
 const card = 'rounded-2xl border border-slate-100 bg-white p-5 shadow-sm'
 
@@ -28,12 +29,19 @@ export default function AdminProfile({ user, profile, onProfileChange }) {
       return
     }
 
+    const cleanPhone = phone.trim()
+    if (!isValidMalaysianPhone(cleanPhone)) {
+      setError(MALAYSIAN_PHONE_ERROR)
+      return
+    }
+
     setSaving(true)
     try {
-      const updated = await updateOwnProfile(user.id, { fullName, phone, gender, avatarUrl: profile?.avatar_url })
+      const updated = await updateOwnProfile(user.id, { fullName, phone: cleanPhone, gender, avatarUrl: profile?.avatar_url })
       const { error: authError } = await supabase.auth.updateUser({ data: { ...user.user_metadata, full_name: updated.full_name, phone: updated.phone, gender: updated.gender } })
       if (authError) console.warn('Auth display metadata was not updated:', authError.message)
       onProfileChange(updated)
+      setPhone(cleanPhone)
       setMessage('Administrator profile saved to Supabase.')
     } catch (saveError) {
       setError(saveError.message || 'Unable to update the administrator profile.')
@@ -58,7 +66,7 @@ export default function AdminProfile({ user, profile, onProfileChange }) {
           <Field label="Full Name" icon={UserRound} value={fullName} onChange={setFullName} required />
           <Field label="Email Address" icon={Mail} value={user?.email || ''} readOnly />
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Phone Number" icon={Phone} value={phone} onChange={setPhone} />
+            <Field label="Phone Number" icon={Phone} value={phone} onChange={setPhone} placeholder="Example: +60 12-345 6789" type="tel" inputMode="tel" />
             <GenderField value={gender} onChange={setGender} accent="blue" />
           </div>
           <Info label="Member Since" value={joined} icon={CalendarDays} />
@@ -72,11 +80,11 @@ export default function AdminProfile({ user, profile, onProfileChange }) {
 }
 
 function GenderField({ value, onChange, accent }) {
-  return <label className="block"><span className="mb-1.5 block text-xs font-semibold text-slate-500">Gender</span><span className="relative block"><UserRound className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><select value={value} onChange={(event) => onChange(event.target.value)} className={`w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-8 text-sm text-slate-700 outline-none ${accent === 'blue' ? 'focus:border-blue-500' : 'focus:border-green-500'}`}><option value="">Prefer not to specify</option><option value="female">Female</option><option value="male">Male</option><option value="non_binary">Non-binary</option><option value="prefer_not_to_say">Prefer not to say</option></select><span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">⌄</span></span></label>
+  return <label className="block"><span className="mb-1.5 block text-xs font-semibold text-slate-500">Gender</span><span className="relative block"><UserRound className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><select value={value} onChange={(event) => onChange(event.target.value)} className={`w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-8 text-sm text-slate-700 outline-none ${accent === 'blue' ? 'focus:border-blue-500' : 'focus:border-green-500'}`}><option value="">Prefer not to specify</option><option value="female">Female</option><option value="male">Male</option><option value="non_binary">Non-binary</option></select><span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">⌄</span></span></label>
 }
 
-function Field({ label, icon: Icon, value, onChange, readOnly, required }) {
-  return <label className="block"><span className="mb-1.5 block text-xs font-semibold text-slate-500">{label}</span><span className="relative block"><Icon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input value={value} onChange={onChange ? (event) => onChange(event.target.value) : undefined} readOnly={readOnly} required={required} className={`w-full rounded-xl border py-2.5 pl-10 pr-3 text-sm outline-none ${readOnly ? 'cursor-not-allowed border-slate-100 bg-slate-100 text-slate-500' : 'border-slate-200 bg-slate-50 text-slate-700 focus:border-blue-500'}`} /></span></label>
+function Field({ label, icon: Icon, value, onChange, readOnly, required, placeholder, type = 'text', inputMode }) {
+  return <label className="block"><span className="mb-1.5 block text-xs font-semibold text-slate-500">{label}</span><span className="relative block"><Icon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input type={type} inputMode={inputMode} value={value} onChange={onChange ? (event) => onChange(event.target.value) : undefined} placeholder={placeholder} readOnly={readOnly} required={required} className={`w-full rounded-xl border py-2.5 pl-10 pr-3 text-sm outline-none ${readOnly ? 'cursor-not-allowed border-slate-100 bg-slate-100 text-slate-500' : 'border-slate-200 bg-slate-50 text-slate-700 focus:border-blue-500'}`} /></span></label>
 }
 
 function Info({ label, value, icon: Icon }) {

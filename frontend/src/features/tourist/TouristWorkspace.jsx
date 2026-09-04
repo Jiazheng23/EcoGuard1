@@ -19,8 +19,12 @@ export default function TouristWorkspace() {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [calculatorDestination, setCalculatorDestination] = useState(null);
+  const [dashboardMessage, setDashboardMessage] = useState("");
 
   function handleNavigate(nextPage, options = {}) {
+    if (nextPage !== "dashboard") {
+      setDashboardMessage("");
+    }
     if (nextPage === "carbon") {
       setCalculatorDestination(options.destination || null);
     }
@@ -84,7 +88,14 @@ export default function TouristWorkspace() {
     navigate("/login", { replace: true });
   }
 
-  async function handleTripSaved() {
+  async function handleTripSaved(savedTrip) {
+    const savedPoints = Number(savedTrip?.eco_points) || 0;
+    const formattedPoints = savedPoints > 0 ? `+${savedPoints}` : String(savedPoints);
+
+    setDashboardMessage(`Eco Score changed by ${formattedPoints}.`);
+    setCalculatorDestination(null);
+    setPage("dashboard");
+
     if (!user) return;
 
     try {
@@ -111,7 +122,13 @@ export default function TouristWorkspace() {
       onLogout={handleLogout}
     >
       {page === "dashboard" ? (
-        <TouristDashboard onNavigate={handleNavigate} user={user} profile={profile} />
+        <TouristDashboard
+          onNavigate={handleNavigate}
+          user={user}
+          profile={profile}
+          successMessage={dashboardMessage}
+          onDismissMessage={() => setDashboardMessage("")}
+        />
       ) : page === "carbon" ? (
         <CarbonCalculator
           user={user}

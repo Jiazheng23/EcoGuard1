@@ -67,8 +67,11 @@ export default function AdminDashboard({
       .filter((trip) => numberValue(trip.carbon_emission) > 15)
       .sort((left, right) => new Date(right.travelled_at) - new Date(left.travelled_at))
       .slice(0, 4)
+    const recordedTourists = new Set(
+      trips.map((trip) => trip.tourist_id).filter(Boolean),
+    ).size
 
-    return { summary, monthly, destinations, highCarbonTrips }
+    return { summary, monthly, destinations, highCarbonTrips, recordedTourists }
   }, [profiles, trips])
 
   const latestMetrics = useMemo(() => latestMetricsByLocation(metrics), [metrics])
@@ -81,7 +84,14 @@ export default function AdminDashboard({
   const sensor = sensorReadingSummary(selectedSensorLocation, selectedSensorReading)
 
   const kpis = [
-    { label: 'Registered Tourists', value: data.summary.touristCount, delta: `${profiles.length} total profiles`, color: '#3b82f6', icon: Users, page: 'reports' },
+    {
+      label: isSuperAdmin ? 'Registered Tourists' : 'Tourists at Location',
+      value: isSuperAdmin ? data.summary.touristCount : data.recordedTourists,
+      delta: isSuperAdmin ? `${profiles.length} total profiles` : `${data.summary.totalTrips} trips to this location`,
+      color: '#3b82f6',
+      icon: Users,
+      page: 'reports',
+    },
     { label: 'Recorded Destinations', value: data.summary.destinationCount, delta: `${data.summary.totalTrips} saved trips`, color: '#22c55e', icon: MapPin, page: 'locations' },
     { label: 'High Carbon Trips', value: data.summary.highEmissionTrips, delta: 'Above 15 kg per passenger', color: '#ef4444', icon: AlertTriangle, page: 'thresholds' },
     { label: 'Avg Carbon/Trip', value: `${data.summary.averageEmission.toFixed(1)} kg`, delta: `${data.summary.totalEmission.toFixed(1)} kg total`, color: '#8b5cf6', icon: TrendingDown, page: 'reports' },
@@ -101,14 +111,14 @@ export default function AdminDashboard({
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
+      <header>
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900">Admin Dashboard</h1>
-          <p className="mt-0.5 text-sm text-slate-500">Live Supabase overview · profiles, trips, and sensor readings</p>
-        </div>
-        <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-3 py-1.5">
-          <span className="size-2 animate-pulse rounded-full bg-green-500" />
-          <span className="text-xs font-semibold text-green-700">Supabase connected</span>
+          <h1 className="text-2xl font-extrabold text-slate-900">{isSuperAdmin ? 'Admin Dashboard' : 'Location Dashboard'}</h1>
+          <p className="mt-0.5 text-sm text-slate-500">
+            {isSuperAdmin
+              ? 'Live system overview · profiles, trips, and sensor readings'
+              : `${selectedSensorLocation?.name || 'Assigned location'} overview · trips and sensor readings`}
+          </p>
         </div>
       </header>
 
@@ -128,20 +138,21 @@ export default function AdminDashboard({
       </section>
 
       <section aria-labelledby="environmental-overview-heading">
-        <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 id="environmental-overview-heading" className="font-bold text-slate-900">Environmental Monitoring</h2>
             <p className="mt-0.5 text-xs text-slate-400">The same current reading shown on the Sensors page</p>
+            <p className="mt-1 text-xs font-medium text-slate-400">Every 5 minutes{sensor.recordedAt ? ` · Updated ${formatMetricDate(sensor.recordedAt)}` : ''}</p>
           </div>
-          <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             {selectedSensorLocation && isSuperAdmin && locations.length > 1 ? (
-              <label className="min-w-56 text-xs font-semibold text-slate-500">
-                Location
+              <label className="flex min-w-72 items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
+                <span className="inline-flex shrink-0 items-center gap-2"><MapPin size={15} className="text-blue-500" />Location</span>
                 <select
                   aria-label="Dashboard sensor location"
                   value={selectedSensorLocation.id}
                   onChange={(event) => onSensorLocationChange?.(event.target.value)}
-                  className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none focus:border-blue-500"
+                  className="block min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none focus:border-blue-500"
                 >
                   {locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
                 </select>
@@ -149,7 +160,6 @@ export default function AdminDashboard({
             ) : selectedSensorLocation ? (
               <span className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600"><MapPin size={14} className="text-blue-500" />{selectedSensorLocation.name}</span>
             ) : null}
-            <span className="pb-2 text-xs font-medium text-slate-400">Every 5 minutes{sensor.recordedAt ? ` · Updated ${formatMetricDate(sensor.recordedAt)}` : ''}</span>
           </div>
         </div>
         {selectedSensorReading ? (
@@ -227,7 +237,9 @@ export default function AdminDashboard({
           ['Low-impact trips', lowImpact, trips.length, '#22c55e', CheckCircle],
           ['Moderate trips', moderateImpact, trips.length, '#f59e0b', Route],
           ['High-impact trips', data.summary.highEmissionTrips, trips.length, '#ef4444', AlertTriangle],
-          ['Profiles synced', profiles.length, profiles.length, '#8b5cf6', Users],
+          isSuperAdmin
+            ? ['Profiles synced', profiles.length, profiles.length, '#8b5cf6', Users]
+            : ['Tourists recorded', data.recordedTourists, data.recordedTourists, '#8b5cf6', Users],
         ].map(([label, value, total, color, Icon]) => (
           <article key={label} className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
             <div className="mb-2 flex items-center gap-2"><Icon size={14} style={{ color }} /><p className="text-xs text-slate-500">{label}</p></div>

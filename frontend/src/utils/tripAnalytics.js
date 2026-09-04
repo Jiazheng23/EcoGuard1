@@ -20,14 +20,32 @@ export const transportColors = {
   flight: '#8b5cf6',
 }
 
+export function formatTransportModeLabel(mode) {
+  if (!mode) return 'Unknown transport'
+  return transportLabels[mode] || String(mode)
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, (character) => character.toUpperCase())
+}
+
 export function getTripTransportLabel(trip) {
   const mode = trip?.transport_mode
-  const label = transportLabels[mode] || mode || 'Unknown transport'
+  const label = formatTransportModeLabel(mode)
 
   if (mode !== 'car') return label
 
   const powertrain = String(trip?.car_powertrain || '').toLowerCase()
   return `${label} · ${powertrain === 'electricity' ? 'Electricity' : 'Petrol'}`
+}
+
+export function getTripTransportFilterValue(trip) {
+  if (trip?.transport_mode !== 'car') return trip?.transport_mode || ''
+  return `car:${String(trip.car_powertrain || '').toLowerCase() === 'electricity' ? 'electricity' : 'petrol'}`
+}
+
+export function formatTransportFilterLabel(value) {
+  if (value === 'car:petrol') return 'Car · Petrol'
+  if (value === 'car:electricity') return 'Car · Electricity'
+  return formatTransportModeLabel(value)
 }
 
 export function numberValue(value) {
@@ -184,4 +202,62 @@ export function getTripSummary(trips, profiles = []) {
       (trip) => numberValue(trip.carbon_emission) > 15,
     ).length,
   }
+}
+
+export function tripMatchesEcologicalLocation(trip, location, radiusKm = 1.5) {
+  if (!trip || !location) return false
+
+  const destination = normalizeLocationText(trip.destination)
+  const locationNames = [location.name, location.address, location.full_address]
+    .map(normalizeLocationText)
+    .filter((value) => value.length >= 5)
+
+  if (destination && locationNames.some((name) => (
+    destination === name || destination.includes(name) || name.includes(destination)
+  ))) {
+    return true
+  }
+
+  const coordinateValues = [
+    trip.destination_lat,
+    trip.destination_lng,
+    location.latitude,
+    location.longitude,
+  ]
+  if (coordinateValues.some((value) => value == null || value === '')) {
+    return false
+  }
+
+  const [destinationLat, destinationLng, locationLat, locationLng] = coordinateValues.map(Number)
+  if (![destinationLat, destinationLng, locationLat, locationLng].every(Number.isFinite)) {
+    return false
+  }
+
+  return coordinateDistanceKm(
+    destinationLat,
+    destinationLng,
+    locationLat,
+    locationLng,
+  ) <= radiusKm
+}
+
+function normalizeLocationText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+}
+
+function coordinateDistanceKm(firstLat, firstLng, secondLat, secondLng) {
+  const toRadians = (value) => value * (Math.PI / 180)
+  const latitudeDifference = toRadians(secondLat - firstLat)
+  const longitudeDifference = toRadians(secondLng - firstLng)
+  const firstLatitude = toRadians(firstLat)
+  const secondLatitude = toRadians(secondLat)
+  const haversine = Math.sin(latitudeDifference / 2) ** 2
+    + Math.cos(firstLatitude) * Math.cos(secondLatitude)
+      * Math.sin(longitudeDifference / 2) ** 2
+
+  return 6371 * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine))
 }

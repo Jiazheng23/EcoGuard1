@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { MapPin, RefreshCw } from 'lucide-react'
+import { RefreshCw } from 'lucide-react'
 import { latestMetricsByLocation } from '../../services/locationService'
 import {
   listWasteCollections,
@@ -14,7 +14,7 @@ import WasteCollectionHistory from './waste/WasteCollectionHistory'
 import WasteOverview from './waste/WasteOverview'
 import WasteScheduleManager from './waste/WasteScheduleManager'
 
-export default function WasteManagement({ locations, metrics, loading, error, onDataChange, isSuperAdmin, profile, section = 'overview', onSectionChange }) {
+export default function WasteManagement({ locations, metrics, loading, error, onDataChange, isSuperAdmin, profile, section = 'overview', onSectionChange, embedded = false }) {
   const [selectedId, setSelectedId] = useState('')
   const [schedules, setSchedules] = useState([])
   const [collections, setCollections] = useState([])
@@ -155,11 +155,11 @@ export default function WasteManagement({ locations, metrics, loading, error, on
   }[section]
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-6">
+    <div className={`${embedded ? '' : 'mx-auto max-w-6xl'} flex flex-col gap-6`}>
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Waste Management</h1>
-          <p className="mt-1 text-sm text-slate-500">Location-scoped schedules, collection history, sensor readings, analytics, and reports</p>
+          <h2 className={`${embedded ? 'text-lg' : 'text-2xl'} font-bold text-slate-900`}>{embedded ? 'Waste Collection Reports' : 'Waste Management'}</h2>
+          <p className="mt-1 text-sm text-slate-500">{embedded ? 'Analytics calculated from persisted collection records.' : 'Location-scoped schedules, collection history, sensor readings, analytics, and reports'}</p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-3">
           {isSuperAdmin && locations.length > 1 && (
@@ -175,13 +175,6 @@ export default function WasteManagement({ locations, metrics, loading, error, on
           </button>
         </div>
       </header>
-
-      {selected && !isSuperAdmin && (
-        <div className="flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-          <MapPin size={16} className="shrink-0" />
-          <span><span className="font-semibold">Assigned location:</span> {selected.name}</span>
-        </div>
-      )}
 
       {error && <ModuleNotice message={error} />}
       {wasteError && <ModuleNotice message={wasteError} />}
