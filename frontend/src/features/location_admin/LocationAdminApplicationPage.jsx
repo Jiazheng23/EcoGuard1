@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Building2, FileCheck2, Leaf, LogOut, MapPin, Search, ShieldCheck } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../../services/supabaseClient'
 import { searchMalaysiaLocations } from '../../services/mapService'
 import { fileToBase64, getApplicationSetup, submitLocationAdminApplication } from '../../services/locationAdminApplicationService'
@@ -14,8 +14,10 @@ const methods = [
 
 export default function LocationAdminApplicationPage() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const initialSetup = location.state?.applicationSetup
   const [method, setMethod] = useState('search')
-  const [locations, setLocations] = useState([])
+  const [locations, setLocations] = useState(initialSetup?.locations || [])
   const [locationId, setLocationId] = useState('')
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
@@ -23,20 +25,21 @@ export default function LocationAdminApplicationPage() {
   const [locationName, setLocationName] = useState('')
   const [document, setDocument] = useState(null)
   const [message, setMessage] = useState('')
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!initialSetup)
   const [searching, setSearching] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [isResubmission, setIsResubmission] = useState(false)
-  const [rejectionReason, setRejectionReason] = useState('')
+  const [isResubmission, setIsResubmission] = useState(initialSetup?.applicationStatus === 'rejected')
+  const [rejectionReason, setRejectionReason] = useState(initialSetup?.rejectionReason || '')
 
   useEffect(() => {
+    if (initialSetup) return
     getApplicationSetup().then((data) => {
-      if (data.applicationStatus === 'pending') return navigate('/location_admin/pending', { replace: true })
+      if (data.applicationStatus === 'pending') return navigate('/location_admin/pending', { replace: true, state: { applicationSetup: data } })
       setIsResubmission(data.applicationStatus === 'rejected')
       setRejectionReason(data.rejectionReason || '')
       setLocations(data.locations || [])
     }).catch((error) => setMessage(error.message)).finally(() => setLoading(false))
-  }, [navigate])
+  }, [initialSetup, navigate])
 
   async function search(event) {
     event.preventDefault()
@@ -91,7 +94,10 @@ export default function LocationAdminApplicationPage() {
         },
         companyDocument: { name: document.name, type: document.type, base64: await fileToBase64(document) },
       })
-      navigate('/location_admin/pending', { replace: true })
+      navigate('/location_admin/pending', {
+        replace: true,
+        state: { applicationSetup: { hasApplication: true, applicationStatus: 'pending' } },
+      })
     } catch (error) { setMessage(error.message) }
     finally { setSubmitting(false) }
   }

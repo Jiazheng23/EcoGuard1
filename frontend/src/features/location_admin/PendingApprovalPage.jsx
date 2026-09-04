@@ -1,21 +1,27 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Check, Clock3, FileCheck2, Leaf, LoaderCircle, LogOut, RotateCcw, ShieldCheck } from 'lucide-react'
 import { supabase } from '../../services/supabaseClient'
 import { getOwnProfile } from '../../services/profileService'
 import { getApplicationSetup } from '../../services/locationAdminApplicationService'
 import './location-admin-application.css'
-import LoadingScreen from '../../components/LoadingScreen'
 
 export default function PendingApprovalPage() {
   const navigate = useNavigate()
-  const [status, setStatus] = useState('Checking your application...')
-  const [rejected, setRejected] = useState(false)
-  const [rejectionReason, setRejectionReason] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [checking, setChecking] = useState(true)
+  const location = useLocation()
+  const initialSetup = location.state?.applicationSetup
+  const initiallyRejected = initialSetup?.applicationStatus === 'rejected'
+  const [status, setStatus] = useState(initialSetup
+    ? initiallyRejected
+      ? 'Review the feedback below, update your application, and submit it again.'
+      : 'Your company document and location are awaiting review by a super administrator.'
+    : 'Checking your application...')
+  const [rejected, setRejected] = useState(initiallyRejected)
+  const [rejectionReason, setRejectionReason] = useState(initialSetup?.rejectionReason || '')
+  const [loading, setLoading] = useState(!initialSetup)
 
   useEffect(() => {
+    if (initialSetup) return
     supabase.auth.getSession().then(async ({ data }) => {
       if (!data.session?.user) return navigate('/login', { replace: true })
       const profile = await getOwnProfile(data.session.user)
@@ -31,16 +37,12 @@ export default function PendingApprovalPage() {
       } else {
         setStatus('Your company document and location are awaiting review by a super administrator.')
       }
-    }).catch((error) => setStatus(error.message)).finally(() => setLoading(false)).finally(() => setChecking(false))
-  }, [navigate])
+    }).catch((error) => setStatus(error.message)).finally(() => setLoading(false))
+  }, [initialSetup, navigate])
 
   async function logout() {
     await supabase.auth.signOut()
     navigate('/login', { replace: true })
-  }
-
-  if (checking) {
-    return <main className="admin-theme"><LoadingScreen fullScreen tone="blue" label="Checking your application..." /></main>
   }
 
   return <main className="admin-theme location-application-page pending-application-page">

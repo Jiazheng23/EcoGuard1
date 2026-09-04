@@ -17,6 +17,7 @@ import "./auth-layout-stability.css";
 import "./auth-overrides.css";
 import { hadPasswordRecoveryRedirect, supabase } from "../../services/supabaseClient";
 import LoadingScreen from "../../components/LoadingScreen";
+import LocationAdminCheckingPage from "../location_admin/LocationAdminCheckingPage";
 import {
   loginUser,
   registerUser,
@@ -28,6 +29,7 @@ import {
   passwordRecoveryError,
   validateNewPassword,
 } from "../../utils/passwordValidation";
+import { getApplicationSetup } from "../../services/locationAdminApplicationService";
 
 const features = [
   {
@@ -55,6 +57,7 @@ export default function AuthPage({ initialMode }) {
   const [submitted, setSubmitted] = useState(false);
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCheckingLocationAdmin, setIsCheckingLocationAdmin] = useState(false);
   const [recoveryStatus, setRecoveryStatus] = useState(
     initialMode === "reset" ? supabase ? "checking" : "invalid" : "not_applicable",
   );
@@ -194,7 +197,12 @@ export default function AuthPage({ initialMode }) {
         } else if (accountRole === "location_admin") {
           navigate("/location_admin/dashboard", { replace: true });
         } else if (accountRole === "pending_location_admin") {
-          navigate("/location_admin/application", { replace: true });
+          setIsCheckingLocationAdmin(true);
+          const applicationSetup = await getApplicationSetup();
+          const destination = applicationSetup.applicationStatus === "pending"
+            ? "/location_admin/pending"
+            : "/location_admin/application";
+          navigate(destination, { replace: true, state: { applicationSetup } });
         } else {
           navigate("/tourist/dashboard", { replace: true });
         }
@@ -217,6 +225,7 @@ export default function AuthPage({ initialMode }) {
         navigate("/login", { replace: true });
       }
     } catch (error) {
+      setIsCheckingLocationAdmin(false);
       setMessage(error.message || "Authentication failed. Please try again.");
     } finally {
       setIsSubmitting(false);
@@ -232,6 +241,10 @@ export default function AuthPage({ initialMode }) {
 
   if (mode === "reset" && recoveryStatus === "checking") {
     return <LoadingScreen fullScreen label="Checking your password reset link..." />;
+  }
+
+  if (isCheckingLocationAdmin) {
+    return <LocationAdminCheckingPage />;
   }
 
   return (
@@ -423,7 +436,9 @@ export default function AuthPage({ initialMode }) {
                 disabled={isSubmitting}
               >
                 {mode === "login"
-                  ? "Sign In"
+                  ? isSubmitting
+                    ? "Signing In..."
+                    : "Sign In"
                   : mode === "register"
                     ? isSubmitting
                       ? "Creating account..."
