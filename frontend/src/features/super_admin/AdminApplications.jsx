@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Check, ExternalLink, FileText, RefreshCw, Search, X } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { AlertTriangle, Check, ChevronDown, ExternalLink, FileText, RefreshCw, Search, X } from 'lucide-react'
 import { decideAdminApplication, listAdminApplications } from '../../services/adminApplicationService'
 
 const statusOptions = [
@@ -15,6 +16,13 @@ const statusStyles = {
   rejected: 'bg-red-50 text-red-600 ring-red-100',
 }
 
+const rejectionReasons = [
+  'The supporting document is missing, unclear, or invalid.',
+  'The requested location already has an administrator.',
+  'The location details do not match the supporting document.',
+  'The requested location information is incomplete or inaccurate.',
+]
+
 export default function AdminApplications() {
   const [applications, setApplications] = useState([])
   const [query, setQuery] = useState('')
@@ -23,6 +31,9 @@ export default function AdminApplications() {
   const [decidingId, setDecidingId] = useState(null)
   const [message, setMessage] = useState('')
   const [messageType, setMessageType] = useState('success')
+  const [rejectingApplication, setRejectingApplication] = useState(null)
+  const [rejectionPreset, setRejectionPreset] = useState('')
+  const [rejectionReason, setRejectionReason] = useState('')
 
   async function refresh(clearMessage = true) {
     setLoading(true)
@@ -71,15 +82,20 @@ export default function AdminApplications() {
     })
   }, [applications, query, statusFilter])
 
-  async function decide(id, decision) {
+  async function decide(id, decision, reason = '') {
     setMessage('')
     setDecidingId(id)
     try {
-      await decideAdminApplication(id, decision)
+      await decideAdminApplication(id, decision, reason)
       const refreshed = await refresh(false)
       if (refreshed) {
         setMessageType('success')
         setMessage(`Application ${decision}.`)
+        if (decision === 'rejected') {
+          setRejectingApplication(null)
+          setRejectionPreset('')
+          setRejectionReason('')
+        }
       }
     } catch (error) {
       setMessageType('error')
@@ -87,6 +103,13 @@ export default function AdminApplications() {
     } finally {
       setDecidingId(null)
     }
+  }
+
+  function openRejectionDialog(application) {
+    setRejectingApplication(application)
+    setRejectionPreset('')
+    setRejectionReason('')
+    setMessage('')
   }
 
   return (
@@ -153,7 +176,7 @@ export default function AdminApplications() {
                       <div className="flex justify-end gap-2">
                         {item.status === 'pending' ? <>
                           <button type="button" onClick={() => decide(item.id, 'approved')} disabled={decidingId === item.id} className="rounded-lg bg-green-50 p-2 text-green-700 transition hover:bg-green-100 disabled:opacity-40" aria-label={`Approve ${item.profiles?.full_name || 'application'}`}><Check size={17} /></button>
-                          <button type="button" onClick={() => decide(item.id, 'rejected')} disabled={decidingId === item.id} className="rounded-lg bg-red-50 p-2 text-red-600 transition hover:bg-red-100 disabled:opacity-40" aria-label={`Reject ${item.profiles?.full_name || 'application'}`}><X size={17} /></button>
+                          <button type="button" onClick={() => openRejectionDialog(item)} disabled={decidingId === item.id} className="rounded-lg bg-red-50 p-2 text-red-600 transition hover:bg-red-100 disabled:opacity-40" aria-label={`Reject ${item.profiles?.full_name || 'application'}`}><X size={17} /></button>
                         </> : <span className="text-xs text-slate-400">Completed</span>}
                       </div>
                     </td>
@@ -171,8 +194,45 @@ export default function AdminApplications() {
 
         {!loading && applications.length > 0 && <div className="border-t border-slate-100 px-5 py-3 text-xs text-slate-400">Showing {filteredApplications.length} of {applications.length} applications</div>}
       </section>
+
+      {rejectingApplication && createPortal(<RejectionDialog
+        application={rejectingApplication}
+        preset={rejectionPreset}
+        details={rejectionReason}
+        deciding={decidingId !== null}
+        onPresetChange={setRejectionPreset}
+        onDetailsChange={setRejectionReason}
+        onClose={() => setRejectingApplication(null)}
+        onConfirm={(reason) => decide(rejectingApplication.id, 'rejected', reason)}
+      />, document.body)}
     </div>
   )
+}
+
+function RejectionDialog({ application, preset, details, deciding, onPresetChange, onDetailsChange, onClose, onConfirm }) {
+  const [reasonsOpen, setReasonsOpen] = useState(false)
+  const presetText = preset === 'custom' ? '' : preset
+  const completeReason = [presetText, details.trim()].filter(Boolean).join(' ')
+  const detailsLimit = Math.max(0, presetText ? 499 - presetText.length : 500)
+  const reasonOptions = [...rejectionReasons.map((reason) => ({ value: reason, label: reason })), { value: 'custom', label: 'Other / custom reason' }]
+
+  function chooseReason(nextPreset) {
+    const nextPresetText = nextPreset === 'custom' ? '' : nextPreset
+    onPresetChange(nextPreset)
+    onDetailsChange(details.slice(0, Math.max(0, nextPresetText ? 499 - nextPresetText.length : 500)))
+    setReasonsOpen(false)
+  }
+
+  return <div style={{ zIndex: 9999 }} className="fixed inset-0 grid place-items-center overflow-y-auto bg-slate-950/60 p-4 backdrop-blur-[2px]" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !deciding) onClose() }}>
+    <section role="dialog" aria-modal="true" aria-labelledby="rejection-dialog-title" className="w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+      <header className="flex items-start gap-3 border-b border-slate-100 px-5 py-4"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-red-50 text-red-600"><AlertTriangle size={18} /></span><div className="min-w-0 flex-1"><h2 id="rejection-dialog-title" className="font-bold text-slate-900">Reject application</h2><p className="mt-0.5 text-xs leading-5 text-slate-500">The reason will be shown to {application.profiles?.full_name || 'the applicant'} before resubmission.</p></div><button type="button" onClick={onClose} disabled={deciding} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600" aria-label="Close rejection dialog"><X size={17} /></button></header>
+      <div className="space-y-4 px-5 py-4">
+        <div className="relative"><span className="text-sm font-semibold text-slate-700">Common reason</span><button type="button" onClick={() => setReasonsOpen((open) => !open)} aria-haspopup="listbox" aria-expanded={reasonsOpen} className={`mt-1.5 flex w-full items-center gap-2 rounded-xl border bg-slate-50 px-3 py-2.5 text-left text-sm outline-none transition ${reasonsOpen ? 'border-red-400 ring-2 ring-red-100' : 'border-slate-200'}`}><span className={`min-w-0 flex-1 break-words ${preset ? 'text-slate-700' : 'text-slate-400'}`}>{preset ? preset === 'custom' ? 'Other / custom reason' : preset : 'Select a reason or type below'}</span><ChevronDown size={16} className={`shrink-0 text-slate-400 transition ${reasonsOpen ? 'rotate-180' : ''}`} /></button>{reasonsOpen && <div role="listbox" aria-label="Common rejection reasons" className="absolute left-0 right-0 top-full z-20 mt-1 max-h-52 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl">{reasonOptions.map((option) => <button key={option.value} type="button" role="option" aria-selected={preset === option.value} onClick={() => chooseReason(option.value)} className={`flex w-full items-start gap-2 whitespace-normal break-words rounded-lg px-3 py-2 text-left text-sm leading-5 transition ${preset === option.value ? 'bg-red-50 font-semibold text-red-700' : 'text-slate-600 hover:bg-slate-50'}`}><span className="min-w-0 flex-1">{option.label}</span>{preset === option.value && <Check size={15} className="mt-0.5 shrink-0" />}</button>)}</div>}</div>
+        <label className="block"><span className="text-sm font-semibold text-slate-700">{preset === 'custom' || !preset ? 'Custom reason' : 'Additional details (optional)'}</span><textarea value={details} onChange={(event) => onDetailsChange(event.target.value)} maxLength={detailsLimit} rows={3} className="mt-1.5 w-full resize-none rounded-xl border border-slate-200 p-3 text-sm leading-5 text-slate-700 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100" placeholder={preset && preset !== 'custom' ? 'Add any details that will help the applicant correct it…' : 'Explain what must be corrected before resubmitting…'} /><span className="mt-1 flex justify-between text-xs text-slate-400"><span>{completeReason ? 'This message will be saved with the application.' : 'A reason is required.'}</span><span>{completeReason.length}/500</span></span></label>
+      </div>
+      <footer className="flex justify-end gap-2 border-t border-slate-100 bg-slate-50 px-5 py-3"><button type="button" onClick={onClose} disabled={deciding} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50">Cancel</button><button type="button" onClick={() => onConfirm(completeReason)} disabled={!completeReason || deciding} className="rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40">{deciding ? 'Rejecting…' : 'Reject application'}</button></footer>
+    </section>
+  </div>
 }
 
 function formatApplicationDate(value) {
