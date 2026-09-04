@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Building2, FileCheck2, LoaderCircle, LogOut, MapPin, Search, ShieldCheck } from 'lucide-react'
+import { Building2, FileCheck2, Leaf, LogOut, MapPin, Search, ShieldCheck } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../services/supabaseClient'
 import { searchMalaysiaLocations } from '../../services/mapService'

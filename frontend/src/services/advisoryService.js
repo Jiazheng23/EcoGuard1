@@ -1,8 +1,8 @@
 import { supabase } from './supabaseClient'
 
 export const USE_MOCK_ADVISORIES = true
+const MOCK_ADVISORY_STORAGE_KEY = 'ecoguard:mock-tourist-advisories:v1'
 const relativeTime = (hours) => new Date(Date.now() + hours * 3600000).toISOString()
-let sequence = 7
 let mockAdvisories = [
   { id: 1, location_id: 1, source_incident_id: null, source_warning_id: null, status: 'published', title: 'Weekend entrance traffic guidance', affected_area: 'Main entrance and visitor parking area', safety_instructions: 'Use the signed overflow parking area and keep emergency access lanes clear.', recommended_visiting_time: '08:00 – 11:00', alternative_location: 'No alternative specified', starts_at: relativeTime(-2), expires_at: relativeTime(70), published_at: relativeTime(-2), created_at: relativeTime(-3), ecological_locations: { name: 'Taman Negara National Park', state: 'Pahang' } },
   { id: 2, location_id: 2, source_incident_id: null, source_warning_id: 501, status: 'published', title: 'High visitor volume advisory', affected_area: 'Viewing deck and main access road', safety_instructions: 'Expect delays, follow crowd-control signs, and avoid stopping in restricted areas.', recommended_visiting_time: '07:00 – 09:30', alternative_location: 'Penang National Park', starts_at: relativeTime(-1), expires_at: relativeTime(23), published_at: relativeTime(-1), created_at: relativeTime(-2), ecological_locations: { name: 'Cameron Highlands Nature Reserve', state: 'Pahang' } },
@@ -12,10 +12,31 @@ let mockAdvisories = [
   { id: 6, location_id: 6, source_incident_id: 99, source_warning_id: null, status: 'withdrawn', title: 'Withdrawn temporary trail closure', affected_area: 'Elevated eastern trail', safety_instructions: 'The restriction is no longer active after repairs passed inspection.', recommended_visiting_time: '09:00 – 17:00', alternative_location: 'Penang Botanic Gardens', starts_at: relativeTime(-48), expires_at: relativeTime(24), published_at: relativeTime(-48), withdrawn_at: relativeTime(-20), created_at: relativeTime(-49), ecological_locations: { name: 'Kuala Lumpur City Centre', state: 'Kuala Lumpur' } },
   { id: 7, location_id: 1, source_incident_id: 107, source_warning_id: null, status: 'published', title: 'Temporary riverside path restriction', affected_area: 'Riverside path near the main entrance', safety_instructions: 'Use the signed upper path while inspection work is in progress.', recommended_visiting_time: '08:00 - 15:00', alternative_location: 'Canopy walkway', starts_at: relativeTime(-1), expires_at: relativeTime(30), published_at: relativeTime(-1), created_at: relativeTime(-2), ecological_locations: { name: 'Taman Negara National Park', state: 'Pahang' } },
 ]
+mockAdvisories = loadStoredMockAdvisories(mockAdvisories)
+let sequence = mockAdvisories.reduce((highest, item) => Math.max(highest, Number(item.id) || 0), 7)
 const listeners = new Set()
 const clone = (item) => ({ ...item, ecological_locations: item.ecological_locations ? { ...item.ecological_locations } : null })
 const active = (item) => item.status === 'published' && new Date(item.starts_at) <= new Date() && new Date(item.expires_at) > new Date()
 function notify() { listeners.forEach((listener) => listener()) }
+
+function loadStoredMockAdvisories(fallback) {
+  try {
+    const stored = globalThis.localStorage?.getItem(MOCK_ADVISORY_STORAGE_KEY)
+    if (!stored) return fallback
+    const parsed = JSON.parse(stored)
+    return Array.isArray(parsed) ? parsed : fallback
+  } catch {
+    return fallback
+  }
+}
+
+function persistMockAdvisories() {
+  try {
+    globalThis.localStorage?.setItem(MOCK_ADVISORY_STORAGE_KEY, JSON.stringify(mockAdvisories))
+  } catch {
+    // In-memory mock mode still works when browser storage is unavailable.
+  }
+}
 
 export async function listActiveAdvisories() {
   if (USE_MOCK_ADVISORIES) return mockAdvisories.filter(active).map(clone)
@@ -42,6 +63,7 @@ export async function saveAdvisory(values) {
       saved = { ...values, id: ++sequence, status: 'published', published_at: now, created_at: now, updated_at: now, ecological_locations: { name: values.locationName, state: '' } }
       mockAdvisories = [saved, ...mockAdvisories]
     }
+    persistMockAdvisories()
     notify(); return clone(saved)
   }
   const { data, error } = await supabase.rpc('publish_tourist_advisory', {
@@ -56,7 +78,7 @@ export async function saveAdvisory(values) {
 }
 
 export async function withdrawAdvisory(id) {
-  if (USE_MOCK_ADVISORIES) { mockAdvisories = mockAdvisories.map((item) => item.id === id ? { ...item, status: 'withdrawn', withdrawn_at: new Date().toISOString() } : item); notify(); return }
+  if (USE_MOCK_ADVISORIES) { mockAdvisories = mockAdvisories.map((item) => item.id === id ? { ...item, status: 'withdrawn', withdrawn_at: new Date().toISOString() } : item); persistMockAdvisories(); notify(); return }
   const { error } = await supabase.rpc('withdraw_tourist_advisory', { target_advisory_id: id })
   if (error) throw error
 }

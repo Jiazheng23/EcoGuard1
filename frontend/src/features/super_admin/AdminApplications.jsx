@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { AlertTriangle, Check, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, FileText, RefreshCw, Search, X } from 'lucide-react'
+import { AlertTriangle, Check, ChevronDown, ExternalLink, FileText, RefreshCw, Search, X } from 'lucide-react'
 import { decideAdminApplication, getAdminApplicationDocumentUrl, listAdminApplications } from '../../services/adminApplicationService'
 import TablePagination from '../../components/TablePagination'
 import useTablePagination from '../../hooks/useTablePagination'
@@ -26,8 +26,6 @@ const rejectionReasons = [
   'The requested location information is incomplete or inaccurate.',
 ]
 
-const applicationsPerPage = 5
-
 export default function AdminApplications() {
   const [applications, setApplications] = useState([])
   const [query, setQuery] = useState('')
@@ -40,7 +38,6 @@ export default function AdminApplications() {
   const [rejectionPreset, setRejectionPreset] = useState('')
   const [rejectionReason, setRejectionReason] = useState('')
   const [openingDocumentId, setOpeningDocumentId] = useState(null)
-  const [currentPage, setCurrentPage] = useState(1)
 
   async function refresh(clearMessage = true) {
     setLoading(true)
@@ -89,13 +86,6 @@ export default function AdminApplications() {
     })
   }, [applications, query, statusFilter])
   const applicationPages = useTablePagination(filteredApplications)
-
-  const totalPages = Math.max(1, Math.ceil(filteredApplications.length / applicationsPerPage))
-  const displayPage = Math.min(currentPage, totalPages)
-  const paginatedApplications = useMemo(() => {
-    const start = (displayPage - 1) * applicationsPerPage
-    return filteredApplications.slice(start, start + applicationsPerPage)
-  }, [displayPage, filteredApplications])
 
   async function decide(id, decision, reason = '') {
     setMessage('')
@@ -171,11 +161,11 @@ export default function AdminApplications() {
           <label className="relative min-w-0 flex-1">
             <span className="sr-only">Search applications</span>
             <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input value={query} onChange={(event) => { setQuery(event.target.value); setCurrentPage(1) }} placeholder="Search applicant, location, document, or status" className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-3 text-sm text-slate-700 outline-none focus:border-blue-500" />
+            <input value={query} onChange={(event) => { setQuery(event.target.value); applicationPages.setPage(1) }} placeholder="Search applicant, location, document, or status" className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-3 text-sm text-slate-700 outline-none focus:border-blue-500" />
           </label>
           <label>
             <span className="sr-only">Filter application status</span>
-            <select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setCurrentPage(1) }} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-500 sm:w-48">
+            <select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); applicationPages.setPage(1) }} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-500 sm:w-48">
               {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </label>
