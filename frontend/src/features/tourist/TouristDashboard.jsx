@@ -227,9 +227,8 @@ export default function TouristDashboard({
           <EcoGauge score={ecoScore} />
           <div className="text-center">
             <p className="text-sm font-semibold text-slate-700">
-              {ecoScore >= 80 ? 'Excellent eco performance' : ecoScore >= 60 ? 'Good — keep improving' : 'Start with a lower-carbon trip'}
+              {ecoScore >= 80 ? 'Excellent eco performance，please keep it up!' : ecoScore >= 60 ? 'Good — keep improving' : 'Start with a lower-carbon trip'}
             </p>
-            <p className="text-xs text-slate-400">Synced from your Supabase profile</p>
           </div>
         </article>
 
