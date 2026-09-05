@@ -5,6 +5,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  ComposedChart,
   Legend,
   Line,
   LineChart,
@@ -24,6 +25,7 @@ import {
   RadioTower,
   Search,
   Thermometer,
+  TrendingUp,
   Users,
   Waves,
   X,
@@ -34,6 +36,7 @@ import {
 } from '../../services/locationService'
 import {
   buildCurrentEnvironmentalWarnings,
+  buildCrowdPrediction,
   buildEnvironmentalTrend,
   buildLocationDensity,
   buildVisitorDensitySeries,
@@ -67,6 +70,7 @@ export default function EnvironmentalAnalytics({
   const [history, setHistory] = useState([])
   const [historyAvailable, setHistoryAvailable] = useState(null)
   const [showAllWarnings, setShowAllWarnings] = useState(false)
+  const [predictionHours, setPredictionHours] = useState(12)
   const needle = query.trim().toLowerCase()
   const selectedRange = useMemo(
     () => getSelectedRange(dateMode, customRange, selectedMonth, selectedYear),
@@ -141,6 +145,10 @@ export default function EnvironmentalAnalytics({
   const visitorDensity = useMemo(
     () => buildVisitorDensitySeries(filteredMetrics, filteredLocations, selectedRange.granularity),
     [filteredLocations, filteredMetrics, selectedRange.granularity],
+  )
+  const crowdPrediction = useMemo(
+    () => buildCrowdPrediction(filteredMetrics, filteredLocations, { horizonHours: predictionHours }),
+    [filteredLocations, filteredMetrics, predictionHours],
   )
   const locationDensity = useMemo(
     () => buildLocationDensity(filteredMetrics, filteredLocations),
@@ -238,6 +246,8 @@ export default function EnvironmentalAnalytics({
           </article>
         ))}
       </section>
+
+      <CrowdPredictionPanel prediction={crowdPrediction} horizonHours={predictionHours} onHorizonChange={setPredictionHours} />
 
       <section className="grid gap-4 lg:grid-cols-3">
         <article className={`${card} lg:col-span-2`}>
@@ -362,6 +372,83 @@ export default function EnvironmentalAnalytics({
       </article>
     </div>
   )
+}
+
+function CrowdPredictionPanel({ prediction, horizonHours, onHorizonChange }) {
+  const first = prediction.points[0]
+  const confidenceStyle = {
+    High: 'border-green-200 bg-green-50 text-green-700',
+    Medium: 'border-amber-200 bg-amber-50 text-amber-700',
+    Low: 'border-orange-200 bg-orange-50 text-orange-700',
+    'Insufficient data': 'border-slate-200 bg-slate-50 text-slate-600',
+  }
+
+  return (
+    <section className={card} aria-labelledby="crowd-prediction-heading">
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 id="crowd-prediction-heading" className="flex items-center gap-2 font-bold text-slate-800"><TrendingUp size={18} className="text-indigo-500" />Crowd prediction</h2>
+          <p className="mt-1 text-xs text-slate-400">Forecast from the locations and historical period selected above</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${confidenceStyle[prediction.confidence]}`}>{prediction.confidence} confidence</span>
+          <label className="text-xs font-semibold text-slate-500">
+            Forecast
+            <select value={horizonHours} onChange={(event) => onHorizonChange(Number(event.target.value))} className="ml-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:border-blue-500">
+              <option value={6}>Next 6 hours</option>
+              <option value={12}>Next 12 hours</option>
+              <option value={24}>Next 24 hours</option>
+            </select>
+          </label>
+        </div>
+      </header>
+
+      {!prediction.available ? (
+        <div className="mt-5 rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center">
+          <History className="mx-auto text-slate-300" size={26} />
+          <p className="mt-3 font-semibold text-slate-700">Not enough history for a crowd forecast</p>
+          <p className="mx-auto mt-1 max-w-xl text-sm leading-6 text-slate-500">{prediction.reason}</p>
+        </div>
+      ) : (
+        <>
+          <div className="mt-5 grid gap-4 xl:grid-cols-[220px_1fr]">
+            <article className="rounded-2xl bg-gradient-to-br from-indigo-600 to-blue-600 p-5 text-white">
+              <p className="text-xs font-semibold uppercase tracking-wider text-indigo-100">Next-hour forecast</p>
+              <p className="mt-3 text-4xl font-bold">{first.predicted.toLocaleString()}</p>
+              <p className="text-sm text-indigo-100">visitors · {first.occupancy.toFixed(1)}% occupancy</p>
+              <div className="mt-5 space-y-2 rounded-xl bg-white/10 p-3 text-xs text-white/80">
+                <ForecastSummaryRow label="Expected range" value={`${first.lower.toLocaleString()}–${first.upper.toLocaleString()}`} />
+                <ForecastSummaryRow label="Forecast time" value={first.label} />
+                <ForecastSummaryRow label="Locations" value={`${prediction.locationsCovered}/${prediction.locationCount}`} />
+              </div>
+            </article>
+
+            <article className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4">
+              <div className="mb-3 flex items-center justify-between gap-3"><p className="text-sm font-bold text-slate-700">Predicted crowd by hour</p><span className="text-xs text-slate-400">Visitors</span></div>
+              <ResponsiveContainer width="100%" height={230}>
+                <ComposedChart data={prediction.points} margin={{ left: -12, right: 8 }}>
+                  <defs><linearGradient id="crowd-forecast" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#6366f1" stopOpacity=".28" /><stop offset="100%" stopColor="#6366f1" stopOpacity="0" /></linearGradient></defs>
+                  <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#94a3b8' }} />
+                  <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} />
+                  <Tooltip contentStyle={tooltipStyle} formatter={(value, name) => [Number(value).toLocaleString(), name]} labelFormatter={(_label, payload) => payload?.[0]?.payload?.fullLabel || _label} />
+                  <Area type="monotone" dataKey="predicted" name="Predicted visitors" stroke="#4f46e5" fill="url(#crowd-forecast)" strokeWidth={2.5} isAnimationActive={false} />
+                  <Line type="monotone" dataKey="upper" name="Upper estimate" stroke="#94a3b8" strokeDasharray="4 4" dot={false} isAnimationActive={false} />
+                  <Line type="monotone" dataKey="lower" name="Lower estimate" stroke="#94a3b8" strokeDasharray="4 4" dot={false} isAnimationActive={false} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </article>
+          </div>
+
+          <p className="mt-4 text-xs leading-5 text-slate-400">Crowd predictions are operational estimates and may differ from actual visitor levels.</p>
+        </>
+      )}
+    </section>
+  )
+}
+
+function ForecastSummaryRow({ label, value }) {
+  return <p className="flex justify-between gap-3"><span>{label}</span><b className="text-right text-white">{value}</b></p>
 }
 
 function PeriodFilter({ ref, mode, onModeChange, range, onRangeChange, month, onMonthChange, year, onYearChange, open, onOpenChange, selectedRange }) {

@@ -3,6 +3,9 @@ function numberValue(value) {
   return Number.isFinite(number) ? number : 0
 }
 
+const HOUR_MS = 60 * 60 * 1000
+const WEEK_MS = 7 * 24 * HOUR_MS
+
 function bucketFor(value, granularity) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return null
@@ -110,6 +113,218 @@ export function buildLocationDensity(metrics = [], locations = []) {
       hasReading: Boolean(metric),
     }
   }).filter((item) => item.hasReading).sort((a, b) => b.visitors - a.visitors)
+}
+
+export function buildCrowdPrediction(metrics = [], locations = [], options = {}) {
+  const now = options.now instanceof Date ? options.now : new Date(options.now || Date.now())
+  const nowTime = Number.isNaN(now.getTime()) ? Date.now() : now.getTime()
+  const horizonHours = Math.min(24, Math.max(1, Math.round(Number(options.horizonHours) || 12)))
+  const maxSamples = Math.min(24, Math.max(2, Math.round(Number(options.maxSamples) || 12)))
+  const capacityByLocation = new Map(locations.map((location) => [
+    String(location.id),
+    Math.max(1, numberValue(location.max_capacity)),
+  ]))
+  const locationById = new Map(locations.map((location) => [String(location.id), location]))
+  const eligibleRows = metrics.filter((metric) => {
+    const recordedAt = new Date(metric.recorded_at).getTime()
+    return capacityByLocation.has(String(metric.location_id))
+      && Number.isFinite(recordedAt)
+      && recordedAt < nowTime
+      && Number.isFinite(Number(metric.crowd_count))
+  })
+  const observationsByLocation = hourlyCrowdObservations(eligibleRows, capacityByLocation)
+  const hourlyObservationCount = [...observationsByLocation.values()]
+    .reduce((total, observations) => total + observations.length, 0)
+  const predictableLocations = locations.filter((location) => (
+    (observationsByLocation.get(String(location.id)) || []).length >= 2
+  ))
+
+  if (!predictableLocations.length) {
+    return {
+      available: false,
+      reason: 'At least two historical hourly observations are required for one location.',
+      points: [],
+      rawReadingCount: eligibleRows.length,
+      hourlyObservationCount,
+      locationCount: locations.length,
+      locationsCovered: 0,
+      backtestCount: 0,
+      mae: null,
+      maePercentCapacity: null,
+      confidence: 'Insufficient data',
+    }
+  }
+
+  const backtest = backtestCrowdModel(observationsByLocation, capacityByLocation, maxSamples)
+  const firstTarget = new Date(nowTime)
+  firstTarget.setMinutes(0, 0, 0)
+  firstTarget.setHours(firstTarget.getHours() + 1)
+
+  const points = Array.from({ length: horizonHours }, (_, index) => {
+    const target = new Date(firstTarget.getTime() + index * HOUR_MS)
+    const evidence = predictableLocations.map((location) => {
+      const locationId = String(location.id)
+      const prediction = predictCrowdForSlot(
+        observationsByLocation.get(locationId) || [],
+        target,
+        capacityByLocation.get(locationId),
+        maxSamples,
+      )
+      const backtestMae = backtest.perLocationMae.get(locationId) || 0
+      const uncertainty = Math.max(1, prediction.spread, backtestMae)
+      return {
+        locationId,
+        locationName: locationById.get(locationId)?.name || 'Location',
+        ...prediction,
+        lower: Math.max(0, prediction.predicted - uncertainty),
+        upper: Math.min(capacityByLocation.get(locationId), prediction.predicted + uncertainty),
+      }
+    })
+    const capacity = evidence.reduce((sum, item) => sum + capacityByLocation.get(item.locationId), 0)
+    const predicted = evidence.reduce((sum, item) => sum + item.predicted, 0)
+    const lower = evidence.reduce((sum, item) => sum + item.lower, 0)
+    const upper = evidence.reduce((sum, item) => sum + item.upper, 0)
+    const basisTypes = new Set(evidence.map((item) => item.basis))
+
+    return {
+      timestamp: target.getTime(),
+      label: new Intl.DateTimeFormat('en-MY', { weekday: 'short', hour: '2-digit', minute: '2-digit' }).format(target),
+      fullLabel: new Intl.DateTimeFormat('en-MY', { dateStyle: 'medium', timeStyle: 'short' }).format(target),
+      predicted: Math.round(predicted),
+      lower: Math.round(lower),
+      upper: Math.round(upper),
+      occupancy: Number((capacity ? predicted / capacity * 100 : 0).toFixed(1)),
+      capacity,
+      sampleCount: evidence.reduce((sum, item) => sum + item.sampleCount, 0),
+      basis: basisTypes.size === 1 ? evidence[0].basis : 'Mixed historical matches',
+      evidence,
+    }
+  })
+
+  const allObservations = [...observationsByLocation.values()].flat()
+  const averageMatches = points.length
+    ? points.reduce((sum, point) => sum + point.sampleCount / predictableLocations.length, 0) / points.length
+    : 0
+  const coverage = predictableLocations.length / Math.max(1, locations.length)
+  const confidence = crowdPredictionConfidence({
+    averageMatches,
+    backtestCount: backtest.count,
+    coverage,
+    maePercentCapacity: backtest.maePercentCapacity,
+  })
+
+  return {
+    available: true,
+    points,
+    rawReadingCount: eligibleRows.length,
+    hourlyObservationCount,
+    locationCount: locations.length,
+    locationsCovered: predictableLocations.length,
+    averageMatches: Number(averageMatches.toFixed(1)),
+    historyStart: allObservations.length ? new Date(Math.min(...allObservations.map((item) => item.timestamp))).toISOString() : null,
+    historyEnd: allObservations.length ? new Date(Math.max(...allObservations.map((item) => item.timestamp))).toISOString() : null,
+    backtestCount: backtest.count,
+    mae: backtest.mae == null ? null : Number(backtest.mae.toFixed(1)),
+    maePercentCapacity: backtest.maePercentCapacity == null ? null : Number(backtest.maePercentCapacity.toFixed(1)),
+    confidence,
+    method: 'Recency-weighted average of historical hourly crowd counts. Same weekday and hour are preferred; same-hour or recent observations are used when exact matches are limited.',
+  }
+}
+
+function hourlyCrowdObservations(metrics, capacityByLocation) {
+  const buckets = new Map()
+  metrics.forEach((metric) => {
+    const date = new Date(metric.recorded_at)
+    const locationId = String(metric.location_id)
+    const hour = new Date(date.getFullYear(), date.getMonth(), date.getDate(), date.getHours()).getTime()
+    const key = `${locationId}:${hour}`
+    const bucket = buckets.get(key) || { locationId, timestamp: hour, total: 0, count: 0 }
+    const capacity = capacityByLocation.get(locationId)
+    bucket.total += Math.min(capacity, Math.max(0, numberValue(metric.crowd_count)))
+    bucket.count += 1
+    buckets.set(key, bucket)
+  })
+
+  const grouped = new Map()
+  buckets.forEach((bucket) => {
+    if (!grouped.has(bucket.locationId)) grouped.set(bucket.locationId, [])
+    grouped.get(bucket.locationId).push({
+      timestamp: bucket.timestamp,
+      crowd: bucket.total / bucket.count,
+      readingCount: bucket.count,
+    })
+  })
+  grouped.forEach((observations) => observations.sort((left, right) => left.timestamp - right.timestamp))
+  return grouped
+}
+
+function predictCrowdForSlot(observations, target, capacity, maxSamples) {
+  const previous = observations.filter((item) => item.timestamp < target.getTime())
+  const exact = previous.filter((item) => {
+    const date = new Date(item.timestamp)
+    return date.getDay() === target.getDay() && date.getHours() === target.getHours()
+  })
+  const sameHour = previous.filter((item) => new Date(item.timestamp).getHours() === target.getHours())
+  const candidates = (exact.length >= 2 ? exact : sameHour.length >= 2 ? sameHour : previous)
+    .slice(-maxSamples)
+  const basis = exact.length >= 2 ? 'Same weekday + hour'
+    : sameHour.length >= 2 ? 'Same hour across days'
+      : 'Recent hourly observations'
+  const weighted = candidates.map((item) => ({
+    ...item,
+    weight: 1 / (1 + Math.max(0, target.getTime() - item.timestamp) / WEEK_MS),
+  }))
+  const weightTotal = weighted.reduce((sum, item) => sum + item.weight, 0) || 1
+  const weightedSum = weighted.reduce((sum, item) => sum + item.crowd * item.weight, 0)
+  const predicted = Math.min(capacity, Math.max(0, weightedSum / weightTotal))
+  const variance = weighted.reduce((sum, item) => sum + item.weight * ((item.crowd - predicted) ** 2), 0) / weightTotal
+
+  return {
+    predicted,
+    spread: Math.sqrt(Math.max(0, variance)),
+    sampleCount: candidates.length,
+    readingCount: candidates.reduce((sum, item) => sum + item.readingCount, 0),
+    weightedSum: Number(weightedSum.toFixed(2)),
+    weightTotal: Number(weightTotal.toFixed(3)),
+    basis,
+  }
+}
+
+function backtestCrowdModel(observationsByLocation, capacityByLocation, maxSamples) {
+  const errors = []
+  const normalizedErrors = []
+  const errorsByLocation = new Map()
+
+  observationsByLocation.forEach((observations, locationId) => {
+    observations.slice(-96).forEach((actual) => {
+      const previous = observations.filter((item) => item.timestamp < actual.timestamp)
+      if (previous.length < 2) return
+      const forecast = predictCrowdForSlot(previous, new Date(actual.timestamp), capacityByLocation.get(locationId), maxSamples)
+      const error = Math.abs(actual.crowd - forecast.predicted)
+      errors.push(error)
+      normalizedErrors.push(error / capacityByLocation.get(locationId) * 100)
+      if (!errorsByLocation.has(locationId)) errorsByLocation.set(locationId, [])
+      errorsByLocation.get(locationId).push(error)
+    })
+  })
+
+  return {
+    count: errors.length,
+    mae: errors.length ? errors.reduce((sum, value) => sum + value, 0) / errors.length : null,
+    maePercentCapacity: normalizedErrors.length
+      ? normalizedErrors.reduce((sum, value) => sum + value, 0) / normalizedErrors.length
+      : null,
+    perLocationMae: new Map([...errorsByLocation.entries()].map(([locationId, values]) => [
+      locationId,
+      values.reduce((sum, value) => sum + value, 0) / values.length,
+    ])),
+  }
+}
+
+function crowdPredictionConfidence({ averageMatches, backtestCount, coverage, maePercentCapacity }) {
+  if (coverage === 1 && averageMatches >= 4 && backtestCount >= 20 && maePercentCapacity != null && maePercentCapacity <= 10) return 'High'
+  if (coverage >= 0.75 && averageMatches >= 2 && backtestCount >= 6 && maePercentCapacity != null && maePercentCapacity <= 20) return 'Medium'
+  return 'Low'
 }
 
 export function buildEnvironmentalTrend(metrics = [], granularity) {

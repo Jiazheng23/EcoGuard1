@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  buildCrowdPrediction,
   buildCurrentEnvironmentalWarnings,
   buildLocationDensity,
   buildVisitorDensitySeries,
@@ -91,4 +92,46 @@ test('current warnings exclude waste and use crowd and environmental thresholds'
     'Crowd', 'Air quality', 'Water quality', 'Temperature',
   ])
   assert.equal(warnings[0].severity, 'critical')
+})
+
+test('crowd prediction uses recency-weighted matching weekday and hour evidence', () => {
+  const prediction = buildCrowdPrediction([
+    { location_id: 1, crowd_count: 200, recorded_at: new Date(2026, 7, 24, 9).toISOString() },
+    { location_id: 1, crowd_count: 100, recorded_at: new Date(2026, 7, 31, 9).toISOString() },
+  ], [{ id: 1, name: 'Taman Negara', max_capacity: 500 }], {
+    now: new Date(2026, 8, 7, 8, 30),
+    horizonHours: 1,
+  })
+
+  assert.equal(prediction.available, true)
+  assert.equal(prediction.points.length, 1)
+  assert.equal(prediction.points[0].predicted, 140)
+  assert.equal(prediction.points[0].basis, 'Same weekday + hour')
+  assert.equal(prediction.points[0].sampleCount, 2)
+  assert.equal(prediction.rawReadingCount, 2)
+})
+
+test('crowd prediction reports its same-hour fallback when weekday evidence is limited', () => {
+  const prediction = buildCrowdPrediction([
+    { location_id: 1, crowd_count: 80, recorded_at: new Date(2026, 8, 1, 9).toISOString() },
+    { location_id: 1, crowd_count: 120, recorded_at: new Date(2026, 8, 2, 9).toISOString() },
+  ], [{ id: 1, name: 'Taman Negara', max_capacity: 500 }], {
+    now: new Date(2026, 8, 7, 8, 30),
+    horizonHours: 1,
+  })
+
+  assert.equal(prediction.available, true)
+  assert.equal(prediction.points[0].basis, 'Same hour across days')
+  assert.equal(prediction.points[0].sampleCount, 2)
+})
+
+test('crowd prediction stays unavailable without enough historical observations', () => {
+  const prediction = buildCrowdPrediction([
+    { location_id: 1, crowd_count: 80, recorded_at: new Date(2026, 8, 1, 9).toISOString() },
+  ], [{ id: 1, name: 'Taman Negara', max_capacity: 500 }], {
+    now: new Date(2026, 8, 7, 8, 30),
+  })
+
+  assert.equal(prediction.available, false)
+  assert.match(prediction.reason, /two historical hourly observations/i)
 })
