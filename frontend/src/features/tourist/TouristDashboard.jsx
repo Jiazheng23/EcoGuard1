@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Area,
   AreaChart,
@@ -150,9 +151,9 @@ export default function TouristDashboard({
 
   return (
     <div className="tourist-dashboard-page mx-auto flex max-w-6xl flex-col gap-5">
-      {successMessage && (
+      {successMessage && createPortal(
         <div
-          className="fixed inset-0 z-[9999] grid place-items-center bg-slate-900/35 p-4 backdrop-blur-[2px]"
+          className="fixed inset-0 z-[9999] grid place-items-center bg-slate-900/40 p-4 backdrop-blur-[2px]"
           role="presentation"
           onMouseDown={(event) => { if (event.target === event.currentTarget) onDismissMessage() }}
         >
@@ -181,7 +182,7 @@ export default function TouristDashboard({
             </button>
           </section>
         </div>
-      )}
+      , document.body)}
 
       <section className="tourist-dashboard-hero flex flex-col justify-between gap-4 rounded-2xl bg-gradient-to-br from-green-600 to-teal-600 p-6 text-white shadow-lg shadow-green-600/20 md:flex-row md:items-center">
         <div>
