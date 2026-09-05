@@ -21,7 +21,7 @@ export default function ReportDownloadDialog({ open, onClose, counts, onDownload
   }
 
   return (
-    <div className="fixed inset-0 z-[2000] grid place-items-center bg-slate-950/45 px-4 pb-4 pt-20" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close() }} onKeyDown={(event) => { if (event.key === 'Escape') close() }}>
+    <div className="fixed inset-0 z-[9999] grid place-items-center bg-slate-950/45 px-4 pb-4 pt-20 backdrop-blur-[2px]" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close() }} onKeyDown={(event) => { if (event.key === 'Escape') close() }}>
       <section role="dialog" aria-modal="true" aria-labelledby="report-download-title" className="max-h-full w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
         <div className="flex items-start justify-between gap-4">
           <div><h2 id="report-download-title" className="text-lg font-bold text-slate-900">Download Report</h2><p className="mt-1 text-sm text-slate-500">{reportType ? 'Choose the file format.' : 'Choose the report you want to generate.'}</p></div>

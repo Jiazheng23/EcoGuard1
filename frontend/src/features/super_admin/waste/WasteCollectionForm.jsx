@@ -65,7 +65,7 @@ export default function WasteCollectionForm({ location, schedule, onClose, onSav
   const missed = values.status === 'missed'
 
   return (
-    <div className="fixed inset-0 z-[2000] grid place-items-center overflow-hidden bg-slate-950/45 px-4 pb-4 pt-20" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) onClose() }} onKeyDown={(event) => { if (event.key === 'Escape' && !saving) onClose() }}>
+    <div className="fixed inset-0 z-[9999] grid place-items-center overflow-hidden bg-slate-950/45 px-4 pb-4 pt-20 backdrop-blur-[2px]" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) onClose() }} onKeyDown={(event) => { if (event.key === 'Escape' && !saving) onClose() }}>
       <div role="dialog" aria-modal="true" aria-labelledby="waste-collection-title" className="flex max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
         <header className="flex shrink-0 items-start justify-between border-b border-slate-100 p-5">
           <div><h2 id="waste-collection-title" className="flex items-center gap-2 text-lg font-bold text-slate-800"><ClipboardCheck size={20} className="text-green-500" />Record waste collection</h2><p className="mt-1 text-xs text-slate-400">{schedule ? `Completes the ${formatDate(schedule.scheduled_for)} schedule atomically.` : 'Creates an unscheduled collection-history record.'}</p></div>

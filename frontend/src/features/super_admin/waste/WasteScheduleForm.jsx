@@ -49,7 +49,7 @@ export default function WasteScheduleForm({ location, schedule, schedules, onClo
   }
 
   return (
-    <div className="fixed inset-0 z-[2000] grid place-items-center overflow-hidden bg-slate-950/45 px-4 pb-4 pt-20" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) onClose() }} onKeyDown={(event) => { if (event.key === 'Escape' && !saving) onClose() }}>
+    <div className="fixed inset-0 z-[9999] grid place-items-center overflow-hidden bg-slate-950/45 px-4 pb-4 pt-20 backdrop-blur-[2px]" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) onClose() }} onKeyDown={(event) => { if (event.key === 'Escape' && !saving) onClose() }}>
       <div role="dialog" aria-modal="true" aria-labelledby="waste-schedule-title" className="flex max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
         <header className="flex shrink-0 items-start justify-between border-b border-slate-100 p-5">
           <div><h2 id="waste-schedule-title" className="flex items-center gap-2 text-lg font-bold text-slate-800"><CalendarClock size={20} className="text-blue-500" />{editing ? 'Edit collection schedule' : 'Create collection schedule'}</h2><p className="mt-1 text-xs text-slate-400">Collection windows cannot overlap at the same location.</p></div>

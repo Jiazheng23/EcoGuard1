@@ -152,7 +152,7 @@ export default function TouristDashboard({
     <div className="tourist-dashboard-page mx-auto flex max-w-6xl flex-col gap-5">
       {successMessage && (
         <div
-          className="fixed inset-0 z-50 grid place-items-center bg-slate-900/35 p-4 backdrop-blur-[2px]"
+          className="fixed inset-0 z-[9999] grid place-items-center bg-slate-900/35 p-4 backdrop-blur-[2px]"
           role="presentation"
           onMouseDown={(event) => { if (event.target === event.currentTarget) onDismissMessage() }}
         >

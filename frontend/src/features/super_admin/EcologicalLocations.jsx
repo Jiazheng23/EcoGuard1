@@ -266,7 +266,7 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
 
       {editing && (
         <div
-          className="fixed inset-0 z-[2000] grid place-items-center overflow-hidden bg-slate-950/45 px-4 pb-4 pt-20"
+          className="fixed inset-0 z-[9999] grid place-items-center overflow-hidden bg-slate-950/45 px-4 pb-4 pt-20 backdrop-blur-[2px]"
           role="presentation"
           onMouseDown={(event) => { if (event.target === event.currentTarget) setEditing(null) }}
           onKeyDown={(event) => { if (event.key === 'Escape') setEditing(null) }}
@@ -320,7 +320,7 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
       )}
 
       {deleteTarget && (
-        <div className="fixed inset-0 z-[2000] grid place-items-center bg-slate-950/45 px-4 pb-4 pt-20" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDeleteTarget(null) }} onKeyDown={(event) => { if (event.key === 'Escape') setDeleteTarget(null) }}><section role="dialog" aria-modal="true" aria-labelledby="delete-location-title" className="max-h-full w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"><h2 id="delete-location-title" className="text-lg font-bold text-slate-900">Delete {deleteTarget.name}?</h2><p className="mt-2 text-sm leading-6 text-slate-500">Its crowd thresholds and environmental snapshots will also be removed. This cannot be undone.</p><div className="mt-6 flex justify-end gap-3"><button type="button" onClick={() => setDeleteTarget(null)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold">Cancel</button><button type="button" onClick={removeLocation} disabled={saving} className="rounded-xl bg-red-500 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60">{saving ? 'Deleting...' : 'Delete location'}</button></div></section></div>
+        <div className="fixed inset-0 z-[9999] grid place-items-center bg-slate-950/45 px-4 pb-4 pt-20 backdrop-blur-[2px]" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDeleteTarget(null) }} onKeyDown={(event) => { if (event.key === 'Escape') setDeleteTarget(null) }}><section role="dialog" aria-modal="true" aria-labelledby="delete-location-title" className="max-h-full w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"><h2 id="delete-location-title" className="text-lg font-bold text-slate-900">Delete {deleteTarget.name}?</h2><p className="mt-2 text-sm leading-6 text-slate-500">Its crowd thresholds and environmental snapshots will also be removed. This cannot be undone.</p><div className="mt-6 flex justify-end gap-3"><button type="button" onClick={() => setDeleteTarget(null)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold">Cancel</button><button type="button" onClick={removeLocation} disabled={saving} className="rounded-xl bg-red-500 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60">{saving ? 'Deleting...' : 'Delete location'}</button></div></section></div>
       )}
     </div>
   )
