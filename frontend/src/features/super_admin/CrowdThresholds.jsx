@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Activity, AlertCircle, AlertTriangle, Bell, CheckCircle, MapPin, Save, Search } from 'lucide-react'
 import { latestMetricsByLocation, saveCrowdThreshold } from '../../services/locationService'
+import { useToast } from '../../components/toastContext'
 
 const levelStyles = {
   optimal: { label: 'Optimal', color: '#22c55e', background: '#f0fdf4' },
@@ -26,6 +27,7 @@ function statusFor(occupancy, threshold) {
 }
 
 export default function CrowdThresholds({ user, locations, thresholds, metrics, loading, error, onDataChange, embedded = false, showFilters = true, showSummary = true }) {
+  const toast = useToast()
   const [editing, setEditing] = useState(null)
   const [draft, setDraft] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -33,6 +35,7 @@ export default function CrowdThresholds({ user, locations, thresholds, metrics, 
   const [query, setQuery] = useState('')
   const [stateFilter, setStateFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [fieldErrors, setFieldErrors] = useState({})
   const latest = useMemo(() => latestMetricsByLocation(metrics), [metrics])
   const thresholdMap = useMemo(() => Object.fromEntries(thresholds.map((item) => [String(item.location_id), item])), [thresholds])
 
@@ -64,11 +67,13 @@ export default function CrowdThresholds({ user, locations, thresholds, metrics, 
     setEditing(row.location.id)
     setDraft({ ...row.threshold, notification_email: row.threshold.notification_email || '' })
     setMessage('')
+    setFieldErrors({})
   }
 
   function changeDraft(event) {
     const { name, value, type, checked } = event.target
     setDraft((current) => ({ ...current, [name]: type === 'checkbox' ? checked : value }))
+    setFieldErrors((current) => ({ ...current, [name]: undefined }))
   }
 
   async function save(event) {
@@ -76,8 +81,17 @@ export default function CrowdThresholds({ user, locations, thresholds, metrics, 
     const caution = Number(draft.caution_percent)
     const warning = Number(draft.warning_percent)
     const critical = Number(draft.critical_percent)
-    if (!(caution > 0 && caution < warning && warning < critical && critical <= 100)) {
+    const nextErrors = {}
+    if (!Number.isFinite(caution) || caution < 1 || caution > 100) nextErrors.caution_percent = 'Enter a percentage from 1 to 100.'
+    if (!Number.isFinite(warning) || warning < 1 || warning > 100) nextErrors.warning_percent = 'Enter a percentage from 1 to 100.'
+    if (!Number.isFinite(critical) || critical < 1 || critical > 100) nextErrors.critical_percent = 'Enter a percentage from 1 to 100.'
+    if (!nextErrors.caution_percent && !nextErrors.warning_percent && caution >= warning) nextErrors.warning_percent = 'Warning must be higher than caution.'
+    if (!nextErrors.warning_percent && !nextErrors.critical_percent && warning >= critical) nextErrors.critical_percent = 'Critical must be higher than warning.'
+    if (draft.notification_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(draft.notification_email.trim())) nextErrors.notification_email = 'Enter a valid notification email.'
+    setFieldErrors(nextErrors)
+    if (Object.keys(nextErrors).length) {
       setMessage('Thresholds must follow: 0 < Caution < Warning < Critical <= 100.')
+      toast.reminder('Please correct the highlighted threshold fields.')
       return
     }
     setSaving(true)
@@ -88,8 +102,11 @@ export default function CrowdThresholds({ user, locations, thresholds, metrics, 
       setEditing(null)
       setDraft(null)
       setMessage('Crowd threshold saved to Supabase.')
+      toast.success('Crowd threshold saved successfully.')
     } catch (saveError) {
-      setMessage(saveError.message || 'Unable to save crowd threshold.')
+      const failure = saveError.message || 'Unable to save crowd threshold.'
+      setMessage(failure)
+      toast.error(failure)
     } finally {
       setSaving(false)
     }
@@ -138,14 +155,14 @@ export default function CrowdThresholds({ user, locations, thresholds, metrics, 
               <div className="mt-2 grid grid-cols-3 text-xs text-slate-400"><span>Caution {row.threshold.caution_percent}%</span><span className="text-center">Warning {row.threshold.warning_percent}%</span><span className="text-right">Critical {row.threshold.critical_percent}%</span></div>
 
               {isEditing && draft && (
-                <form onSubmit={save} className="mt-5 rounded-xl bg-slate-50 p-4">
+                <form onSubmit={save} noValidate className="mt-5 rounded-xl bg-slate-50 p-4">
                   <div className="grid gap-4 sm:grid-cols-3">
-                    <ThresholdInput label="Caution %" name="caution_percent" value={draft.caution_percent} onChange={changeDraft} />
-                    <ThresholdInput label="Warning %" name="warning_percent" value={draft.warning_percent} onChange={changeDraft} />
-                    <ThresholdInput label="Critical %" name="critical_percent" value={draft.critical_percent} onChange={changeDraft} />
+                    <ThresholdInput label="Caution %" name="caution_percent" value={draft.caution_percent} onChange={changeDraft} error={fieldErrors.caution_percent} />
+                    <ThresholdInput label="Warning %" name="warning_percent" value={draft.warning_percent} onChange={changeDraft} error={fieldErrors.warning_percent} />
+                    <ThresholdInput label="Critical %" name="critical_percent" value={draft.critical_percent} onChange={changeDraft} error={fieldErrors.critical_percent} />
                   </div>
                   <div className="mt-4 flex flex-wrap items-end gap-4">
-                    <label className="min-w-64 flex-1"><span className="mb-1.5 block text-xs font-semibold text-slate-600">Notification email</span><input type="email" name="notification_email" value={draft.notification_email} onChange={changeDraft} placeholder="alerts@ecoguard.my" className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500" /></label>
+                    <label className="min-w-64 flex-1"><span className="mb-1.5 block text-xs font-semibold text-slate-600">Notification email</span><input type="email" name="notification_email" value={draft.notification_email} onChange={changeDraft} placeholder="alerts@ecoguard.my" aria-invalid={Boolean(fieldErrors.notification_email)} className={`w-full rounded-xl border bg-white px-3 py-2.5 text-sm outline-none ${fieldErrors.notification_email ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-100' : 'border-slate-200 focus:border-blue-500'}`} />{fieldErrors.notification_email && <span className="mt-1 block text-xs text-red-500">{fieldErrors.notification_email}</span>}</label>
                     <label className="flex h-[42px] items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700"><input type="checkbox" name="auto_alerts" checked={draft.auto_alerts} onChange={changeDraft} className="size-4 accent-blue-500" /><Bell size={15} /> Auto alerts</label>
                     <div className="flex gap-2"><button type="button" onClick={() => { setEditing(null); setDraft(null) }} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600">Cancel</button><button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"><Save size={15} />{saving ? 'Saving...' : 'Save'}</button></div>
                   </div>
@@ -160,6 +177,6 @@ export default function CrowdThresholds({ user, locations, thresholds, metrics, 
   )
 }
 
-function ThresholdInput({ label, ...props }) {
-  return <label><span className="mb-1.5 block text-xs font-semibold text-slate-600">{label}</span><input type="number" min="1" max="100" required {...props} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500" /></label>
+function ThresholdInput({ label, error, ...props }) {
+  return <label><span className="mb-1.5 block text-xs font-semibold text-slate-600">{label}</span><input type="number" min="1" max="100" required {...props} aria-invalid={Boolean(error)} className={`w-full rounded-xl border bg-white px-3 py-2.5 text-sm outline-none ${error ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-100' : 'border-slate-200 focus:border-blue-500'}`} />{error && <span className="mt-1 block text-xs text-red-500">{error}</span>}</label>
 }

@@ -2,8 +2,10 @@ import { useState } from 'react'
 import { ClipboardCheck, Save, X } from 'lucide-react'
 import { createWasteCollection } from '../../../services/wasteService'
 import { validateWasteCollection, WASTE_COLLECTION_SOURCES, WASTE_COLLECTION_STATUSES, WASTE_TYPES } from '../../../utils/wasteValidation'
+import { useToast } from '../../../components/toastContext'
 
 export default function WasteCollectionForm({ location, schedule, onClose, onSaved }) {
+  const toast = useToast()
   const [values, setValues] = useState(() => ({
     schedule_id: schedule?.id || null,
     location_id: location.id,
@@ -37,15 +39,21 @@ export default function WasteCollectionForm({ location, schedule, onClose, onSav
     event.preventDefault()
     const nextErrors = validateWasteCollection(values)
     setErrors(nextErrors)
-    if (Object.keys(nextErrors).length) return
+    if (Object.keys(nextErrors).length) {
+      toast.reminder('Please correct the highlighted collection fields.')
+      return
+    }
 
     setSaving(true)
     setSubmitError('')
     try {
       const saved = await createWasteCollection(values)
       await onSaved(saved, Boolean(schedule))
+      toast.success('Waste collection recorded successfully.')
     } catch (saveError) {
-      setSubmitError(saveError.message || 'Unable to record this waste collection.')
+      const failure = saveError.message || 'Unable to record this waste collection.'
+      setSubmitError(failure)
+      toast.error(failure)
     } finally {
       setSaving(false)
     }
@@ -64,7 +72,7 @@ export default function WasteCollectionForm({ location, schedule, onClose, onSav
           <button type="button" onClick={onClose} aria-label="Close collection form" className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
         </header>
 
-        <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
+        <form onSubmit={submit} noValidate className="flex min-h-0 flex-1 flex-col">
           <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
           <div className="grid gap-4 md:grid-cols-2">
             <FormField label="Location"><input value={location.name} disabled className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-500" /></FormField>
@@ -79,7 +87,7 @@ export default function WasteCollectionForm({ location, schedule, onClose, onSav
 
           {values.source === 'simulated_sensor' && <div className="rounded-xl border border-violet-200 bg-violet-50 p-3 text-sm text-violet-700"><b>Automated sensor:</b> this record was captured from the location sensor feed.</div>}
           {missed && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">A missed collection records zero kilograms. For a scheduled record, the schedule will also be marked missed.</div>}
-          <FormField label="Notes (optional)"><textarea name="notes" rows="3" value={values.notes} onChange={updateValue} placeholder="Collection result, issue, vehicle, or reason for a missed collection" className={inputClass()} /></FormField>
+          <FormField label="Notes (optional)" error={errors.notes}><textarea name="notes" rows="3" maxLength="1000" value={values.notes} onChange={updateValue} placeholder="Collection result, issue, vehicle, or reason for a missed collection" className={inputClass(errors.notes)} /></FormField>
           {submitError && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-600">{submitError}</div>}
           </div>
 
@@ -98,7 +106,7 @@ function FormField({ label, error, children }) {
 }
 
 function inputClass(error) {
-  return `w-full rounded-xl border bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-500 ${error ? 'border-red-300' : 'border-slate-200'}`
+  return `w-full rounded-xl border bg-white px-3 py-2.5 text-sm text-slate-700 outline-none ${error ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-100' : 'border-slate-200 focus:border-blue-500'}`
 }
 
 function toLocalInput(value) {

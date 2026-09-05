@@ -10,6 +10,7 @@ import { isWestMalaysiaCoordinate, isWestMalaysiaLocation } from '../../utils/we
 import { deleteLocationImages, MAX_GALLERY_IMAGES, uploadLocationImages } from '../../services/locationImageService'
 import TablePagination from '../../components/TablePagination'
 import useTablePagination from '../../hooks/useTablePagination'
+import { useToast } from '../../components/toastContext'
 
 const locationTypes = ['Cultural Site', 'World Heritage Site', 'National Park', 'Tourist attractions', 'Geopark', 'Marine Park', 'Highland Reserve']
 const localImagePreviewUrls = new WeakMap()
@@ -40,6 +41,7 @@ const emptyForm = () => ({
 })
 
 export default function EcologicalLocations({ user, isSuperAdmin, locations, loading, error, onDataChange, embedded = false, showFilters = true }) {
+  const toast = useToast()
   const [query, setQuery] = useState('')
   const [stateFilter, setStateFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
@@ -52,6 +54,7 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
   const [galleryFiles, setGalleryFiles] = useState([])
   const [newWallpaperIndex, setNewWallpaperIndex] = useState(null)
   const [removedGalleryUrls, setRemovedGalleryUrls] = useState([])
+  const [fieldErrors, setFieldErrors] = useState({})
 
   const westMalaysiaLocations = useMemo(
     () => locations.filter(isWestMalaysiaLocation),
@@ -92,6 +95,7 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
     setGalleryFiles([])
     setNewWallpaperIndex(null)
     setRemovedGalleryUrls([])
+    setFieldErrors({})
   }
 
   function openEdit(location) {
@@ -121,21 +125,35 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
     setGalleryFiles([])
     setNewWallpaperIndex(null)
     setRemovedGalleryUrls([])
+    setFieldErrors({})
   }
 
   function updateField(event) {
     const { name, value, type, checked } = event.target
     setForm((current) => ({ ...current, [name]: type === 'checkbox' ? checked : value }))
+    setFieldErrors((current) => ({
+      ...current,
+      [name]: undefined,
+      ...(name.startsWith('operating_') ? { operating_hours: undefined } : {}),
+      ...(name.startsWith('visit_') ? { best_visit_time: undefined } : {}),
+    }))
   }
 
   async function saveLocation(event) {
     event.preventDefault()
-    if (!form.location_confirmed || !isWestMalaysiaCoordinate(form.latitude, form.longitude) || !form.state) {
-      setMessage('Search for and confirm a valid destination within West Malaysia before saving.')
-      return
-    }
-    if (form.operating_start >= form.operating_end || form.visit_start >= form.visit_end) {
-      setMessage('Each end time must be later than its start time.')
+    const nextErrors = {}
+    if (!form.location_confirmed || !isWestMalaysiaCoordinate(form.latitude, form.longitude) || !form.state) nextErrors.location = 'Search for and confirm a valid destination within West Malaysia.'
+    if (form.name.trim().length < 2) nextErrors.name = 'Enter a location name with at least 2 characters.'
+    else if (form.name.trim().length > 120) nextErrors.name = 'Location name cannot exceed 120 characters.'
+    if (!locationTypes.includes(form.location_type)) nextErrors.location_type = 'Choose a valid location type.'
+    if (!Number.isInteger(Number(form.max_capacity)) || Number(form.max_capacity) < 1) nextErrors.max_capacity = 'Maximum capacity must be a whole number greater than 0.'
+    if (form.operating_start >= form.operating_end) nextErrors.operating_hours = 'Operating end time must be later than its start time.'
+    if (form.visit_start >= form.visit_end) nextErrors.best_visit_time = 'Visit end time must be later than its start time.'
+    if (form.description.length > 2000) nextErrors.description = 'Description cannot exceed 2,000 characters.'
+    setFieldErrors(nextErrors)
+    if (Object.keys(nextErrors).length) {
+      setMessage('Please correct the highlighted location fields.')
+      toast.reminder('Please correct the highlighted location fields.')
       return
     }
     setSaving(true)
@@ -162,8 +180,11 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
       await onDataChange()
       setEditing(null)
       setMessage('Location saved to Supabase. Tourist map data is now updated.')
+      toast.success('Ecological location saved successfully.')
     } catch (saveError) {
-      setMessage(saveError.message || 'Unable to save this location.')
+      const failure = saveError.message || 'Unable to save this location.'
+      setMessage(failure)
+      toast.error(failure)
     } finally {
       setSaving(false)
     }
@@ -177,8 +198,11 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
       await onDataChange()
       setDeleteTarget(null)
       setMessage('Location and its linked thresholds/metrics were removed.')
+      toast.success('Location removed successfully.')
     } catch (deleteError) {
-      setMessage(deleteError.message || 'Unable to delete this location.')
+      const failure = deleteError.message || 'Unable to delete this location.'
+      setMessage(failure)
+      toast.error(failure)
     } finally {
       setSaving(false)
     }
@@ -247,21 +271,22 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
           onMouseDown={(event) => { if (event.target === event.currentTarget) setEditing(null) }}
           onKeyDown={(event) => { if (event.key === 'Escape') setEditing(null) }}
         >
-          <form onSubmit={saveLocation} role="dialog" aria-modal="true" aria-labelledby="location-dialog-title" className="flex max-h-full w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+          <form onSubmit={saveLocation} noValidate role="dialog" aria-modal="true" aria-labelledby="location-dialog-title" className="flex max-h-full w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
             <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-100 px-6 py-4"><div><h2 id="location-dialog-title" className="text-lg font-bold text-slate-900">{editing === 'new' ? 'Add ecological location' : 'Edit ecological location'}</h2><p className="mt-1 text-sm text-slate-500">This information is shared with the Tourist map.</p></div><button type="button" onClick={() => setEditing(null)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={19} /></button></div>
             <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">
             <div className="mt-5">
-              <WestMalaysiaLocationPicker latitude={form.latitude} longitude={form.longitude} state={form.state} onConfirmationChange={(confirmed) => setForm((current) => ({ ...current, location_confirmed: confirmed }))} onChange={(location) => setForm((current) => ({ ...current, latitude: location.lat, longitude: location.lng, state: location.state, location_confirmed: true }))} />
+              <div className={fieldErrors.location ? 'rounded-xl ring-2 ring-red-300' : ''}><WestMalaysiaLocationPicker latitude={form.latitude} longitude={form.longitude} state={form.state} onConfirmationChange={(confirmed) => { setForm((current) => ({ ...current, location_confirmed: confirmed })); if (confirmed) setFieldErrors((current) => ({ ...current, location: undefined })) }} onChange={(location) => { setForm((current) => ({ ...current, latitude: location.lat, longitude: location.lng, state: location.state, location_confirmed: true })); setFieldErrors((current) => ({ ...current, location: undefined })) }} /></div>
+              {fieldErrors.location && <p className="mt-2 text-xs text-red-500">{fieldErrors.location}</p>}
             </div>
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              <Input label="Location display name" name="name" value={form.name} onChange={updateField} placeholder="Example: KLCC Park" />
+              <Input label="Location display name" name="name" value={form.name} onChange={updateField} placeholder="Example: KLCC Park" maxLength="120" error={fieldErrors.name} />
               <label><span className="mb-1.5 block text-xs font-semibold text-slate-600">State</span><input readOnly required value={form.state} placeholder="Filled automatically after destination confirmation" className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-600 outline-none" /></label>
-              <label><span className="mb-1.5 block text-xs font-semibold text-slate-600">Location type</span><select required name="location_type" value={form.location_type} onChange={updateField} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500">{locationTypes.map((type) => <option key={type}>{type}</option>)}</select></label>
-              <Input label="Maximum capacity" name="max_capacity" type="number" min="1" value={form.max_capacity} onChange={updateField} />
-              <TimeRangeField label="Operating hours" startName="operating_start" endName="operating_end" start={form.operating_start} end={form.operating_end} onChange={updateField} />
-              <TimeRangeField label="Best visit time" startName="visit_start" endName="visit_end" start={form.visit_start} end={form.visit_end} onChange={updateField} />
+              <label><span className="mb-1.5 block text-xs font-semibold text-slate-600">Location type</span><select required name="location_type" value={form.location_type} onChange={updateField} aria-invalid={Boolean(fieldErrors.location_type)} className={`w-full rounded-xl border bg-white px-3 py-2.5 text-sm outline-none ${fieldErrors.location_type ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-100' : 'border-slate-200 focus:border-blue-500'}`}>{locationTypes.map((type) => <option key={type}>{type}</option>)}</select>{fieldErrors.location_type && <span className="mt-1 block text-xs text-red-500">{fieldErrors.location_type}</span>}</label>
+              <Input label="Maximum capacity" name="max_capacity" type="number" min="1" step="1" value={form.max_capacity} onChange={updateField} error={fieldErrors.max_capacity} />
+              <TimeRangeField label="Operating hours" startName="operating_start" endName="operating_end" start={form.operating_start} end={form.operating_end} onChange={updateField} error={fieldErrors.operating_hours} />
+              <TimeRangeField label="Best visit time" startName="visit_start" endName="visit_end" start={form.visit_start} end={form.visit_end} onChange={updateField} error={fieldErrors.best_visit_time} />
               <label className="flex items-end"><span className="flex h-[42px] w-full items-center gap-3 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-700"><input name="is_active" type="checkbox" checked={form.is_active} onChange={updateField} className="size-4 accent-blue-500" /> Display on Tourist map</span></label>
-              <label className="sm:col-span-2"><span className="mb-1.5 block text-xs font-semibold text-slate-600">Description</span><textarea name="description" value={form.description} onChange={updateField} rows="3" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-500" /></label>
+              <label className="sm:col-span-2"><span className="mb-1.5 block text-xs font-semibold text-slate-600">Description</span><textarea name="description" value={form.description} onChange={updateField} rows="3" maxLength="2000" aria-invalid={Boolean(fieldErrors.description)} className={`w-full rounded-xl border px-3 py-2.5 text-sm outline-none ${fieldErrors.description ? 'border-red-400 bg-red-50 focus:border-red-500 focus:ring-2 focus:ring-red-100' : 'border-slate-200 focus:border-blue-500'}`} />{fieldErrors.description && <span className="mt-1 block text-xs text-red-500">{fieldErrors.description}</span>}</label>
               <ImageFields
                 form={form}
                 galleryFiles={galleryFiles}
@@ -280,6 +305,7 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
                 onRemoveGallery={(url) => {
                   if (url === form.wallpaper_url) {
                     setMessage('Choose another wallpaper before removing the current wallpaper image.')
+                    toast.reminder('Choose another wallpaper before removing the current wallpaper image.')
                     return
                   }
                   setRemovedGalleryUrls((current) => [...current, url])
@@ -288,7 +314,7 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
               />
             </div>
             </div>
-            <div className="flex shrink-0 justify-end gap-3 border-t border-slate-100 bg-white px-6 py-4"><button type="button" onClick={() => setEditing(null)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600">Cancel</button><button type="submit" disabled={saving || !form.location_confirmed} className="rounded-xl bg-blue-500 px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60">{saving ? 'Saving...' : 'Save location'}</button></div>
+            <div className="flex shrink-0 justify-end gap-3 border-t border-slate-100 bg-white px-6 py-4"><button type="button" onClick={() => setEditing(null)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600">Cancel</button><button type="submit" disabled={saving} className="rounded-xl bg-blue-500 px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60">{saving ? 'Saving...' : 'Save location'}</button></div>
           </form>
         </div>
       )}
@@ -301,6 +327,7 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
 }
 
 function ImageFields({ form, galleryFiles, isSuperAdmin, newWallpaperIndex, onGalleryChange, onSelectSavedWallpaper, onSelectNewWallpaper, onRemoveGallery }) {
+  const toast = useToast()
   const fileInputRef = useRef(null)
   const [selectionError, setSelectionError] = useState('')
 
@@ -308,8 +335,16 @@ function ImageFields({ form, galleryFiles, isSuperAdmin, newWallpaperIndex, onGa
     const files = [...(event.target.files || [])]
     const existingKeys = new Set(galleryFiles.map((file) => `${file.name}-${file.size}-${file.lastModified}`))
     const newFiles = files.filter((file) => !existingKeys.has(`${file.name}-${file.size}-${file.lastModified}`))
+    if (newFiles.some((file) => !['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024)) {
+      const failure = 'Each image must be a JPG, PNG, or WebP file no larger than 5 MB.'
+      setSelectionError(failure)
+      toast.reminder(failure)
+      event.target.value = ''
+      return
+    }
     if (form.gallery_urls.length + galleryFiles.length + newFiles.length > MAX_GALLERY_IMAGES) {
       setSelectionError(`A location can have up to ${MAX_GALLERY_IMAGES} gallery images.`)
+      toast.reminder(`A location can have up to ${MAX_GALLERY_IMAGES} gallery images.`)
       event.target.value = ''
       return
     }
@@ -361,12 +396,13 @@ function FileImagePreview({ file, ...props }) {
   return <ImagePreview {...props} url={url} />
 }
 
-function Input({ label, required = true, ...props }) {
-  return <label><span className="mb-1.5 block text-xs font-semibold text-slate-600">{label}</span><input required={required} {...props} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-500" /></label>
+function Input({ label, required = true, error, ...props }) {
+  return <label><span className="mb-1.5 block text-xs font-semibold text-slate-600">{label}</span><input required={required} {...props} aria-invalid={Boolean(error)} className={`w-full rounded-xl border px-3 py-2.5 text-sm outline-none ${error ? 'border-red-400 bg-red-50 focus:border-red-500 focus:ring-2 focus:ring-red-100' : 'border-slate-200 focus:border-blue-500'}`} />{error && <span className="mt-1 block text-xs text-red-500">{error}</span>}</label>
 }
 
-function TimeRangeField({ label, startName, endName, start, end, onChange }) {
-  return <fieldset><legend className="mb-1.5 text-xs font-semibold text-slate-600">{label}</legend><div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2"><label><span className="sr-only">{label} start time</span><select name={startName} value={start} onChange={onChange} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500">{timeOptions.map((time) => <option key={time} value={time}>{formatTimeLabel(time)}</option>)}</select></label><span className="text-xs font-semibold text-slate-400">to</span><label><span className="sr-only">{label} end time</span><select name={endName} value={end} onChange={onChange} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500">{timeOptions.map((time) => <option key={time} value={time}>{formatTimeLabel(time)}</option>)}</select></label></div></fieldset>
+function TimeRangeField({ label, startName, endName, start, end, onChange, error }) {
+  const selectClass = `w-full rounded-xl border bg-white px-3 py-2.5 text-sm outline-none ${error ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-100' : 'border-slate-200 focus:border-blue-500'}`
+  return <fieldset><legend className="mb-1.5 text-xs font-semibold text-slate-600">{label}</legend><div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2"><label><span className="sr-only">{label} start time</span><select name={startName} value={start} onChange={onChange} aria-invalid={Boolean(error)} className={selectClass}>{timeOptions.map((time) => <option key={time} value={time}>{formatTimeLabel(time)}</option>)}</select></label><span className="text-xs font-semibold text-slate-400">to</span><label><span className="sr-only">{label} end time</span><select name={endName} value={end} onChange={onChange} aria-invalid={Boolean(error)} className={selectClass}>{timeOptions.map((time) => <option key={time} value={time}>{formatTimeLabel(time)}</option>)}</select></label></div>{error && <span className="mt-1 block text-xs text-red-500">{error}</span>}</fieldset>
 }
 
 function formatTimeLabel(value) {

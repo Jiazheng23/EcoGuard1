@@ -30,6 +30,7 @@ import {
   validateNewPassword,
 } from "../../utils/passwordValidation";
 import { getApplicationSetup } from "../../services/locationAdminApplicationService";
+import { useToast } from "../../components/toastContext";
 
 const features = [
   {
@@ -51,6 +52,7 @@ const features = [
 
 export default function AuthPage({ initialMode }) {
   const navigate = useNavigate();
+  const toast = useToast();
   const mode = initialMode;
   const [role, setRole] = useState("tourist");
   const [showPassword, setShowPassword] = useState(false);
@@ -72,6 +74,7 @@ export default function AuthPage({ initialMode }) {
     password: "",
     confirmPassword: "",
   });
+  const [fieldErrors, setFieldErrors] = useState({});
 
   useEffect(() => {
     if (mode !== "reset") return undefined;
@@ -135,13 +138,35 @@ export default function AuthPage({ initialMode }) {
       [event.target.name]: event.target.value,
     }));
     setMessage("");
+    setFieldErrors((current) => ({ ...current, [event.target.name]: undefined }));
+  }
+
+  function validateForm() {
+    const errors = {};
+    const cleanEmail = form.email.trim();
+    if (mode === "register" && form.name.trim().length < 2) errors.name = "Enter your full name (at least 2 characters).";
+    if (mode !== "reset") {
+      if (!cleanEmail) errors.email = "Email address is required.";
+      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) errors.email = "Enter a valid email address.";
+    }
+    if (mode !== "forgot") {
+      if (!form.password) errors.password = "Password is required.";
+      else if ((mode === "register" || mode === "reset") && form.password.length < 8) errors.password = "Password must contain at least 8 characters.";
+    }
+    if (mode === "register" || mode === "reset") {
+      if (!form.confirmPassword) errors.confirmPassword = "Please confirm your password.";
+      else if (form.password !== form.confirmPassword) errors.confirmPassword = "Passwords do not match.";
+    }
+    return errors;
   }
 
   async function handleSubmit(event) {
     event.preventDefault();
 
-    if (!event.currentTarget.checkValidity()) {
-      event.currentTarget.reportValidity();
+    const nextErrors = validateForm();
+    setFieldErrors(nextErrors);
+    if (Object.keys(nextErrors).length) {
+      toast.reminder("Please correct the highlighted fields before continuing.");
       return;
     }
 
@@ -149,22 +174,28 @@ export default function AuthPage({ initialMode }) {
       setMessage(
         "Supabase is not configured. Add your VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY values.",
       );
+      toast.error("Supabase is not configured. Authentication is unavailable.");
       return;
     }
 
     if (mode === "register" && form.password !== form.confirmPassword) {
       setMessage("Passwords do not match. Please check and try again.");
+      setFieldErrors({ confirmPassword: "Passwords do not match." });
+      toast.reminder("Please correct the highlighted field.");
       return;
     }
 
     if (mode === "reset") {
       if (recoveryStatus !== "ready") {
         setMessage("Open a valid password reset link from your email before choosing a new password.");
+        toast.reminder("Open a valid password reset link before continuing.");
         return;
       }
       const passwordError = validateNewPassword(form.password, form.confirmPassword);
       if (passwordError) {
         setMessage(passwordError);
+        setFieldErrors({ password: passwordError });
+        toast.reminder(passwordError);
         return;
       }
     }
@@ -177,18 +208,21 @@ export default function AuthPage({ initialMode }) {
     try {
       if (mode === "forgot") {
         await sendPasswordReset(cleanEmail);
+        toast.success("Password reset instructions have been requested.");
         setSubmitted(true);
         return;
       }
 
       if (mode === "reset") {
         await updateRecoveredPassword(form.password);
+        toast.success("Your password has been updated successfully.");
         setSubmitted(true);
         return;
       }
 
       if (mode === "login") {
         const data = await loginUser(cleanEmail, form.password);
+        toast.success("Signed in successfully.");
 
         const accountRole = data.profile?.role || "tourist";
 
@@ -217,6 +251,7 @@ export default function AuthPage({ initialMode }) {
           password: form.password,
           role,
         });
+        toast.success("Account created successfully.");
         if (role === 'location_admin') {
           await loginUser(cleanEmail, form.password)
           navigate('/location_admin/application', { replace: true })
@@ -227,6 +262,7 @@ export default function AuthPage({ initialMode }) {
     } catch (error) {
       setIsCheckingLocationAdmin(false);
       setMessage(error.message || "Authentication failed. Please try again.");
+      toast.error(error.message || "Authentication failed. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -350,7 +386,7 @@ export default function AuthPage({ initialMode }) {
               </button>
             </div>
           ) : (
-            <form className="auth-form" onSubmit={handleSubmit}>
+            <form className="auth-form" onSubmit={handleSubmit} noValidate>
               {mode === "register" && (
                 <Field
                   label="Full name"
@@ -359,6 +395,7 @@ export default function AuthPage({ initialMode }) {
                   placeholder="Ahmad Rizal"
                   value={form.name}
                   onChange={updateField}
+                  error={fieldErrors.name}
                 />
               )}
               {mode !== "reset" && (
@@ -371,6 +408,7 @@ export default function AuthPage({ initialMode }) {
                   placeholder={role === "location_admin" ? "location.admin@ecoguard.my" : "tourist@example.com"}
                   value={form.email}
                   onChange={updateField}
+                  error={fieldErrors.email}
                 />
               )}
               {mode !== "forgot" && (
@@ -386,7 +424,7 @@ export default function AuthPage({ initialMode }) {
                       </button>
                     )}
                   </div>
-                  <div className="field__input">
+                  <div className={`field__input ${fieldErrors.password ? "field__input--error" : ""}`}>
                     <LockKeyhole size={17} />
                     <input
                       id="password"
@@ -398,6 +436,8 @@ export default function AuthPage({ initialMode }) {
                       minLength={mode === "reset" ? 8 : undefined}
                       autoComplete={mode === "login" ? "current-password" : "new-password"}
                       required
+                      aria-invalid={Boolean(fieldErrors.password)}
+                      aria-describedby={fieldErrors.password ? "password-error" : undefined}
                     />
                     <button
                       type="button"
@@ -409,6 +449,7 @@ export default function AuthPage({ initialMode }) {
                       {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
                   </div>
+                  {fieldErrors.password && <small id="password-error" className="field-error">{fieldErrors.password}</small>}
                 </div>
               )}
               {(mode === "register" || mode === "reset") && (
@@ -422,6 +463,7 @@ export default function AuthPage({ initialMode }) {
                   placeholder="••••••••"
                   value={form.confirmPassword}
                   onChange={updateField}
+                  error={fieldErrors.confirmPassword}
                 />
               )}
               {mode === "reset" && <p className="password-requirements">Use at least 8 characters with uppercase, lowercase, and a number.</p>}
@@ -492,11 +534,12 @@ function Field({
   onChange,
   minLength,
   autoComplete,
+  error,
 }) {
   return (
     <div className="field">
       <label htmlFor={name}>{label}</label>
-      <div className="field__input">
+      <div className={`field__input ${error ? "field__input--error" : ""}`}>
         {icon}
         <input
           id={name}
@@ -508,8 +551,11 @@ function Field({
           minLength={minLength}
           autoComplete={autoComplete}
           required
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? `${name}-error` : undefined}
         />
       </div>
+      {error && <small id={`${name}-error`} className="field-error">{error}</small>}
     </div>
   );
 }

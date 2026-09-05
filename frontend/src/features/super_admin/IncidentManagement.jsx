@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CheckCircle2, ChevronLeft, ChevronRight, Clock3, Expand, FileCheck2, MapPin, Megaphone, Plus, RefreshCw, Search, ShieldAlert, X, XCircle } from 'lucide-react'
 import { listManagedIncidents, removeResolutionEvidence, reviewIncident, reviewIncidentAudit, saveIncidentResponse, submitIncidentForAudit, subscribeToIncidents, uploadResolutionEvidence } from '../../services/incidentService'
 import AdvisoryEditor from './AdvisoryEditor'
 import LoadingScreen from '../../components/LoadingScreen'
+import { useToast } from '../../components/toastContext'
 
 const categoryLabels = {
   water_pollution: 'Water pollution', overflowing_rubbish: 'Overflowing rubbish',
@@ -14,6 +15,7 @@ const displayStatus = (item) => item?.audit_status === 'changes_requested' ? 'ch
 const categoryLabel = (item) => item?.category === 'other' ? item.custom_category || 'Other' : categoryLabels[item?.category] || 'Other'
 
 export default function IncidentManagement({ user, locations, isSuperAdmin, profile }) {
+  const toast = useToast()
   const [incidents, setIncidents] = useState([])
   const [selectedId, setSelectedId] = useState(null)
   const selectedIdRef = useRef(null)
@@ -28,8 +30,9 @@ export default function IncidentManagement({ user, locations, isSuperAdmin, prof
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState({ text: '', error: false })
   const [advisorySource, setAdvisorySource] = useState(null)
+  const [fieldErrors, setFieldErrors] = useState({})
 
-  async function refresh(silent = false) {
+  const refresh = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
     try {
       const rows = await listManagedIncidents()
@@ -43,14 +46,14 @@ export default function IncidentManagement({ user, locations, isSuperAdmin, prof
         setReason(first?.rejection_reason || '')
         setAuditComment(first?.audit_comment || '')
       }
-    } catch (error) { setNotice({ text: error.message || 'Unable to load incident reports.', error: true }) }
+    } catch (error) { const failure = error.message || 'Unable to load incident reports.'; setNotice({ text: failure, error: true }); toast.error(failure) }
     finally { if (!silent) setLoading(false) }
-  }
+  }, [toast])
 
   useEffect(() => {
     void Promise.resolve().then(() => refresh())
     return subscribeToIncidents(() => refresh(true))
-  }, [])
+  }, [refresh])
 
   const selected = incidents.find((item) => item.id === selectedId) || null
   const filtered = useMemo(() => incidents.filter((item) => {
@@ -63,13 +66,24 @@ export default function IncidentManagement({ user, locations, isSuperAdmin, prof
 
   function select(item) {
     selectedIdRef.current = item.id
-    setSelectedId(item.id); setResponse(item.response_action || ''); setReason(item.rejection_reason || ''); setAuditComment(item.audit_comment || ''); setFiles([]); setNotice({ text: '', error: false })
+    setSelectedId(item.id); setResponse(item.response_action || ''); setReason(item.rejection_reason || ''); setAuditComment(item.audit_comment || ''); setFiles([]); setNotice({ text: '', error: false }); setFieldErrors({})
   }
 
   async function act(action) {
     if (!selected || saving) return
+    const nextErrors = {}
+    if (action === 'reject' && reason.trim().length < 3) nextErrors.reason = 'Enter a rejection reason with at least 3 characters.'
+    if (action === 'response' && response.trim().length < 5) nextErrors.response = 'Describe the response action using at least 5 characters.'
+    if (action === 'request-changes' && auditComment.trim().length < 3) nextErrors.auditComment = 'Enter a review comment explaining the required changes.'
+    if (action === 'submit-audit' && !files.length && !selected.resolution_evidence_path && !selected.resolution_evidence_paths?.length) nextErrors.evidence = 'Add at least one resolution image before submitting for audit.'
+    setFieldErrors(nextErrors)
+    if (Object.keys(nextErrors).length) {
+      toast.reminder('Please correct the highlighted incident management fields.')
+      return
+    }
     if (isSuperAdmin && ['verify', 'reject', 'response', 'submit-audit'].includes(action)) {
       setNotice({ text: 'Super administrators can only review a submitted resolution and approve it or request changes.', error: true })
+      toast.reminder('This action is only available to the assigned location administrator.')
       return
     }
     setSaving(true); setNotice({ text: '', error: false })
@@ -85,22 +99,31 @@ export default function IncidentManagement({ user, locations, isSuperAdmin, prof
       if (action === 'request-changes') await reviewIncidentAudit(selected.id, 'changes_requested', auditComment)
       await refresh(true)
       setFiles([])
-      setNotice({ text: action === 'response' ? 'Proposed response action saved. You can now add resolution evidence.' : action === 'submit-audit' ? 'Resolution submitted for super-admin approval.' : action === 'approve-audit' ? 'Resolution approved and incident closed.' : action === 'request-changes' ? 'Resolution returned to the location administrator.' : `Incident ${action === 'verify' ? 'verified' : 'rejected'}.`, error: false })
-    } catch (error) { setNotice({ text: error.message || 'Unable to update incident.', error: true }) }
+      const success = action === 'response' ? 'Proposed response action saved. You can now add resolution evidence.' : action === 'submit-audit' ? 'Resolution submitted for super-admin approval.' : action === 'approve-audit' ? 'Resolution approved and incident closed.' : action === 'request-changes' ? 'Resolution returned to the location administrator.' : `Incident ${action === 'verify' ? 'verified' : 'rejected'}.`
+      setNotice({ text: success, error: false }); toast.success(success)
+    } catch (error) { const failure = error.message || 'Unable to update incident.'; setNotice({ text: failure, error: true }); toast.error(failure) }
     finally { setSaving(false) }
   }
 
   async function removeEvidence(path) {
     if (!selected || saving) return
     setSaving(true)
-    try { await removeResolutionEvidence(selected, path); await refresh(true); setNotice({ text: 'Resolution image removed.', error: false }) }
-    catch (error) { setNotice({ text: error.message || 'Unable to remove resolution image.', error: true }) }
+    try { await removeResolutionEvidence(selected, path); await refresh(true); setNotice({ text: 'Resolution image removed.', error: false }); toast.success('Resolution image removed.') }
+    catch (error) { const failure = error.message || 'Unable to remove resolution image.'; setNotice({ text: failure, error: true }); toast.error(failure) }
     finally { setSaving(false) }
   }
 
   function chooseEvidence(event) {
     const chosen = Array.from(event.target.files || [])
-    if (chosen.length) setFiles((current) => [...current, ...chosen])
+    const invalid = chosen.find((file) => !['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 10 * 1024 * 1024)
+    if (invalid) {
+      const failure = 'Each resolution image must be a JPG, PNG, or WebP file no larger than 10 MB.'
+      setFieldErrors((current) => ({ ...current, evidence: failure }))
+      toast.reminder(failure)
+    } else if (chosen.length) {
+      setFiles((current) => [...current, ...chosen])
+      setFieldErrors((current) => ({ ...current, evidence: undefined }))
+    }
     event.target.value = ''
   }
 
@@ -115,14 +138,15 @@ export default function IncidentManagement({ user, locations, isSuperAdmin, prof
       </div>
       <div className="min-h-0 overflow-y-auto p-5 md:p-6">{!selected ? <div className="grid h-full place-items-center text-sm text-slate-400">Select an incident report.</div> : <><div className="flex flex-wrap items-center gap-2"><Status value={displayStatus(selected)} /><span className="text-xs text-slate-400">Report #{selected.id}</span></div><h2 className="mt-3 text-xl font-bold text-slate-900">{categoryLabel(selected)}</h2>{selected.category === 'other' && <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-violet-600">Custom issue category</p>}<p className="mt-1 flex items-center gap-1 text-sm text-slate-500"><MapPin size={14} />{selected.ecological_locations?.name}</p><p className="mt-4 rounded-xl bg-slate-50 p-4 text-sm leading-6 text-slate-700">{selected.description}</p>{selected.audit_status === 'changes_requested' && <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800"><b>Changes requested by super admin</b><p className="mt-1">{selected.audit_comment}</p></div>}
         <IncidentPhotoSlideshow key={selected.id} urls={selected.photo_urls?.length ? selected.photo_urls : [selected.photo_url].filter(Boolean)} />
-        {selected.status === 'submitted' && !isSuperAdmin && <div className="mt-5 border-t border-slate-100 pt-5"><div className="flex gap-2"><button type="button" disabled={saving} onClick={() => act('verify')} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white"><CheckCircle2 size={16} />Verify incident</button></div><label className="mt-4 block text-xs font-semibold text-slate-500">Reason for rejection<textarea rows="2" value={reason} onChange={(e) => setReason(e.target.value)} className="mt-1 w-full resize-none rounded-xl border border-slate-200 p-3 text-sm font-normal outline-none" placeholder="Explain why this report is invalid or a duplicate" /></label><button type="button" disabled={saving || !reason.trim()} onClick={() => act('reject')} className="mt-2 inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-bold text-red-700 disabled:opacity-40"><XCircle size={16} />Reject report</button></div>}
+        {selected.status === 'submitted' && !isSuperAdmin && <div className="mt-5 border-t border-slate-100 pt-5"><div className="flex gap-2"><button type="button" disabled={saving} onClick={() => act('verify')} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white"><CheckCircle2 size={16} />Verify incident</button></div><label className="mt-4 block text-xs font-semibold text-slate-500">Reason for rejection<textarea rows="2" value={reason} onChange={(e) => { setReason(e.target.value); setFieldErrors((current) => ({ ...current, reason: undefined })) }} aria-invalid={Boolean(fieldErrors.reason)} className={`mt-1 w-full resize-none rounded-xl border p-3 text-sm font-normal outline-none ${fieldErrors.reason ? 'border-red-400 bg-red-50 focus:border-red-500 focus:ring-2 focus:ring-red-100' : 'border-slate-200'}`} placeholder="Explain why this report is invalid or a duplicate" />{fieldErrors.reason && <span className="mt-1 block font-normal text-red-500">{fieldErrors.reason}</span>}</label><button type="button" disabled={saving} onClick={() => act('reject')} className="mt-2 inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-bold text-red-700 disabled:opacity-40"><XCircle size={16} />Reject report</button></div>}
         {selected.status === 'submitted' && isSuperAdmin && <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800"><b>Awaiting location administrator verification</b><p className="mt-1 leading-6">Only the administrator assigned to this location can verify or reject this report. Super-admin review becomes available after the response action and resolution evidence are submitted for audit.</p></div>}
         {selected.status === 'rejected' && <div className="mt-5 rounded-xl border border-red-100 bg-red-50 p-4 text-sm text-red-700"><b>Rejection reason</b><p className="mt-1">{selected.rejection_reason}</p></div>}
-        {['verified', 'closed'].includes(selected.status) && <div className="mt-5 border-t border-slate-100 pt-5">{selected.status === 'verified' && <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-orange-200 bg-orange-50 p-4"><div><p className="text-xs font-bold uppercase tracking-wide text-orange-700">Optional step</p><p className="mt-1 text-sm text-orange-800">Publish safety guidance for tourists when public communication is needed.</p></div><button type="button" onClick={() => setAdvisorySource(selected)} className="inline-flex items-center gap-2 rounded-xl border border-orange-300 bg-white px-4 py-2.5 text-sm font-bold text-orange-700 hover:bg-orange-100"><Megaphone size={16} />Create tourist advisory</button></div>}<div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4"><div className="flex items-center justify-between gap-3"><h3 className="font-bold text-slate-800">Step 1 · Proposed response action</h3>{selected.response_action && <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold uppercase text-emerald-700">Saved</span>}</div><p className="mt-1 text-xs text-slate-500">Save the action plan before adding resolution evidence.</p>{isSuperAdmin && !selected.response_action && <div className="mt-3 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-800"><Clock3 className="mt-0.5 shrink-0" size={18} /><div><p className="text-sm font-bold">Waiting for proposed response action</p><p className="mt-1 text-xs leading-5">The location administrator has not recorded the action taken or proposed solution yet. Super-admin review will be available after the complete resolution is submitted.</p></div></div>}<label className="mt-3 block text-xs font-semibold text-slate-500">Action taken or proposed<textarea disabled={selected.status === 'closed' || isSuperAdmin || selected.audit_status === 'pending'} rows="4" value={response} onChange={(e) => setResponse(e.target.value)} className="mt-1 w-full resize-none rounded-xl border border-slate-200 bg-white p-3 text-sm font-normal leading-6 outline-none disabled:bg-slate-100" placeholder="Describe containment, cleanup, repairs, communication, and follow-up..." /></label>{selected.status === 'verified' && !isSuperAdmin && selected.audit_status !== 'pending' && <button type="button" disabled={saving || response.trim().length < 5} onClick={() => act('response')} className="mt-3 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40">{selected.response_action ? 'Update response action' : 'Save response action'}</button>}</div>
+        {['verified', 'closed'].includes(selected.status) && <div className="mt-5 border-t border-slate-100 pt-5">{selected.status === 'verified' && <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-orange-200 bg-orange-50 p-4"><div><p className="text-xs font-bold uppercase tracking-wide text-orange-700">Optional step</p><p className="mt-1 text-sm text-orange-800">Publish safety guidance for tourists when public communication is needed.</p></div><button type="button" onClick={() => setAdvisorySource(selected)} className="inline-flex items-center gap-2 rounded-xl border border-orange-300 bg-white px-4 py-2.5 text-sm font-bold text-orange-700 hover:bg-orange-100"><Megaphone size={16} />Create tourist advisory</button></div>}<div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4"><div className="flex items-center justify-between gap-3"><h3 className="font-bold text-slate-800">Step 1 · Proposed response action</h3>{selected.response_action && <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold uppercase text-emerald-700">Saved</span>}</div><p className="mt-1 text-xs text-slate-500">Save the action plan before adding resolution evidence.</p>{isSuperAdmin && !selected.response_action && <div className="mt-3 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-800"><Clock3 className="mt-0.5 shrink-0" size={18} /><div><p className="text-sm font-bold">Waiting for proposed response action</p><p className="mt-1 text-xs leading-5">The location administrator has not recorded the action taken or proposed solution yet. Super-admin review will be available after the complete resolution is submitted.</p></div></div>}<label className="mt-3 block text-xs font-semibold text-slate-500">Action taken or proposed<textarea disabled={selected.status === 'closed' || isSuperAdmin || selected.audit_status === 'pending'} rows="4" value={response} onChange={(e) => { setResponse(e.target.value); setFieldErrors((current) => ({ ...current, response: undefined })) }} aria-invalid={Boolean(fieldErrors.response)} className={`mt-1 w-full resize-none rounded-xl border bg-white p-3 text-sm font-normal leading-6 outline-none disabled:bg-slate-100 ${fieldErrors.response ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-100' : 'border-slate-200'}`} placeholder="Describe containment, cleanup, repairs, communication, and follow-up..." />{fieldErrors.response && <span className="mt-1 block font-normal text-red-500">{fieldErrors.response}</span>}</label>{selected.status === 'verified' && !isSuperAdmin && selected.audit_status !== 'pending' && <button type="button" disabled={saving} onClick={() => act('response')} className="mt-3 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40">{selected.response_action ? 'Update response action' : 'Save response action'}</button>}</div>
           <div className="mt-4 rounded-xl border border-slate-200 p-4"><div className="flex items-center justify-between gap-3"><p className="flex items-center gap-2 text-sm font-semibold text-slate-700"><FileCheck2 size={16} />Step 2 · Resolution evidence</p><span className="text-[11px] text-slate-400">Click an image to preview</span></div><input ref={evidenceInputRef} type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={chooseEvidence} className="hidden" />{isSuperAdmin && !selected.resolution_urls?.length && <div className="mt-3 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-800"><Clock3 className="mt-0.5 shrink-0" size={18} /><div><p className="text-sm font-bold">Waiting for resolution evidence</p><p className="mt-1 text-xs leading-5">The location administrator has not submitted any resolution images yet. Audit controls will become available after the proposed response and evidence are submitted.</p></div></div>}<div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">{selected.resolution_urls?.map((url, index) => <div key={url} className="relative overflow-hidden rounded-xl border border-slate-200 bg-slate-50"><a href={url} target="_blank" rel="noreferrer" title="Open full-size preview"><img src={url} alt={`Incident resolution evidence ${index + 1}`} className="h-28 w-full object-cover" /></a><span className="pointer-events-none absolute bottom-1 left-1 rounded bg-slate-950/70 px-2 py-1 text-[10px] font-bold text-white">Evidence {index + 1}</span>{selected.status === 'verified' && !isSuperAdmin && selected.audit_status !== 'pending' && <button type="button" disabled={saving} onClick={() => removeEvidence(selected.resolution_evidence_paths?.[index])} aria-label={`Remove evidence ${index + 1}`} className="absolute right-1 top-1 rounded-full bg-white/95 p-1.5 text-red-500 shadow hover:bg-red-50"><X size={14} /></button>}</div>)}{filePreviews.map((item, index) => <div key={item.url} className="relative overflow-hidden rounded-xl border border-blue-300 bg-blue-50"><a href={item.url} target="_blank" rel="noreferrer" title="Open full-size preview"><img src={item.url} alt={`New resolution evidence ${index + 1}`} className="h-28 w-full object-cover" /></a><span className="pointer-events-none absolute bottom-1 left-1 rounded bg-blue-600 px-2 py-1 text-[10px] font-bold text-white">New {index + 1}</span><button type="button" onClick={() => setFiles((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Remove new evidence ${index + 1}`} className="absolute right-1 top-1 rounded-full bg-white/95 p-1.5 text-red-500 shadow hover:bg-red-50"><X size={14} /></button></div>)}{selected.status === 'verified' && !isSuperAdmin && selected.audit_status !== 'pending' && selected.response_action && <button type="button" onClick={() => evidenceInputRef.current?.click()} className="flex min-h-28 flex-col items-center justify-center rounded-xl border-2 border-dashed border-blue-200 bg-blue-50/50 text-blue-600 hover:border-blue-400 hover:bg-blue-50"><Plus size={22} /><span className="mt-1 text-sm font-semibold">Add images</span><span className="text-[10px] text-blue-400">Select one or many</span></button>}</div>{!selected.response_action && selected.status === 'verified' && !isSuperAdmin && <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs font-semibold text-amber-700">Save the proposed response action before adding evidence.</p>}</div>
-          {selected.status === 'verified' && !isSuperAdmin && selected.audit_status !== 'pending' && <button type="button" disabled={saving || !selected.response_action || (!files.length && !selected.resolution_evidence_path && !selected.resolution_evidence_paths?.length)} onClick={() => act('submit-audit')} className="mt-4 w-full rounded-xl bg-emerald-600 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300">{saving ? 'Submitting...' : 'Submit for audit'}</button>}
+          {fieldErrors.evidence && <p className="mt-2 text-xs font-semibold text-red-500">{fieldErrors.evidence}</p>}
+          {selected.status === 'verified' && !isSuperAdmin && selected.audit_status !== 'pending' && <button type="button" disabled={saving || !selected.response_action} onClick={() => act('submit-audit')} className="mt-4 w-full rounded-xl bg-emerald-600 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300">{saving ? 'Submitting...' : 'Submit for audit'}</button>}
           {selected.status === 'verified' && selected.audit_status === 'pending' && !isSuperAdmin && <p className="mt-4 rounded-xl bg-blue-50 p-4 text-sm font-semibold text-blue-700">Awaiting super-admin audit. The response is locked until reviewed.</p>}
-          {isSuperAdmin && selected.status === 'verified' && selected.audit_status === 'pending' && <div className="mt-4 rounded-xl border border-violet-200 bg-violet-50 p-4"><h3 className="font-bold text-violet-900">Super-admin review</h3><p className="mt-1 text-xs text-violet-700">Review the proposed action and every evidence image before deciding.</p><label className="mt-3 block text-xs font-semibold text-violet-800">Review comment <span className="font-normal text-violet-500">(required when requesting changes)</span><textarea rows="3" value={auditComment} onChange={(e) => setAuditComment(e.target.value)} className="mt-1 w-full rounded-xl border border-violet-200 bg-white p-3 text-sm font-normal outline-none" placeholder="Explain what must be corrected or add an approval note" /></label><div className="mt-3 flex flex-wrap gap-2"><button type="button" disabled={saving} onClick={() => act('approve-audit')} className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40">Approve resolution</button><button type="button" disabled={saving || !auditComment.trim()} onClick={() => act('request-changes')} className="rounded-xl border border-amber-300 bg-white px-4 py-2.5 text-sm font-bold text-amber-700 disabled:opacity-40">Request changes</button></div></div>}
+          {isSuperAdmin && selected.status === 'verified' && selected.audit_status === 'pending' && <div className="mt-4 rounded-xl border border-violet-200 bg-violet-50 p-4"><h3 className="font-bold text-violet-900">Super-admin review</h3><p className="mt-1 text-xs text-violet-700">Review the proposed action and every evidence image before deciding.</p><label className="mt-3 block text-xs font-semibold text-violet-800">Review comment <span className="font-normal text-violet-500">(required when requesting changes)</span><textarea rows="3" value={auditComment} onChange={(e) => { setAuditComment(e.target.value); setFieldErrors((current) => ({ ...current, auditComment: undefined })) }} aria-invalid={Boolean(fieldErrors.auditComment)} className={`mt-1 w-full rounded-xl border bg-white p-3 text-sm font-normal outline-none ${fieldErrors.auditComment ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-100' : 'border-violet-200'}`} placeholder="Explain what must be corrected or add an approval note" />{fieldErrors.auditComment && <span className="mt-1 block font-normal text-red-500">{fieldErrors.auditComment}</span>}</label><div className="mt-3 flex flex-wrap gap-2"><button type="button" disabled={saving} onClick={() => act('approve-audit')} className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40">Approve resolution</button><button type="button" disabled={saving} onClick={() => act('request-changes')} className="rounded-xl border border-amber-300 bg-white px-4 py-2.5 text-sm font-bold text-amber-700 disabled:opacity-40">Request changes</button></div></div>}
           {selected.status === 'closed' && <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800"><b>Audit approved</b><p className="mt-1">{selected.audit_comment || 'The resolution evidence was approved by a super administrator.'}</p><p className="mt-2 text-xs">Audited {formatDate(selected.audited_at || selected.closed_at)}</p></div>}</div>}
       </>}</div>
     </section>{advisorySource && <AdvisoryEditor source={advisorySource} locations={locations} isSuperAdmin={isSuperAdmin} profile={profile} onClose={() => setAdvisorySource(null)} onSaved={() => setNotice({ text: 'Tourist advisory published.', error: false })} />}

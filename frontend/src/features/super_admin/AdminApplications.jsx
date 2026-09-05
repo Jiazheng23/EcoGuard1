@@ -5,6 +5,7 @@ import { decideAdminApplication, getAdminApplicationDocumentUrl, listAdminApplic
 import TablePagination from '../../components/TablePagination'
 import useTablePagination from '../../hooks/useTablePagination'
 import LoadingScreen from '../../components/LoadingScreen'
+import { useToast } from '../../components/toastContext'
 
 const statusOptions = [
   { value: 'all', label: 'All statuses' },
@@ -27,6 +28,7 @@ const rejectionReasons = [
 ]
 
 export default function AdminApplications() {
+  const toast = useToast()
   const [applications, setApplications] = useState([])
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -48,6 +50,7 @@ export default function AdminApplications() {
     } catch (error) {
       setMessageType('error')
       setMessage(error.message)
+      toast.error(error.message || 'Unable to load applications.')
       return false
     } finally {
       setLoading(false)
@@ -62,11 +65,12 @@ export default function AdminApplications() {
         if (active) {
           setMessageType('error')
           setMessage(error.message)
+          toast.error(error.message || 'Unable to load applications.')
         }
       })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [])
+  }, [toast])
 
   const filteredApplications = useMemo(() => {
     const term = query.trim().toLowerCase()
@@ -96,6 +100,7 @@ export default function AdminApplications() {
       if (refreshed) {
         setMessageType('success')
         setMessage(`Application ${decision}.`)
+        toast.success(`Application ${decision} successfully.`)
         if (decision === 'rejected') {
           setRejectingApplication(null)
           setRejectionPreset('')
@@ -105,6 +110,7 @@ export default function AdminApplications() {
     } catch (error) {
       setMessageType('error')
       setMessage(error.message)
+      toast.error(error.message || 'Unable to update the application.')
     } finally {
       setDecidingId(null)
     }
@@ -133,6 +139,7 @@ export default function AdminApplications() {
       previewWindow?.close()
       setMessageType('error')
       setMessage(error.message)
+      toast.error(error.message || 'Unable to open the supporting document.')
     } finally {
       setOpeningDocumentId(null)
     }
@@ -237,7 +244,9 @@ export default function AdminApplications() {
 }
 
 function RejectionDialog({ application, preset, details, deciding, onPresetChange, onDetailsChange, onClose, onConfirm }) {
+  const toast = useToast()
   const [reasonsOpen, setReasonsOpen] = useState(false)
+  const [reasonError, setReasonError] = useState('')
   const presetText = preset === 'custom' ? '' : preset
   const completeReason = [presetText, details.trim()].filter(Boolean).join(' ')
   const detailsLimit = Math.max(0, presetText ? 499 - presetText.length : 500)
@@ -248,6 +257,16 @@ function RejectionDialog({ application, preset, details, deciding, onPresetChang
     onPresetChange(nextPreset)
     onDetailsChange(details.slice(0, Math.max(0, nextPresetText ? 499 - nextPresetText.length : 500)))
     setReasonsOpen(false)
+    setReasonError('')
+  }
+
+  function confirmRejection() {
+    if (!completeReason.trim()) {
+      setReasonError('Select a common reason or enter a custom rejection reason.')
+      toast.reminder('A rejection reason is required.')
+      return
+    }
+    onConfirm(completeReason)
   }
 
   return <div style={{ zIndex: 9999 }} className="fixed inset-0 grid place-items-center overflow-y-auto bg-slate-950/60 p-4 backdrop-blur-[2px]" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !deciding) onClose() }}>
@@ -255,9 +274,9 @@ function RejectionDialog({ application, preset, details, deciding, onPresetChang
       <header className="flex items-start gap-3 border-b border-slate-100 px-5 py-4"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-red-50 text-red-600"><AlertTriangle size={18} /></span><div className="min-w-0 flex-1"><h2 id="rejection-dialog-title" className="font-bold text-slate-900">Reject application</h2><p className="mt-0.5 text-xs leading-5 text-slate-500">The reason will be shown to {application.profiles?.full_name || 'the applicant'} before resubmission.</p></div><button type="button" onClick={onClose} disabled={deciding} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600" aria-label="Close rejection dialog"><X size={17} /></button></header>
       <div className="space-y-4 px-5 py-4">
         <div className="relative"><span className="text-sm font-semibold text-slate-700">Common reason</span><button type="button" onClick={() => setReasonsOpen((open) => !open)} aria-haspopup="listbox" aria-expanded={reasonsOpen} className={`mt-1.5 flex w-full items-center gap-2 rounded-xl border bg-slate-50 px-3 py-2.5 text-left text-sm outline-none transition ${reasonsOpen ? 'border-red-400 ring-2 ring-red-100' : 'border-slate-200'}`}><span className={`min-w-0 flex-1 break-words ${preset ? 'text-slate-700' : 'text-slate-400'}`}>{preset ? preset === 'custom' ? 'Other / custom reason' : preset : 'Select a reason or type below'}</span><ChevronDown size={16} className={`shrink-0 text-slate-400 transition ${reasonsOpen ? 'rotate-180' : ''}`} /></button>{reasonsOpen && <div role="listbox" aria-label="Common rejection reasons" className="absolute left-0 right-0 top-full z-20 mt-1 max-h-52 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl">{reasonOptions.map((option) => <button key={option.value} type="button" role="option" aria-selected={preset === option.value} onClick={() => chooseReason(option.value)} className={`flex w-full items-start gap-2 whitespace-normal break-words rounded-lg px-3 py-2 text-left text-sm leading-5 transition ${preset === option.value ? 'bg-red-50 font-semibold text-red-700' : 'text-slate-600 hover:bg-slate-50'}`}><span className="min-w-0 flex-1">{option.label}</span>{preset === option.value && <Check size={15} className="mt-0.5 shrink-0" />}</button>)}</div>}</div>
-        <label className="block"><span className="text-sm font-semibold text-slate-700">{preset === 'custom' || !preset ? 'Custom reason' : 'Additional details (optional)'}</span><textarea value={details} onChange={(event) => onDetailsChange(event.target.value)} maxLength={detailsLimit} rows={3} className="mt-1.5 w-full resize-none rounded-xl border border-slate-200 p-3 text-sm leading-5 text-slate-700 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100" placeholder={preset && preset !== 'custom' ? 'Add any details that will help the applicant correct it…' : 'Explain what must be corrected before resubmitting…'} /><span className="mt-1 flex justify-between text-xs text-slate-400"><span>{completeReason ? 'This message will be saved with the application.' : 'A reason is required.'}</span><span>{completeReason.length}/500</span></span></label>
+        <label className="block"><span className="text-sm font-semibold text-slate-700">{preset === 'custom' || !preset ? 'Custom reason' : 'Additional details (optional)'}</span><textarea value={details} onChange={(event) => { onDetailsChange(event.target.value); setReasonError('') }} maxLength={detailsLimit} rows={3} aria-invalid={Boolean(reasonError)} className={`mt-1.5 w-full resize-none rounded-xl border p-3 text-sm leading-5 text-slate-700 outline-none ${reasonError ? 'border-red-400 bg-red-50 focus:border-red-500 focus:ring-2 focus:ring-red-100' : 'border-slate-200 focus:border-red-400 focus:ring-2 focus:ring-red-100'}`} placeholder={preset && preset !== 'custom' ? 'Add any details that will help the applicant correct it…' : 'Explain what must be corrected before resubmitting…'} />{reasonError && <span className="mt-1 block text-xs text-red-500">{reasonError}</span>}<span className="mt-1 flex justify-between text-xs text-slate-400"><span>{completeReason ? 'This message will be saved with the application.' : 'A reason is required.'}</span><span>{completeReason.length}/500</span></span></label>
       </div>
-      <footer className="flex justify-end gap-2 border-t border-slate-100 bg-slate-50 px-5 py-3"><button type="button" onClick={onClose} disabled={deciding} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50">Cancel</button><button type="button" onClick={() => onConfirm(completeReason)} disabled={!completeReason || deciding} className="rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40">{deciding ? 'Rejecting…' : 'Reject application'}</button></footer>
+      <footer className="flex justify-end gap-2 border-t border-slate-100 bg-slate-50 px-5 py-3"><button type="button" onClick={onClose} disabled={deciding} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50">Cancel</button><button type="button" onClick={confirmRejection} disabled={deciding} className="rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40">{deciding ? 'Rejecting…' : 'Reject application'}</button></footer>
     </section>
   </div>
 }

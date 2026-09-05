@@ -2,8 +2,10 @@ import { useState } from 'react'
 import { CalendarClock, Save, X } from 'lucide-react'
 import { createWasteSchedule, updateWasteSchedule } from '../../../services/wasteService'
 import { isWasteScheduleConflict, validateWasteSchedule, WASTE_TYPES } from '../../../utils/wasteValidation'
+import { useToast } from '../../../components/toastContext'
 
 export default function WasteScheduleForm({ location, schedule, schedules, onClose, onSaved }) {
+  const toast = useToast()
   const editing = Boolean(schedule)
   const [values, setValues] = useState(() => initialValues(location, schedule))
   const [errors, setErrors] = useState({})
@@ -24,7 +26,10 @@ export default function WasteScheduleForm({ location, schedule, schedules, onClo
       nextErrors.conflict = 'This collection window overlaps another active schedule at this location.'
     }
     setErrors(nextErrors)
-    if (Object.keys(nextErrors).length) return
+    if (Object.keys(nextErrors).length) {
+      toast.reminder('Please correct the highlighted schedule fields.')
+      return
+    }
 
     setSaving(true)
     setSubmitError('')
@@ -33,8 +38,11 @@ export default function WasteScheduleForm({ location, schedule, schedules, onClo
         ? await updateWasteSchedule(schedule.id, values)
         : await createWasteSchedule(values)
       await onSaved(saved, editing)
+      toast.success(editing ? 'Collection schedule updated successfully.' : 'Collection schedule created successfully.')
     } catch (saveError) {
-      setSubmitError(saveError.message || 'Unable to save the collection schedule.')
+      const failure = saveError.message || 'Unable to save the collection schedule.'
+      setSubmitError(failure)
+      toast.error(failure)
     } finally {
       setSaving(false)
     }
@@ -48,7 +56,7 @@ export default function WasteScheduleForm({ location, schedule, schedules, onClo
           <button type="button" onClick={onClose} aria-label="Close schedule form" className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
         </header>
 
-        <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
+        <form onSubmit={submit} noValidate className="flex min-h-0 flex-1 flex-col">
           <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
           <FormField label="Location"><input value={location.name} disabled className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-500" /></FormField>
           <div className="grid gap-4 md:grid-cols-2">
@@ -57,7 +65,7 @@ export default function WasteScheduleForm({ location, schedule, schedules, onClo
             <FormField label="Waste type" error={errors.waste_type}><select name="waste_type" value={values.waste_type} onChange={updateValue} className={inputClass(errors.waste_type)}>{WASTE_TYPES.map((type) => <option key={type} value={type}>{titleCase(type)}</option>)}</select></FormField>
             <FormField label="Assigned team" error={errors.assigned_team}><input name="assigned_team" value={values.assigned_team} onChange={updateValue} placeholder="Example: Team A" className={inputClass(errors.assigned_team)} /></FormField>
           </div>
-          <FormField label="Notes (optional)"><textarea name="notes" rows="3" value={values.notes} onChange={updateValue} placeholder="Vehicle, route, or handling instructions" className={inputClass()} /></FormField>
+          <FormField label="Notes (optional)"><textarea name="notes" rows="3" maxLength="1000" value={values.notes} onChange={updateValue} placeholder="Vehicle, route, or handling instructions" className={inputClass()} /></FormField>
 
           {errors.conflict && <Notice message={errors.conflict} />}
           {submitError && <Notice message={submitError} />}
@@ -97,7 +105,7 @@ function Notice({ message }) {
 }
 
 function inputClass(error) {
-  return `w-full rounded-xl border bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-500 ${error ? 'border-red-300' : 'border-slate-200'}`
+  return `w-full rounded-xl border bg-white px-3 py-2.5 text-sm text-slate-700 outline-none ${error ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-100' : 'border-slate-200 focus:border-blue-500'}`
 }
 
 function toLocalInput(value) {

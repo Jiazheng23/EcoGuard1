@@ -15,10 +15,12 @@ import { listOwnTrips } from '../../services/tripService'
 import AchievementBadges from '../../components/AchievementBadges'
 import ProfileAvatarUploader from '../profile/ProfileAvatarUploader'
 import { isValidMalaysianPhone, MALAYSIAN_PHONE_ERROR } from '../../utils/malaysianPhone'
+import { useToast } from '../../components/toastContext'
 
 const card = 'rounded-2xl border border-slate-100 bg-white p-5 shadow-sm'
 
 export default function TouristProfile({ user, profile, onProfileChange, onNavigate }) {
+  const toast = useToast()
   const [fullName, setFullName] = useState(
     profile?.full_name || user?.user_metadata?.full_name || '',
   )
@@ -34,6 +36,12 @@ export default function TouristProfile({ user, profile, onProfileChange, onNavig
   const [trips, setTrips] = useState([])
   const [badgesLoading, setBadgesLoading] = useState(true)
   const [badgesError, setBadgesError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState({})
+
+  function updateField(field, setter, value) {
+    setter(value)
+    setFieldErrors((current) => ({ ...current, [field]: undefined }))
+  }
 
   const role = profile?.role || 'tourist'
 
@@ -89,13 +97,22 @@ export default function TouristProfile({ user, profile, onProfileChange, onNavig
     const cleanName = fullName.trim()
     const cleanPhone = phone.trim()
 
+    const nextErrors = {}
     if (!cleanName) {
+      nextErrors.fullName = 'Full name is required.'
       setErrorMessage('Full name is required.')
-      return
+    } else if (cleanName.length > 120) {
+      nextErrors.fullName = 'Full name cannot exceed 120 characters.'
+      setErrorMessage(nextErrors.fullName)
     }
 
     if (!isValidMalaysianPhone(cleanPhone)) {
+      nextErrors.phone = MALAYSIAN_PHONE_ERROR
       setErrorMessage(MALAYSIAN_PHONE_ERROR)
+    }
+    setFieldErrors(nextErrors)
+    if (Object.keys(nextErrors).length) {
+      toast.reminder('Please correct the highlighted profile fields.')
       return
     }
 
@@ -126,10 +143,11 @@ export default function TouristProfile({ user, profile, onProfileChange, onNavig
       setPhone(cleanPhone)
       onProfileChange?.(updatedProfile)
       setSuccessMessage('Profile updated successfully.')
+      toast.success('Profile updated successfully.')
     } catch (error) {
-      setErrorMessage(
-        error.message || 'Unable to update your profile.',
-      )
+      const failure = error.message || 'Unable to update your profile.'
+      setErrorMessage(failure)
+      toast.error(failure)
     } finally {
       setIsSaving(false)
     }
@@ -156,7 +174,7 @@ export default function TouristProfile({ user, profile, onProfileChange, onNavig
 
       <div className="grid gap-5 lg:grid-cols-[280px_1fr]">
         <aside className={`${card} h-full text-center`}>
-          <ProfileAvatarUploader userId={user.id} profile={profile} initials={initials} onProfileChange={onProfileChange} onError={setErrorMessage} onSuccess={setSuccessMessage} />
+          <ProfileAvatarUploader userId={user.id} profile={profile} initials={initials} onProfileChange={onProfileChange} onError={(text) => { setErrorMessage(text); toast.error(text) }} onSuccess={(text) => { setSuccessMessage(text); toast.success(text) }} />
 
           <h2 className="mt-4 text-xl font-bold text-slate-800">
             {fullName || 'Tourist'}
@@ -173,7 +191,7 @@ export default function TouristProfile({ user, profile, onProfileChange, onNavig
 
         </aside>
 
-        <form onSubmit={handleSubmit} className={`${card} space-y-5`}>
+        <form onSubmit={handleSubmit} noValidate className={`${card} space-y-5`}>
           <div>
             <h2 className="font-bold text-slate-800">
               Personal Information
@@ -187,9 +205,11 @@ export default function TouristProfile({ user, profile, onProfileChange, onNavig
             label="Full Name"
             icon={UserRound}
             value={fullName}
-            onChange={setFullName}
+            onChange={(value) => updateField('fullName', setFullName, value)}
             placeholder="Enter your full name"
             required
+            maxLength={120}
+            error={fieldErrors.fullName}
           />
 
           <ProfileField
@@ -204,10 +224,11 @@ export default function TouristProfile({ user, profile, onProfileChange, onNavig
               label="Phone Number"
               icon={Phone}
               value={phone}
-              onChange={setPhone}
+              onChange={(value) => updateField('phone', setPhone, value)}
               placeholder="Example: +60 12-345 6789"
               type="tel"
               inputMode="tel"
+              error={fieldErrors.phone}
             />
 
             <GenderField value={gender} onChange={setGender} />
@@ -267,6 +288,8 @@ function ProfileField({
   required = false,
   type = 'text',
   inputMode,
+  error,
+  maxLength,
 }) {
   return (
     <label className="block">
@@ -292,13 +315,18 @@ function ProfileField({
           placeholder={placeholder}
           readOnly={readOnly}
           required={required}
+          aria-invalid={Boolean(error)}
+          maxLength={maxLength}
           className={`w-full rounded-xl border py-2.5 pl-10 pr-3 text-sm outline-none ${
             readOnly
               ? 'cursor-not-allowed border-slate-100 bg-slate-100 text-slate-500'
-              : 'border-slate-200 bg-slate-50 text-slate-700 focus:border-green-500'
+              : error
+                ? 'border-red-400 bg-red-50 text-slate-700 focus:border-red-500 focus:ring-2 focus:ring-red-100'
+                : 'border-slate-200 bg-slate-50 text-slate-700 focus:border-green-500'
           }`}
         />
       </span>
+      {error && <span className="mt-1 block text-xs font-normal text-red-500">{error}</span>}
     </label>
   )
 }

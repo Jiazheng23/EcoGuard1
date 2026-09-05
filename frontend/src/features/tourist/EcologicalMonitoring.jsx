@@ -37,6 +37,7 @@ import { isWestMalaysiaLocation } from '../../utils/westMalaysia'
 import { submitEnvironmentalIncident } from '../../services/incidentService'
 import { listActiveAdvisories, subscribeToAdvisories } from '../../services/advisoryService'
 import LoadingScreen from '../../components/LoadingScreen'
+import { useToast } from '../../components/toastContext'
 
 const WEST_MALAYSIA_CENTER = [4.2105, 101.9758]
 const WEST_MALAYSIA_BOUNDS = [
@@ -881,6 +882,7 @@ const incidentCategories = [
 ]
 
 function IncidentReportDialog({ destination, user, onClose }) {
+  const toast = useToast()
   const photoInputRef = useRef(null)
   const [category, setCategory] = useState('')
   const [customCategory, setCustomCategory] = useState('')
@@ -890,6 +892,7 @@ function IncidentReportDialog({ destination, user, onClose }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [submitted, setSubmitted] = useState(false)
+  const [fieldErrors, setFieldErrors] = useState({})
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow
@@ -907,8 +910,15 @@ function IncidentReportDialog({ destination, user, onClose }) {
   function choosePhotos(files) {
     const selected = Array.from(files || [])
     if (!selected.length) return
+    const invalid = selected.find((file) => !['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 10 * 1024 * 1024)
+    if (invalid) {
+      setFieldErrors((current) => ({ ...current, photos: 'Each photo must be a JPG, PNG, or WebP file no larger than 10 MB.' }))
+      toast.reminder('One or more selected photos are invalid.')
+      return
+    }
     setPhotos((current) => [...current, ...selected])
     setPreviews((current) => [...current, ...selected.map((file) => URL.createObjectURL(file))])
+    setFieldErrors((current) => ({ ...current, photos: undefined }))
   }
 
   function removePhoto(index) {
@@ -919,28 +929,36 @@ function IncidentReportDialog({ destination, user, onClose }) {
 
   async function submit(event) {
     event.preventDefault()
-    if (!category || (category === 'other' && customCategory.trim().length < 3) || description.trim().length < 10 || !photos.length) {
+    const nextErrors = {}
+    if (!category) nextErrors.category = 'Choose an issue category.'
+    if (category === 'other' && customCategory.trim().length < 3) nextErrors.customCategory = 'Enter at least 3 characters.'
+    if (description.trim().length < 10) nextErrors.description = 'Enter at least 10 characters describing the issue.'
+    if (!photos.length) nextErrors.photos = 'Attach at least one photo.'
+    setFieldErrors(nextErrors)
+    if (Object.keys(nextErrors).length) {
       setError('Choose a category, enter at least 10 characters, and attach at least one photo.')
+      toast.reminder('Please correct the highlighted incident report fields.')
       return
     }
     setSaving(true); setError('')
     try {
       await submitEnvironmentalIncident({ locationId: destination.sourceId, locationName: destination.name, reporterId: user.id, category, customCategory, description, photos })
       setSubmitted(true)
-    } catch (submitError) { setError(submitError.message || 'Unable to submit the report.') }
+      toast.success('Environmental incident report submitted successfully.')
+    } catch (submitError) { const failure = submitError.message || 'Unable to submit the report.'; setError(failure); toast.error(failure) }
     finally { setSaving(false) }
   }
 
   return createPortal(<div className="fixed inset-0 z-[9999] grid place-items-center overflow-y-auto bg-slate-950/65 p-4" role="dialog" aria-modal="true" aria-labelledby="incident-report-title" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) onClose() }}>
     <section className={submitted ? 'relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl' : 'flex h-[calc(100dvh-2rem)] max-h-[760px] min-h-0 w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-white p-5 shadow-2xl md:p-6'}>
       {!submitted && <div className="flex shrink-0 items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-widest text-green-600">Environmental incident</p><h2 id="incident-report-title" className="mt-1 text-xl font-bold text-slate-900">Report an issue</h2></div><button type="button" onClick={onClose} disabled={saving} aria-label="Close report form" className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={20} /></button></div>}
-      {submitted ? <div className="py-5 text-center"><button type="button" onClick={onClose} aria-label="Close confirmation" className="absolute right-4 top-4 rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={19} /></button><span className="mx-auto grid size-14 place-items-center rounded-full bg-emerald-50"><CheckCircle2 size={34} className="text-emerald-500" /></span><p className="mt-5 text-xs font-bold uppercase tracking-widest text-green-600">Environmental incident</p><h3 className="mt-2 text-xl font-bold text-slate-900">Report submitted</h3><p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-slate-500">Your report was routed to the administrator responsible for {destination.name}.</p><button type="button" onClick={onClose} className="mt-6 rounded-xl bg-green-600 px-6 py-2.5 text-sm font-bold text-white hover:bg-green-700">Done</button></div> : <form onSubmit={submit} className="mt-5 min-h-0 space-y-4 overflow-y-auto pr-1">
+      {submitted ? <div className="py-5 text-center"><button type="button" onClick={onClose} aria-label="Close confirmation" className="absolute right-4 top-4 rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={19} /></button><span className="mx-auto grid size-14 place-items-center rounded-full bg-emerald-50"><CheckCircle2 size={34} className="text-emerald-500" /></span><p className="mt-5 text-xs font-bold uppercase tracking-widest text-green-600">Environmental incident</p><h3 className="mt-2 text-xl font-bold text-slate-900">Report submitted</h3><p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-slate-500">Your report was routed to the administrator responsible for {destination.name}.</p><button type="button" onClick={onClose} className="mt-6 rounded-xl bg-green-600 px-6 py-2.5 text-sm font-bold text-white hover:bg-green-700">Done</button></div> : <form onSubmit={submit} noValidate className="mt-5 min-h-0 space-y-4 overflow-y-auto pr-1">
         {error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
         <label className="block text-xs font-semibold text-slate-500">Location<input readOnly value={destination.name} className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-600" /></label>
-        <label className="block text-xs font-semibold text-slate-500">Issue category<select required value={category} onChange={(event) => setCategory(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-green-500"><option value="">Select a category</option>{incidentCategories.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-        {category === 'other' && <label className="block text-xs font-semibold text-slate-500">Custom issue category<input required minLength="3" maxLength="80" value={customCategory} onChange={(event) => setCustomCategory(event.target.value)} placeholder="Enter the type of environmental issue" className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal text-slate-700 outline-none focus:border-green-500" /></label>}
-        <label className="block text-xs font-semibold text-slate-500">Description<textarea required minLength="10" maxLength="2000" rows="5" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Describe what you observed and where within the destination it occurred." className="mt-1 w-full resize-y rounded-xl border border-slate-200 p-3 text-sm font-normal leading-6 outline-none focus:border-green-500" /><span className="mt-1 block text-right text-[11px] text-slate-400">{description.length}/2000</span></label>
-        <div className="rounded-xl border border-slate-200 p-4 text-sm"><div className="flex items-center justify-between gap-3"><span className="font-semibold text-slate-700">Photo evidence</span><span className="text-xs text-slate-400">JPG, PNG or WebP · 10 MB each</span></div><input ref={photoInputRef} type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={(event) => { choosePhotos(event.target.files); event.target.value = '' }} className="hidden" /><div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">{previews.map((url, index) => <div key={url} className="relative overflow-hidden rounded-xl border border-orange-200 bg-orange-50"><img src={url} alt={`Selected incident evidence ${index + 1}`} className="h-28 w-full object-cover" /><span className="pointer-events-none absolute bottom-1 left-1 rounded bg-orange-600 px-2 py-1 text-[10px] font-bold text-white">Image {index + 1}</span><button type="button" onClick={() => removePhoto(index)} aria-label={`Remove image ${index + 1}`} className="absolute right-1 top-1 rounded-full bg-white/95 p-1.5 text-red-500 shadow hover:bg-red-50"><X size={14} /></button></div>)}<button type="button" onClick={() => photoInputRef.current?.click()} className="flex min-h-28 flex-col items-center justify-center rounded-xl border-2 border-dashed border-orange-200 bg-orange-50/50 text-orange-600 hover:border-orange-400 hover:bg-orange-50"><Plus size={22} /><span className="mt-1 font-semibold">Add images</span><span className="text-[10px] text-orange-400">Select one or many</span></button></div>{!photos.length && <p className="mt-2 text-xs text-slate-400">At least one photo is required.</p>}</div>
+        <label className="block text-xs font-semibold text-slate-500">Issue category<select required value={category} onChange={(event) => { setCategory(event.target.value); setFieldErrors((current) => ({ ...current, category: undefined })) }} aria-invalid={Boolean(fieldErrors.category)} className={`mt-1 w-full rounded-xl border bg-white px-3 py-2.5 text-sm text-slate-700 outline-none ${fieldErrors.category ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-100' : 'border-slate-200 focus:border-green-500'}`}><option value="">Select a category</option>{incidentCategories.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>{fieldErrors.category && <span className="mt-1 block font-normal text-red-500">{fieldErrors.category}</span>}</label>
+        {category === 'other' && <label className="block text-xs font-semibold text-slate-500">Custom issue category<input required minLength="3" maxLength="80" value={customCategory} onChange={(event) => { setCustomCategory(event.target.value); setFieldErrors((current) => ({ ...current, customCategory: undefined })) }} placeholder="Enter the type of environmental issue" aria-invalid={Boolean(fieldErrors.customCategory)} className={`mt-1 w-full rounded-xl border bg-white px-3 py-2.5 text-sm font-normal text-slate-700 outline-none ${fieldErrors.customCategory ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-100' : 'border-slate-200 focus:border-green-500'}`} />{fieldErrors.customCategory && <span className="mt-1 block font-normal text-red-500">{fieldErrors.customCategory}</span>}</label>}
+        <label className="block text-xs font-semibold text-slate-500">Description<textarea required minLength="10" maxLength="2000" rows="5" value={description} onChange={(event) => { setDescription(event.target.value); setFieldErrors((current) => ({ ...current, description: undefined })) }} placeholder="Describe what you observed and where within the destination it occurred." aria-invalid={Boolean(fieldErrors.description)} className={`mt-1 w-full resize-y rounded-xl border p-3 text-sm font-normal leading-6 outline-none ${fieldErrors.description ? 'border-red-400 bg-red-50 focus:border-red-500 focus:ring-2 focus:ring-red-100' : 'border-slate-200 focus:border-green-500'}`} />{fieldErrors.description && <span className="mt-1 block font-normal text-red-500">{fieldErrors.description}</span>}<span className="mt-1 block text-right text-[11px] text-slate-400">{description.length}/2000</span></label>
+        <div className={`rounded-xl border p-4 text-sm ${fieldErrors.photos ? 'border-red-400 bg-red-50/40 ring-2 ring-red-100' : 'border-slate-200'}`}><div className="flex items-center justify-between gap-3"><span className="font-semibold text-slate-700">Photo evidence</span><span className="text-xs text-slate-400">JPG, PNG or WebP · 10 MB each</span></div><input ref={photoInputRef} type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={(event) => { choosePhotos(event.target.files); event.target.value = '' }} className="hidden" /><div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">{previews.map((url, index) => <div key={url} className="relative overflow-hidden rounded-xl border border-orange-200 bg-orange-50"><img src={url} alt={`Selected incident evidence ${index + 1}`} className="h-28 w-full object-cover" /><span className="pointer-events-none absolute bottom-1 left-1 rounded bg-orange-600 px-2 py-1 text-[10px] font-bold text-white">Image {index + 1}</span><button type="button" onClick={() => removePhoto(index)} aria-label={`Remove image ${index + 1}`} className="absolute right-1 top-1 rounded-full bg-white/95 p-1.5 text-red-500 shadow hover:bg-red-50"><X size={14} /></button></div>)}<button type="button" onClick={() => photoInputRef.current?.click()} className="flex min-h-28 flex-col items-center justify-center rounded-xl border-2 border-dashed border-orange-200 bg-orange-50/50 text-orange-600 hover:border-orange-400 hover:bg-orange-50"><Plus size={22} /><span className="mt-1 font-semibold">Add images</span><span className="text-[10px] text-orange-400">Select one or many</span></button></div>{fieldErrors.photos ? <p className="mt-2 text-xs text-red-500">{fieldErrors.photos}</p> : !photos.length && <p className="mt-2 text-xs text-slate-400">At least one photo is required.</p>}</div>
         <button type="submit" disabled={saving} className="sticky bottom-0 w-full rounded-xl bg-green-600 py-3 text-sm font-bold text-white shadow-lg shadow-green-900/10 hover:bg-green-700 disabled:opacity-50">{saving ? 'Submitting report...' : 'Submit environmental report'}</button>
       </form>}
     </section>

@@ -6,6 +6,7 @@ import { searchMalaysiaLocations } from '../../services/mapService'
 import { fileToBase64, getApplicationSetup, submitLocationAdminApplication } from '../../services/locationAdminApplicationService'
 import './location-admin-application.css'
 import LoadingScreen from '../../components/LoadingScreen'
+import { useToast } from '../../components/toastContext'
 
 const methods = [
   { value: 'search', label: 'Search location', hint: 'Enter a place name or full address', icon: Search },
@@ -13,6 +14,7 @@ const methods = [
 ]
 
 export default function LocationAdminApplicationPage() {
+  const toast = useToast()
   const navigate = useNavigate()
   const location = useLocation()
   const initialSetup = location.state?.applicationSetup
@@ -30,6 +32,7 @@ export default function LocationAdminApplicationPage() {
   const [submitting, setSubmitting] = useState(false)
   const [isResubmission, setIsResubmission] = useState(initialSetup?.applicationStatus === 'rejected')
   const [rejectionReason, setRejectionReason] = useState(initialSetup?.rejectionReason || '')
+  const [fieldErrors, setFieldErrors] = useState({})
 
   useEffect(() => {
     if (initialSetup) return
@@ -38,15 +41,19 @@ export default function LocationAdminApplicationPage() {
       setIsResubmission(data.applicationStatus === 'rejected')
       setRejectionReason(data.rejectionReason || '')
       setLocations(data.locations || [])
-    }).catch((error) => setMessage(error.message)).finally(() => setLoading(false))
-  }, [initialSetup, navigate])
+    }).catch((error) => { setMessage(error.message); toast.error(error.message) }).finally(() => setLoading(false))
+  }, [initialSetup, navigate, toast])
 
   async function search(event) {
     event.preventDefault()
-    if (query.trim().length < 2) return setMessage('Enter at least 2 characters.')
+    if (query.trim().length < 2) {
+      setFieldErrors((current) => ({ ...current, location: 'Enter at least 2 characters.' }))
+      toast.reminder('Enter at least 2 characters to search for a location.')
+      return
+    }
     setSearching(true); setMessage(''); setSelected(null); setLocationName('')
     try { setResults(await searchMalaysiaLocations(query.trim())) }
-    catch (error) { setMessage(error.message) }
+    catch (error) { setMessage(error.message); toast.error(error.message) }
     finally { setSearching(false) }
   }
 
@@ -56,6 +63,7 @@ export default function LocationAdminApplicationPage() {
     setLocationName(item.name.split(',')[0].trim().slice(0, 120))
     setResults([])
     setMessage('')
+    setFieldErrors((current) => ({ ...current, location: undefined }))
   }
 
   function updateSearchQuery(event) {
@@ -66,6 +74,7 @@ export default function LocationAdminApplicationPage() {
     }
     setResults([])
     setMessage('')
+    setFieldErrors((current) => ({ ...current, location: undefined }))
   }
 
   function changeSearchSelection() {
@@ -78,11 +87,19 @@ export default function LocationAdminApplicationPage() {
 
   async function submit(event) {
     event.preventDefault(); setMessage('')
-    if (method === 'existing' && !locationId) return setMessage('Choose an available location.')
-    if (method !== 'existing' && !selected) return setMessage('Select one OpenStreetMap search result.')
-    if (method !== 'existing' && !locationName.trim()) return setMessage('Enter a short name for the location.')
-    if (!document) return setMessage('Upload your supporting company document.')
-    if (document.size > 5 * 1024 * 1024) return setMessage('The company document must be 5 MB or smaller.')
+    const nextErrors = {}
+    if (method === 'existing' && !locationId) nextErrors.location = 'Choose an available location.'
+    if (method !== 'existing' && !selected) nextErrors.location = 'Search and select one location result.'
+    if (method !== 'existing' && selected && !locationName.trim()) nextErrors.location = 'A valid location name is required.'
+    if (!document) nextErrors.document = 'Upload your supporting company document.'
+    else if (!['application/pdf', 'image/jpeg', 'image/png'].includes(document.type)) nextErrors.document = 'Upload a PDF, JPG, or PNG document.'
+    else if (document.size > 5 * 1024 * 1024) nextErrors.document = 'The company document must be 5 MB or smaller.'
+    setFieldErrors(nextErrors)
+    if (Object.keys(nextErrors).length) {
+      setMessage('Please correct the highlighted fields.')
+      toast.reminder('Please correct the highlighted application fields.')
+      return
+    }
     setSubmitting(true)
     try {
       await submitLocationAdminApplication({
@@ -94,17 +111,18 @@ export default function LocationAdminApplicationPage() {
         },
         companyDocument: { name: document.name, type: document.type, base64: await fileToBase64(document) },
       })
+      toast.success('Application submitted successfully for approval.')
       navigate('/location_admin/pending', {
         replace: true,
         state: { applicationSetup: { hasApplication: true, applicationStatus: 'pending' } },
       })
-    } catch (error) { setMessage(error.message) }
+    } catch (error) { setMessage(error.message); toast.error(error.message || 'Unable to submit the application.') }
     finally { setSubmitting(false) }
   }
 
   async function logout() { await supabase.auth.signOut(); navigate('/login', { replace: true }) }
   function chooseMethod(value) {
-    setMethod(value); setMessage(''); setSelected(null); setLocationName(''); setResults([]); setLocationId('')
+    setMethod(value); setMessage(''); setSelected(null); setLocationName(''); setResults([]); setLocationId(''); setFieldErrors((current) => ({ ...current, location: undefined }))
   }
 
   return <main className="admin-theme location-application-page">
@@ -117,11 +135,11 @@ export default function LocationAdminApplicationPage() {
       </header>
       <div className="location-application-card">
         <header className="flex items-start justify-between gap-4"><div><span className="inline-flex rounded-xl bg-emerald-50 p-2.5 text-emerald-600"><ShieldCheck size={24} /></span><p className="location-application-step">Application · Step 1 of 1</p><h1 className="mt-2 text-2xl font-bold text-slate-900">Set up your managed location</h1><p className="mt-2 text-sm leading-6 text-slate-500">Choose a location, then upload evidence for super-admin review.</p></div><button type="button" onClick={logout} className="location-application-signout"><LogOut size={15} /> <span>Sign out</span></button></header>
-        {loading ? <LoadingScreen compact label="Loading application..." /> : <form className="location-application-form mt-8" onSubmit={submit}>
+        {loading ? <LoadingScreen compact label="Loading application..." /> : <form className="location-application-form mt-8" onSubmit={submit} noValidate>
           {isResubmission && <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"><strong className="block text-xs uppercase tracking-wide text-amber-700">Reason for rejection</strong><p className="mt-1 leading-5">{rejectionReason || 'Update the location information and supporting document before resubmitting.'}</p></div>}
           <div className="location-methods grid gap-2">{methods.map(({ value, label, hint, icon: Icon }) => <button key={value} type="button" onClick={() => chooseMethod(value)} className={`rounded-xl border p-3 text-left transition ${method === value ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-sm' : 'border-slate-200 text-slate-600 hover:border-emerald-300'}`}><Icon size={18} /><span><strong>{label}</strong><small>{hint}</small></span>{method === value && <ShieldCheck size={17} className="location-method-check" />}</button>)}</div>
-          {method === 'existing' ? <label className="mt-6 block"><span className="text-sm font-semibold text-slate-700">Unassigned location</span><select className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm outline-none focus:border-emerald-500" value={locationId} onChange={(event) => { setLocationId(event.target.value); setMessage('') }} required><option value="">Select a location</option>{locations.map((item) => <option key={item.id} value={item.id}>{item.name}{item.state ? ` — ${item.state}` : ''}</option>)}</select><small className="location-availability-note"><ShieldCheck size={14} /> Only locations without an administrator are shown.</small>{!locations.length && <small className="mt-2 block text-amber-600">No existing locations are currently unassigned. Search for a new place instead.</small>}</label> : <div className="mt-6"><label className="text-sm font-semibold text-slate-700">Place name or full address</label><div className="mt-2 flex gap-2"><input className={`min-w-0 flex-1 rounded-xl border p-3 text-sm outline-none ${selected ? 'border-emerald-400 bg-emerald-50 text-emerald-900' : 'border-slate-200 bg-slate-50 focus:border-emerald-500'}`} value={query} onChange={updateSearchQuery} readOnly={Boolean(selected)} aria-label={selected ? 'Chosen location' : 'Search location'} placeholder="e.g. Taman Negara or a complete address" /><button type="button" onClick={selected ? changeSearchSelection : search} disabled={searching} className="location-search-button">{selected ? 'Change' : searching ? 'Finding...' : 'Find'}</button></div>{selected && <small className="location-chosen-note"><ShieldCheck size={14} /> Location selected. Choose “Change” to search again.</small>}{results.length > 0 && <div className="mt-3 grid gap-2">{results.map((item) => <button type="button" key={item.id} onClick={() => selectSearchResult(item)} className="rounded-xl border border-slate-200 p-3 text-left text-sm text-slate-600 transition hover:border-emerald-300"><MapPin className="mr-2 inline shrink-0" size={15} />{item.name}</button>)}</div>}</div>}
-          <label className="mt-6 block"><span className="text-sm font-semibold text-slate-700">Supporting company document</span><span className="mt-2 flex items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4"><FileCheck2 className="text-emerald-600" size={21} /><input type="file" accept="application/pdf,image/jpeg,image/png" onChange={(event) => setDocument(event.target.files?.[0] || null)} required className="min-w-0 text-sm text-slate-600" /></span><small className="mt-2 block text-xs text-slate-400">PDF, JPG, or PNG, up to 5 MB.</small></label>
+          {method === 'existing' ? <label className="mt-6 block"><span className="text-sm font-semibold text-slate-700">Unassigned location</span><select aria-invalid={Boolean(fieldErrors.location)} className={`mt-2 w-full rounded-xl border bg-slate-50 p-3 text-sm outline-none ${fieldErrors.location ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-100' : 'border-slate-200 focus:border-emerald-500'}`} value={locationId} onChange={(event) => { setLocationId(event.target.value); setMessage(''); setFieldErrors((current) => ({ ...current, location: undefined })) }} required><option value="">Select a location</option>{locations.map((item) => <option key={item.id} value={item.id}>{item.name}{item.state ? ` — ${item.state}` : ''}</option>)}</select>{fieldErrors.location && <small className="mt-1 block text-xs text-red-500">{fieldErrors.location}</small>}<small className="location-availability-note"><ShieldCheck size={14} /> Only locations without an administrator are shown.</small>{!locations.length && <small className="mt-2 block text-amber-600">No existing locations are currently unassigned. Search for a new place instead.</small>}</label> : <div className="mt-6"><label className="text-sm font-semibold text-slate-700">Place name or full address</label><div className="mt-2 flex gap-2"><input aria-invalid={Boolean(fieldErrors.location)} className={`min-w-0 flex-1 rounded-xl border p-3 text-sm outline-none ${fieldErrors.location ? 'border-red-400 bg-red-50 focus:border-red-500 focus:ring-2 focus:ring-red-100' : selected ? 'border-emerald-400 bg-emerald-50 text-emerald-900' : 'border-slate-200 bg-slate-50 focus:border-emerald-500'}`} value={query} onChange={updateSearchQuery} readOnly={Boolean(selected)} aria-label={selected ? 'Chosen location' : 'Search location'} placeholder="e.g. Taman Negara or a complete address" /><button type="button" onClick={selected ? changeSearchSelection : search} disabled={searching} className="location-search-button">{selected ? 'Change' : searching ? 'Finding...' : 'Find'}</button></div>{fieldErrors.location && <small className="mt-1 block text-xs text-red-500">{fieldErrors.location}</small>}{selected && <small className="location-chosen-note"><ShieldCheck size={14} /> Location selected. Choose “Change” to search again.</small>}{results.length > 0 && <div className="mt-3 grid gap-2">{results.map((item) => <button type="button" key={item.id} onClick={() => selectSearchResult(item)} className="rounded-xl border border-slate-200 p-3 text-left text-sm text-slate-600 transition hover:border-emerald-300"><MapPin className="mr-2 inline shrink-0" size={15} />{item.name}</button>)}</div>}</div>}
+          <label className="mt-6 block"><span className="text-sm font-semibold text-slate-700">Supporting company document</span><span className={`mt-2 flex items-center gap-3 rounded-xl border border-dashed bg-slate-50 p-4 ${fieldErrors.document ? 'border-red-400 ring-2 ring-red-100' : 'border-slate-300'}`}><FileCheck2 className="text-emerald-600" size={21} /><input type="file" accept="application/pdf,image/jpeg,image/png" onChange={(event) => { setDocument(event.target.files?.[0] || null); setFieldErrors((current) => ({ ...current, document: undefined })) }} required className="min-w-0 text-sm text-slate-600" /></span>{fieldErrors.document && <small className="mt-1 block text-xs text-red-500">{fieldErrors.document}</small>}<small className="mt-2 block text-xs text-slate-400">PDF, JPG, or PNG, up to 5 MB.</small></label>
           {message && <p role="alert" className="mt-4 rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-600">{message}</p>}
           <button type="submit" disabled={submitting} className="mt-6 w-full rounded-xl bg-emerald-600 px-5 py-3.5 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50">{submitting ? 'Submitting application...' : isResubmission ? 'Resubmit for approval' : 'Submit for approval'}</button>
         </form>}
