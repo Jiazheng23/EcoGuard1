@@ -45,7 +45,7 @@ export default function LandingPage() {
     <main className="landing-page">
       <header className="landing-nav">
         <a className="landing-brand" href="#top" aria-label="EcoGuard home">
-          <span><ShieldCheck size={20} /></span>
+          <span><Leaf size={19} /></span>
           <div>EcoGuard <small>EEWS</small></div>
         </a>
         <nav className={menuOpen ? 'is-open' : ''} aria-label="Main navigation">
@@ -144,7 +144,7 @@ export default function LandingPage() {
       </section>
 
       <footer className="landing-footer">
-        <a className="landing-brand" href="#top"><span><ShieldCheck size={18} /></span><div>EcoGuard <small>EEWS</small></div></a>
+        <a className="landing-brand" href="#top"><span><Leaf size={19} /></span><div>EcoGuard <small>EEWS</small></div></a>
         <p>Ecological Early Warning System for sustainable tourism.</p>
         <span>© {new Date().getFullYear()} EcoGuard</span>
       </footer>

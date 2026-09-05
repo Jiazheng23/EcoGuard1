@@ -256,7 +256,7 @@ export default function AuthPage({ initialMode }) {
           </Link>
           <div className="auth-brand">
             <span className="auth-brand__mark">
-              <ShieldCheck size={21} />
+              <Leaf size={19} />
             </span>
             <span>EcoGuard EEWS</span>
           </div>

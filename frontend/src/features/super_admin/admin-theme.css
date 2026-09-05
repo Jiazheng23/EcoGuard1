@@ -13,7 +13,7 @@
 .admin-sidebar-shell { background: #102b4b; border-right: 1px solid #1d4167; }
 .admin-sidebar { background: linear-gradient(180deg, #102e51 0%, #0d2744 100%); }
 .admin-brand { border-color: rgb(255 255 255 / 10%); }
-.admin-brand-mark { background: #2381dc; box-shadow: 0 0 0 4px rgb(61 147 228 / 12%); }
+.admin-brand-mark { background: #d99436; box-shadow: 0 0 0 5px rgba(217,148,54,.12); }
 .admin-nav-item { color: #aebfd2; }
 .admin-nav-item:hover { background: rgb(255 255 255 / 7%); color: #fff; }
 .admin-nav-item.is-active { background: #f5f9ff; color: #125ea9; box-shadow: inset 3px 0 #3b8ddd; }

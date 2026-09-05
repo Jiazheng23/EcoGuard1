@@ -10,7 +10,7 @@ import {
   Megaphone,
   RadioTower,
   Recycle,
-  Shield,
+  Leaf,
   ShieldAlert,
   SlidersHorizontal,
   UserCheck,
@@ -49,7 +49,7 @@ const pageLabels = {
   sensors: 'Sensor Monitoring',
   incidents: 'Environmental Incidents',
   advisories: 'Tourist Advisories',
-  thresholds: 'Crowd Thresholds',
+  thresholds: 'Threshold Settings',
   waste: 'Waste Management',
   'waste-schedules': 'Waste / Collection Schedules',
   'waste-history': 'Waste / Collection History',
@@ -80,7 +80,7 @@ function AdminSidebar({ activePage, onNavigate, onClose, profile }) {
   return (
     <div className="admin-sidebar flex h-full flex-col">
       <button type="button" onClick={() => navigateTo('dashboard')} className="admin-brand flex items-center gap-3 border-b px-5 py-5 text-left">
-        <span className="admin-brand-mark grid size-9 place-items-center rounded-lg"><Shield size={17} className="text-white" /></span>
+        <span className="admin-brand-mark grid size-10 place-items-center rounded-full text-white"><Leaf size={19} /></span>
         <span><span className="block text-[15px] font-extrabold leading-none text-white">EcoGuard</span><span className="mt-1.5 block text-[9px] font-bold tracking-[0.18em] text-blue-200">{profile?.role === 'super_admin' ? 'SUPER ADMIN' : 'LOCATION ADMIN'}</span></span>
       </button>
 

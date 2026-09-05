@@ -50,7 +50,7 @@ export default function AdminWorkspace({ requiredRole }) {
   const [dataError, setDataError] = useState('')
   const reportTab = workspaceSearchParams.get('report') === 'waste' ? 'waste' : 'environment'
   const requestedPage = adminPages.has(routePage) ? routePage : 'dashboard'
-  const page = profile?.role === 'location_admin' && ['locations', 'thresholds'].includes(requestedPage)
+  const page = profile?.role === 'location_admin' && requestedPage === 'locations'
     ? 'location-detail'
     : requestedPage
 
@@ -164,7 +164,7 @@ export default function AdminWorkspace({ requiredRole }) {
       destinationPage = 'reports'
       destinationSearch = '?report=waste'
     }
-    if (profile?.role === 'location_admin' && ['locations', 'thresholds'].includes(destinationPage)) {
+    if (profile?.role === 'location_admin' && destinationPage === 'locations') {
       destinationPage = 'location-detail'
     }
     if (destinationPage !== page || destinationSearch) {
