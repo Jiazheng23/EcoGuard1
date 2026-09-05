@@ -91,6 +91,30 @@ function saveCache(key, data) {
   })
 }
 
+export function isUsableLandLocation(data, requestedLat, requestedLng) {
+  if (data?.address?.country_code?.toLowerCase() !== 'my') return false
+
+  const type = String(data.type || '').toLowerCase()
+  if (['sea', 'ocean', 'bay', 'strait', 'administrative'].includes(type)) return false
+
+  const address = data.address || {}
+  const hasLocalAddress = [
+    'road', 'pedestrian', 'building', 'amenity', 'tourism', 'leisure',
+    'neighbourhood', 'suburb', 'village', 'town', 'city', 'municipality',
+    'district', 'county', 'postcode',
+  ].some((key) => address[key])
+  if (!hasLocalAddress) return false
+
+  const matchedLat = Number(data.lat)
+  const matchedLng = Number(data.lon)
+  if (!Number.isFinite(matchedLat) || !Number.isFinite(matchedLng)) return false
+
+  return coordinateDistanceMeters(
+    [Number(requestedLat), Number(requestedLng)],
+    [matchedLat, matchedLng],
+  ) <= 2000
+}
+
 export function resolveRoutingMode(value) {
   const requestedMode = String(value || 'car').trim().toLowerCase()
   const aliases = {
@@ -438,11 +462,9 @@ router.get('/reverse', async (req, res) => {
 
     const data = await fetchNominatim(url)
 
-    if (
-      data.address?.country_code?.toLowerCase() !== 'my'
-    ) {
+    if (!isUsableLandLocation(data, lat, lng)) {
       return res.status(400).json({
-        error: 'Please select a location within Malaysia.',
+        error: 'Please select a specific location on land in Malaysia.',
       })
     }
 

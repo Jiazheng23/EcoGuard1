@@ -202,11 +202,6 @@ export default function CarbonCalculator({
     setSaveMessage('')
     setSaveError('')
 
-    if (modeId === 'mixed') {
-      setSaveError('Mixed routes are calculated only and are not saved to trip history.')
-      return
-    }
-
     if (!user) {
       setSaveError('You must be logged in to save a trip.')
       return
@@ -231,6 +226,7 @@ export default function CarbonCalculator({
         destination,
         transport_mode: mode.id,
         ...(mode.id === 'car' ? { car_powertrain: carPowertrain } : {}),
+        ...(mode.id === 'mixed' ? { route_legs: routeLegs } : {}),
         distance_km: km,
         passengers: pax,
         round_trip: roundTrip,
@@ -626,7 +622,6 @@ export default function CarbonCalculator({
                   onClick={saveTrip}
                   disabled={
                     isSaving ||
-                    modeId === 'mixed' ||
                     !user ||
                     !journeyCoordinates.origin ||
                     !journeyCoordinates.destination ||
@@ -634,9 +629,7 @@ export default function CarbonCalculator({
                   }
                   className="rounded-xl bg-green-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {modeId === 'mixed'
-                    ? 'Mixed Route — Calculation Only'
-                    : isSaving
+                  {isSaving
                     ? 'Saving Trip...'
                     : `Save Trip — Optional (${formatSignedPoints(ecoPoints)} Eco Score)`}
                 </button>

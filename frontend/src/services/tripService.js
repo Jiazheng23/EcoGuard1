@@ -17,6 +17,7 @@ const tripColumns = [
   'origin_lng',
   'destination_lat',
   'destination_lng',
+  'route_legs',
 ].join(', ')
 
 const tripColumnsWithCarPowertrain = `${tripColumns}, car_powertrain`

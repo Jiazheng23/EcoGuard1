@@ -125,6 +125,7 @@ as $$
       when 'bicycle' then case when distance_km_value <= 10 then 5 else 2 end
       when 'bus' then case when distance_km_value <= 10 then 3 else 1 end
       when 'mrt' then case when distance_km_value <= 10 then 3 else 1 end
+      when 'mixed' then case when distance_km_value <= 10 then 3 else 1 end
       when 'motorcycle' then case when distance_km_value <= 10 then 1 else 0 end
       when 'car' then case when distance_km_value <= 10 then -4 else -6 end
       else 0

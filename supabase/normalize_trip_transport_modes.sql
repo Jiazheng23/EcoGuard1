@@ -87,7 +87,7 @@ alter table public.trips
   add constraint trips_supported_transport_mode_check
   check (
     transport_mode is not null
-    and transport_mode in ('car', 'motorcycle', 'bus', 'mrt', 'walking', 'bicycle')
+    and transport_mode in ('car', 'motorcycle', 'bus', 'mrt', 'mixed', 'walking', 'bicycle')
   ) not valid;
 
 alter table public.trips
@@ -105,4 +105,4 @@ order by transport_mode;
 select count(*) as unsupported_trip_count
 from public.trips
 where transport_mode is null
-   or transport_mode not in ('car', 'motorcycle', 'bus', 'mrt', 'walking', 'bicycle');
+   or transport_mode not in ('car', 'motorcycle', 'bus', 'mrt', 'mixed', 'walking', 'bicycle');

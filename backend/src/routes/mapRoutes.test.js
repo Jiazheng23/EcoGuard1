@@ -4,6 +4,7 @@ import {
   buildOsrmRouteUrl,
   decodePolyline,
   estimateTransitousItineraryEmissionG,
+  isUsableLandLocation,
   mapTransitousItinerary,
   resolveRoutingMode,
   selectTransitousItinerary,
@@ -94,4 +95,15 @@ test('uses independent OSRM services for driving, cycling, and walking', () => {
   assert.match(walkingUrl, /routed-foot\/route\/v1\/driving/)
   assert.notEqual(drivingUrl, cyclingUrl)
   assert.notEqual(drivingUrl, walkingUrl)
+})
+
+test('rejects ocean and broad administrative reverse-geocoding matches', () => {
+  assert.equal(isUsableLandLocation({
+    type: 'administrative', lat: '3.1', lon: '101.6',
+    address: { country_code: 'my', state: 'Selangor' },
+  }, 3.1, 101.6), false)
+  assert.equal(isUsableLandLocation({
+    type: 'road', lat: '3.1001', lon: '101.6001',
+    address: { country_code: 'my', road: 'Jalan Example', city: 'Kuala Lumpur' },
+  }, 3.1, 101.6), true)
 })
