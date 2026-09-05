@@ -85,7 +85,7 @@ export default function AdminApplications() {
       return matchesStatus && matchesSearch
     })
   }, [applications, query, statusFilter])
-  const applicationPages = useTablePagination(filteredApplications)
+  const applicationPages = useTablePagination(filteredApplications, 5)
 
   async function decide(id, decision, reason = '') {
     setMessage('')
@@ -219,7 +219,7 @@ export default function AdminApplications() {
           </div>
         )}
 
-        {!loading && filteredApplications.length > 0 && <TablePagination {...applicationPages} onPageChange={applicationPages.setPage} label="applications" />}
+        {!loading && filteredApplications.length > 0 && <TablePagination {...applicationPages} pageSize={5} onPageChange={applicationPages.setPage} label="applications" />}
       </section>
 
       {rejectingApplication && createPortal(<RejectionDialog
