@@ -183,6 +183,39 @@ async function requirePendingLocationAdmin(req, res) {
   return user
 }
 
+export async function startGoogleApplication(req, res) {
+  if (!requireAdminClient(res)) return
+  const user = await requireAuthenticatedUser(req, res)
+  if (!user) return
+  if (!user.identities?.some((identity) => identity.provider === 'google')) {
+    return res.status(403).json({ error: 'A Google account is required.' })
+  }
+  const conflict = () => res.status(409).json({
+    error: 'This email is already registered with another role. Sign in to your existing account or use a different Google email for Location Admin.',
+  })
+  const readProfile = () => supabaseAdmin.from('profiles').select('role').eq('id', user.id).maybeSingle()
+  const { data: profile, error: profileError } = await readProfile()
+  if (profileError) return respondToAdminClientError(res, profileError)
+  if (profile) {
+    if (!['pending_location_admin', 'location_admin'].includes(profile.role)) return conflict()
+    return res.json({ success: true })
+  }
+  // Never overwrite an existing role. Only an unassigned account can start onboarding.
+  if (user.app_metadata?.role && !['pending_location_admin', 'location_admin'].includes(user.app_metadata.role)) return conflict()
+  const { error } = await supabaseAdmin.from('profiles').insert({
+    id: user.id,
+    full_name: user.user_metadata?.full_name || user.user_metadata?.name || 'EcoGuard User',
+    avatar_url: user.user_metadata?.avatar_url || null,
+    role: user.app_metadata?.role || 'pending_location_admin',
+  })
+  if (error?.code === '23505') {
+    const { data: concurrentProfile, error: readError } = await readProfile()
+    if (readError) return respondToAdminClientError(res, readError)
+    if (!['pending_location_admin', 'location_admin'].includes(concurrentProfile?.role)) return conflict()
+  } else if (error) return respondToAdminClientError(res, error)
+  return res.json({ success: true })
+}
+
 export async function register(req, res) {
   const name = req.body?.name?.trim()
   const email = req.body?.email?.trim().toLowerCase()

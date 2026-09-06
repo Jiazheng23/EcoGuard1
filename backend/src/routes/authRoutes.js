@@ -1,9 +1,10 @@
 import { Router } from 'express'
-import { decideAdminApplication, getAdminApplicationDocumentUrl, listAdminApplications, listUnassignedLocations, register, submitAdminApplication } from '../controllers/authController.js'
+import { startGoogleApplication, decideAdminApplication, getAdminApplicationDocumentUrl, listAdminApplications, listUnassignedLocations, register, submitAdminApplication } from '../controllers/authController.js'
 
 const router = Router()
 
 router.post('/register', register)
+router.post('/auth/google-application', startGoogleApplication)
 router.get('/location-admin/unassigned-locations', listUnassignedLocations)
 router.post('/location-admin/application', submitAdminApplication)
 router.get('/admin-applications', listAdminApplications)

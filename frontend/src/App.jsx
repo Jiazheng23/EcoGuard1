@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import AuthPage from './features/auth/AuthPage'
+import GoogleCallbackPage from './features/auth/GoogleCallbackPage'
 import TouristWorkspace from './features/tourist/TouristWorkspace'
 import AdminWorkspace from './features/super_admin/AdminWorkspace'
 import LocationAdminWorkspace from './features/location_admin/LocationAdminWorkspace'
@@ -13,6 +14,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<AuthPage key="login" initialMode="login" />} />
+        <Route path="/auth/callback" element={<GoogleCallbackPage />} />
         <Route path="/register" element={<AuthPage key="register" initialMode="register" />} />
         <Route path="/forgot-password" element={<AuthPage key="forgot" initialMode="forgot" />} />
         <Route path="/reset-password" element={<AuthPage key="reset" initialMode="reset" />} />

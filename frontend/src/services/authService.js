@@ -1,6 +1,20 @@
 import { supabase } from './supabaseClient'
 import { getOwnProfile } from './profileService'
 
+export async function signInWithGoogle(role = null) {
+  if (!supabase) throw new Error('Authentication is unavailable. Supabase is not configured.')
+  const redirect = new URL('/auth/callback', window.location.origin)
+  if (role) sessionStorage.setItem('ecoguard.googleRegistrationRole', role)
+  else sessionStorage.removeItem('ecoguard.googleRegistrationRole')
+  if (role === 'location_admin') redirect.searchParams.set('application', 'location_admin')
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo: redirect.href, queryParams: { prompt: 'select_account' } },
+  })
+  if (error) throw error
+  return data
+}
+
 export async function loginUser(email, password) {
   const { data, error } = await supabase.auth.signInWithPassword({
     email: email.trim().toLowerCase(),
