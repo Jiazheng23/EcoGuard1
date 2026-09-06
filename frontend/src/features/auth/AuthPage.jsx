@@ -31,6 +31,8 @@ import {
   validateNewPassword,
 } from "../../utils/passwordValidation";
 import { getApplicationSetup } from "../../services/locationAdminApplicationService";
+import { authenticatedRequest } from "../../services/authenticatedRequest";
+import { getOwnProfile } from "../../services/profileService";
 import { useToast } from "../../components/toastContext";
 
 const features = [
@@ -62,7 +64,11 @@ export default function AuthPage({ initialMode }) {
   const [message, setMessage] = useState(location.state?.authError || "");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [googleRoleUser, setGoogleRoleUser] = useState(null);
+  const [googleRoleChoice, setGoogleRoleChoice] = useState("");
+  const [googleRoleMessage, setGoogleRoleMessage] = useState("");
   const [isCheckingLocationAdmin, setIsCheckingLocationAdmin] = useState(false);
+  const showGoogleRoleModal = location.state?.googleRoleSelection === true;
   const [recoveryStatus, setRecoveryStatus] = useState(
     initialMode === "reset" ? supabase ? "checking" : "invalid" : "not_applicable",
   );
@@ -78,6 +84,20 @@ export default function AuthPage({ initialMode }) {
     confirmPassword: "",
   });
   const [fieldErrors, setFieldErrors] = useState({});
+
+  useEffect(() => {
+    if (!showGoogleRoleModal || !supabase) return undefined;
+    let active = true;
+    supabase.auth.getUser().then(({ data, error }) => {
+      if (!active) return;
+      if (error || !data.user) {
+        setGoogleRoleMessage("Your Google session could not be verified. Please sign in again.");
+        return;
+      }
+      setGoogleRoleUser(data.user);
+    });
+    return () => { active = false; };
+  }, [showGoogleRoleModal]);
 
   useEffect(() => {
     if (mode !== "reset") return undefined;
@@ -272,6 +292,44 @@ export default function AuthPage({ initialMode }) {
     }
   }
 
+  async function chooseGoogleRole(selectedRole) {
+    if (!googleRoleUser || googleRoleChoice) return;
+    setGoogleRoleChoice(selectedRole);
+    setGoogleRoleMessage("");
+    try {
+      if (selectedRole === "location_admin") {
+        await authenticatedRequest("/api/auth/google-application", {
+          method: "POST",
+          body: JSON.stringify({ initialGoogleOnboarding: true }),
+        });
+      }
+      const profile = await getOwnProfile(googleRoleUser);
+      if (profile.role === "pending_location_admin") {
+        const applicationSetup = await getApplicationSetup();
+        navigate(applicationSetup.applicationStatus === "pending"
+          ? "/location_admin/pending"
+          : "/location_admin/application", { replace: true, state: { applicationSetup } });
+        return;
+      }
+      navigate(profile.role === "location_admin"
+        ? "/location_admin/dashboard"
+        : profile.role === "super_admin"
+          ? "/super_admin/dashboard"
+          : "/tourist/dashboard", { replace: true });
+    } catch (error) {
+      setGoogleRoleMessage(error.message || "Your account could not be registered. Please try again.");
+      setGoogleRoleChoice("");
+    }
+  }
+
+  async function cancelGoogleRegistration() {
+    try {
+      await supabase.auth.signOut({ scope: "local" });
+    } finally {
+      navigate("/login", { replace: true, state: null });
+    }
+  }
+
   const heading = {
     login: ["Welcome back", "Sign in to your EcoGuard account"],
     register: ["Create account", "Start your sustainable journey today"],
@@ -288,8 +346,8 @@ export default function AuthPage({ initialMode }) {
   }
 
   return (
-    <main className={`auth-page auth-page--${mode}`}>
-      <aside className="auth-showcase">
+    <main className={`auth-page auth-page--${mode}${showGoogleRoleModal ? " auth-page--modal-open" : ""}`}>
+      <aside className="auth-showcase" aria-hidden={showGoogleRoleModal || undefined} inert={showGoogleRoleModal ? "" : undefined}>
         <div>
           <Link className="auth-back auth-back--light" to="/">
             <ArrowLeft size={16} /> Back to Home
@@ -328,7 +386,7 @@ export default function AuthPage({ initialMode }) {
         </div>
       </aside>
 
-      <section className="auth-content">
+      <section className="auth-content" aria-hidden={showGoogleRoleModal || undefined} inert={showGoogleRoleModal ? "" : undefined}>
         <Link className="auth-back auth-back--mobile" to="/">
           <ArrowLeft size={16} /> Back
         </Link>
@@ -508,7 +566,7 @@ export default function AuthPage({ initialMode }) {
                   setMessage("");
                   setIsGoogleLoading(true);
                   try {
-                    await signInWithGoogle(mode === "register" ? role : null);
+                    await signInWithGoogle();
                   } catch (error) {
                     setMessage(error.message || "Google sign-in could not start. Please try again.");
                     setIsGoogleLoading(false);
@@ -522,8 +580,8 @@ export default function AuthPage({ initialMode }) {
                 </svg>
                 {isGoogleLoading ? "Connecting to Google..." : "Continue with Google"}
               </button>
-              {mode === "register" && role === "location_admin" && (
-                <p className="auth-social-note">Location applications still require approval.</p>
+              {mode === "register" && (
+                <p className="auth-social-note">New Google users choose their role after Google verifies the account.</p>
               )}
             </div>
           )}
@@ -552,6 +610,38 @@ export default function AuthPage({ initialMode }) {
           )}
         </div>
       </section>
+      {showGoogleRoleModal && (
+        <>
+          <div className="google-role-backdrop" aria-hidden="true" />
+          <section className="google-role-modal" role="dialog" aria-modal="true" aria-labelledby="google-role-title">
+            <span className="google-role-brand"><Leaf size={21} /> EcoGuard</span>
+            <div className="google-role-heading">
+              <h1 id="google-role-title">Create your EcoGuard account</h1>
+              <p>
+                {googleRoleUser
+                  ? <><strong>{googleRoleUser.email}</strong> is not registered yet. Choose how you want to use EcoGuard.</>
+                  : "Checking your Google account before registration..."}
+              </p>
+            </div>
+            <div className="google-role-options">
+              <button type="button" disabled={!googleRoleUser || Boolean(googleRoleChoice)} onClick={() => chooseGoogleRole("tourist")}>
+                <span><UserRound size={22} /></span>
+                <div><strong>Continue as Tourist</strong><small>Track trips, eco score, and environmental impact</small></div>
+                {googleRoleChoice === "tourist" && <em>Creating...</em>}
+              </button>
+              <button type="button" disabled={!googleRoleUser || Boolean(googleRoleChoice)} onClick={() => chooseGoogleRole("location_admin")}>
+                <span><ShieldCheck size={22} /></span>
+                <div><strong>Apply as Location Admin</strong><small>Continue to the location and document application</small></div>
+                {googleRoleChoice === "location_admin" && <em>Preparing...</em>}
+              </button>
+            </div>
+            {googleRoleMessage && <p className="google-role-error" role="alert">{googleRoleMessage}</p>}
+            <button className="google-role-cancel" type="button" disabled={Boolean(googleRoleChoice)} onClick={cancelGoogleRegistration}>
+              Use a different account
+            </button>
+          </section>
+        </>
+      )}
     </main>
   );
 }

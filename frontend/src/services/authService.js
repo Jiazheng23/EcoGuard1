@@ -3,6 +3,7 @@ import { getOwnProfile } from './profileService'
 
 export async function signInWithGoogle(role = null) {
   if (!supabase) throw new Error('Authentication is unavailable. Supabase is not configured.')
+  sessionStorage.setItem('ecoguard.googleOAuthStartedAt', String(Date.now()))
   const redirect = new URL('/auth/callback', window.location.origin)
   if (role) sessionStorage.setItem('ecoguard.googleRegistrationRole', role)
   else sessionStorage.removeItem('ecoguard.googleRegistrationRole')

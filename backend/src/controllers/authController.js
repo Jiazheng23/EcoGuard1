@@ -193,10 +193,23 @@ export async function startGoogleApplication(req, res) {
   const conflict = () => res.status(409).json({
     error: 'This email is already registered with another role. Sign in to your existing account or use a different Google email for Location Admin.',
   })
-  const readProfile = () => supabaseAdmin.from('profiles').select('role').eq('id', user.id).maybeSingle()
+  const readProfile = () => supabaseAdmin.from('profiles').select('role, created_at').eq('id', user.id).maybeSingle()
   const { data: profile, error: profileError } = await readProfile()
   if (profileError) return respondToAdminClientError(res, profileError)
   if (profile) {
+    if (profile.role === 'tourist' && req.body?.initialGoogleOnboarding === true) {
+      const createdAt = Date.parse(user.created_at || '')
+      const lastSignInAt = Date.parse(user.last_sign_in_at || '')
+      const isOnlyGoogleIdentity = user.identities?.length === 1 && user.identities[0].provider === 'google'
+      const isFirstSignIn = Number.isFinite(createdAt) && Number.isFinite(lastSignInAt)
+        && Math.abs(lastSignInAt - createdAt) <= 60_000
+        && Date.now() - createdAt <= 15 * 60_000
+      if (!isOnlyGoogleIdentity || !isFirstSignIn) return conflict()
+      const { error: updateError } = await supabaseAdmin.from('profiles')
+        .update({ role: 'pending_location_admin', location_id: null }).eq('id', user.id).eq('role', 'tourist')
+      if (updateError) return respondToAdminClientError(res, updateError)
+      return res.json({ success: true })
+    }
     if (!['pending_location_admin', 'location_admin'].includes(profile.role)) return conflict()
     return res.json({ success: true })
   }
