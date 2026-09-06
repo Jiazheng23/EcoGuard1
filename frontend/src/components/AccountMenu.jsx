@@ -80,5 +80,14 @@ export default function AccountMenu({ name, email, roleLabel, initials, avatarUr
 }
 
 function Avatar({ avatarUrl, initials, className, theme }) {
-  return <span className={`grid overflow-hidden place-items-center rounded-full bg-gradient-to-br font-bold text-white ${theme.avatar} ${className}`}>{avatarUrl ? <img src={avatarUrl} alt="" className="size-full object-cover" /> : initials}</span>
+  const [failedUrl, setFailedUrl] = useState(null)
+  const showImage = Boolean(avatarUrl && failedUrl !== avatarUrl)
+
+  return (
+    <span className={`grid overflow-hidden place-items-center rounded-full bg-gradient-to-br font-bold text-white ${theme.avatar} ${className}`}>
+      {showImage
+        ? <img src={avatarUrl} alt="" className="size-full object-cover" onError={() => setFailedUrl(avatarUrl)} />
+        : initials}
+    </span>
+  )
 }
