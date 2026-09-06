@@ -22,6 +22,7 @@ import {
   Clock3,
   CloudSun,
   History,
+  MapPin,
   RadioTower,
   Search,
   Thermometer,
@@ -42,6 +43,7 @@ import {
   buildVisitorDensitySeries,
   getEnvironmentalSummary,
 } from '../../utils/environmentalAnalytics'
+import LoadingScreen from '../../components/LoadingScreen'
 
 const card = 'rounded-2xl border border-slate-100 bg-white p-5 shadow-sm'
 const tooltipStyle = { border: '1px solid #e2e8f0', borderRadius: 12, fontSize: 12 }
@@ -71,6 +73,7 @@ export default function EnvironmentalAnalytics({
   const [historyAvailable, setHistoryAvailable] = useState(null)
   const [showAllWarnings, setShowAllWarnings] = useState(false)
   const [predictionHours, setPredictionHours] = useState(12)
+  const [densityLimit, setDensityLimit] = useState(5)
   const needle = query.trim().toLowerCase()
   const selectedRange = useMemo(
     () => getSelectedRange(dateMode, customRange, selectedMonth, selectedYear),
@@ -133,7 +136,8 @@ export default function EnvironmentalAnalytics({
     () => new Set(filteredLocations.map((location) => String(location.id))),
     [filteredLocations],
   )
-  const analyticsMetrics = history.length ? history : metrics
+  const analyticsLoading = loading || historyAvailable === null
+  const analyticsMetrics = history.length || historyAvailable === null ? history : metrics
   const filteredMetrics = useMemo(() => analyticsMetrics.filter((metric) => {
     const recordedAt = new Date(metric.recorded_at).getTime()
     const matchesDate = Number.isFinite(recordedAt)
@@ -170,6 +174,13 @@ export default function EnvironmentalAnalytics({
     () => [...warnings].sort((a, b) => new Date(b.recordedAt || 0).getTime() - new Date(a.recordedAt || 0).getTime()),
     [warnings],
   )
+  const singleLocation = filteredLocations.length === 1 ? filteredLocations[0] : null
+  const singleLocationThreshold = singleLocation
+    ? thresholds.find((threshold) => String(threshold.location_id) === String(singleLocation.id))
+    : null
+  const visibleLocationDensity = densityLimit === 'all'
+    ? locationDensity
+    : locationDensity.slice(0, densityLimit)
   const visibleWarnings = showAllWarnings ? warningsByLatest : warningsByLatest.slice(0, 3)
   const peak = summary.peakPeriod
 
@@ -180,6 +191,30 @@ export default function EnvironmentalAnalytics({
     setCustomRange({ start: '', end: '' })
     setSelectedMonth('')
     setSelectedYear('')
+  }
+
+  if (analyticsLoading) {
+    return (
+      <div className="mx-auto flex max-w-6xl flex-col gap-6">
+        <header className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">Environmental Analytics</h1>
+            <p className="mt-1 text-sm text-slate-500">Visitor-density and environmental trends from ecological-location sensors</p>
+          </div>
+          <span className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700">
+            <RadioTower size={15} className="animate-pulse" /> Loading sensor history
+          </span>
+        </header>
+        {error && <div className="rounded-xl bg-red-50 p-3 text-sm text-red-600">{error}</div>}
+        <section className={`${card} overflow-hidden`}>
+          <LoadingScreen
+            compact
+            tone="blue"
+            label="Loading environmental analytics..."
+          />
+        </section>
+      </div>
+    )
   }
 
   return (
@@ -219,8 +254,12 @@ export default function EnvironmentalAnalytics({
         ) : (
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-semibold text-slate-700">Assigned-location analytics</p>
-              <p className="mt-0.5 text-xs text-slate-400">Only readings for your assigned ecological location are included</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Assigned location</p>
+              <div className="mt-1 flex items-center gap-2">
+                <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-600"><MapPin size={17} /></span>
+                <p className="text-lg font-bold text-slate-800">{filteredLocations[0]?.name || 'Location unavailable'}</p>
+              </div>
+              <p className="mt-1 text-xs text-slate-400">Only sensor readings for this ecological location are included</p>
             </div>
             <PeriodFilter ref={dateFilterRef} mode={dateMode} onModeChange={setDateMode} range={customRange} onRangeChange={setCustomRange} month={selectedMonth} onMonthChange={setSelectedMonth} year={selectedYear} onYearChange={setSelectedYear} open={dateFilterOpen} onOpenChange={setDateFilterOpen} selectedRange={selectedRange} />
           </div>
@@ -247,7 +286,12 @@ export default function EnvironmentalAnalytics({
         ))}
       </section>
 
-      <CrowdPredictionPanel prediction={crowdPrediction} horizonHours={predictionHours} onHorizonChange={setPredictionHours} />
+      <CrowdPredictionPanel
+        prediction={crowdPrediction}
+        horizonHours={predictionHours}
+        onHorizonChange={setPredictionHours}
+        locationName={singleLocation?.name}
+      />
 
       <section className="grid gap-4 lg:grid-cols-3">
         <article className={`${card} lg:col-span-2`}>
@@ -290,13 +334,37 @@ export default function EnvironmentalAnalytics({
         </article>
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-2">
-        <article className={card}>
-          <h2 className="font-bold text-slate-800">Latest visitor density by location</h2>
-          <p className="mb-4 mt-1 text-xs text-slate-400">Most recent sensor reading for each location</p>
-          {locationDensity.length ? (
-            <ResponsiveContainer width="100%" height={Math.max(280, locationDensity.length * 42)}>
-              <BarChart data={locationDensity} layout="vertical" margin={{ left: 20, right: 14 }}>
+      <section className={`grid gap-4 ${isSuperAdmin ? 'lg:grid-cols-2' : ''}`}>
+        {isSuperAdmin && <article className={card}>
+          {singleLocation ? (
+            <SingleLocationDensity
+              location={singleLocation}
+              density={locationDensity[0]}
+              threshold={singleLocationThreshold}
+            />
+          ) : <>
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="font-bold text-slate-800">Latest visitor density by location</h2>
+                <p className="mt-1 text-xs text-slate-400">Busiest locations based on their most recent sensor reading</p>
+              </div>
+              <label className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+                Show
+                <select
+                  value={densityLimit}
+                  onChange={(event) => setDensityLimit(event.target.value === 'all' ? 'all' : Number(event.target.value))}
+                  className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:border-blue-500"
+                >
+                  <option value={5}>Top 5</option>
+                  <option value={10}>Top 10</option>
+                  <option value={15}>Top 15</option>
+                  <option value="all">All locations</option>
+                </select>
+              </label>
+            </div>
+            {locationDensity.length ? (
+            <ResponsiveContainer width="100%" height={Math.max(280, visibleLocationDensity.length * 42)}>
+              <BarChart data={visibleLocationDensity} layout="vertical" margin={{ left: 20, right: 14 }}>
                 <CartesianGrid stroke="#f1f5f9" strokeDasharray="3 3" horizontal={false} />
                 <XAxis type="number" tick={{ fontSize: 10, fill: '#94a3b8' }} />
                 <YAxis type="category" dataKey="name" width={105} tick={{ fontSize: 10, fill: '#64748b' }} />
@@ -304,8 +372,14 @@ export default function EnvironmentalAnalytics({
                 <Bar dataKey="visitors" name="Visitors" fill="#3b82f6" radius={[0, 5, 5, 0]} isAnimationActive={false} />
               </BarChart>
             </ResponsiveContainer>
-          ) : <EmptyState text="No current visitor readings match this filter." />}
-        </article>
+            ) : <EmptyState text="No current visitor readings match this filter." />}
+            {locationDensity.length > visibleLocationDensity.length && (
+              <p className="mt-3 text-center text-xs text-slate-400">
+                Showing {visibleLocationDensity.length} of {locationDensity.length} locations, ranked by visitor count.
+              </p>
+            )}
+          </>}
+        </article>}
 
         <article className={card}>
           <h2 className="font-bold text-slate-800">Environmental sensor trend</h2>
@@ -374,7 +448,80 @@ export default function EnvironmentalAnalytics({
   )
 }
 
-function CrowdPredictionPanel({ prediction, horizonHours, onHorizonChange }) {
+function SingleLocationDensity({ location, density, threshold }) {
+  if (!density) {
+    return (
+      <>
+        <h2 className="font-bold text-slate-800">Current visitor density</h2>
+        <p className="mt-1 text-xs text-slate-400">Latest sensor reading for {location.name}</p>
+        <EmptyState text="No current visitor reading is available for this location." />
+      </>
+    )
+  }
+
+  const capacity = Math.max(1, Number(location.max_capacity) || 1)
+  const occupancy = Math.max(0, Number(density.occupancy) || 0)
+  const status = densityStatus(occupancy, threshold)
+
+  return (
+    <>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="font-bold text-slate-800">Current visitor density</h2>
+          <p className="mt-1 text-xs text-slate-400">Latest sensor reading for {location.name}</p>
+        </div>
+        <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${status.badge}`}>{status.label}</span>
+      </div>
+
+      <div className="flex min-h-[280px] flex-col justify-center py-5">
+        <div className="grid items-center gap-6 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+          <div className="rounded-2xl bg-blue-50 p-5">
+            <span className="grid size-11 place-items-center rounded-xl bg-white text-blue-600 shadow-sm"><Users size={21} /></span>
+            <p className="mt-4 text-4xl font-bold text-blue-600">{density.visitors.toLocaleString()}</p>
+            <p className="mt-1 text-sm font-semibold text-slate-700">visitors detected</p>
+            <p className="mt-1 text-xs text-slate-400">Capacity: {capacity.toLocaleString()}</p>
+          </div>
+
+          <div>
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Occupancy</p>
+                <p className="mt-1 text-3xl font-bold text-slate-800">{occupancy.toFixed(1)}%</p>
+              </div>
+              <Activity size={28} className={status.icon} />
+            </div>
+            <div
+              className="mt-4 h-3 overflow-hidden rounded-full bg-slate-100"
+              role="progressbar"
+              aria-label={`${location.name} occupancy`}
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow={Math.min(100, Math.round(occupancy))}
+            >
+              <div className={`h-full rounded-full transition-[width] duration-300 ${status.bar}`} style={{ width: `${Math.min(100, occupancy)}%` }} />
+            </div>
+            <div className="mt-4 space-y-2 rounded-xl bg-slate-50 p-3 text-xs text-slate-500">
+              <SummaryRow label="Available capacity" value={Math.max(0, capacity - density.visitors).toLocaleString()} />
+              <SummaryRow label="Last updated" value={formatDateTime(density.recordedAt)} />
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
+function densityStatus(occupancy, threshold = {}) {
+  const caution = Number(threshold?.caution_percent) || 60
+  const warning = Number(threshold?.warning_percent) || 80
+  const critical = Number(threshold?.critical_percent) || 90
+  if (occupancy >= critical) return { label: 'Critical occupancy', badge: 'border-red-200 bg-red-50 text-red-700', bar: 'bg-red-500', icon: 'text-red-500' }
+  if (occupancy >= warning) return { label: 'High occupancy', badge: 'border-orange-200 bg-orange-50 text-orange-700', bar: 'bg-orange-500', icon: 'text-orange-500' }
+  if (occupancy >= caution) return { label: 'Moderate occupancy', badge: 'border-amber-200 bg-amber-50 text-amber-700', bar: 'bg-amber-500', icon: 'text-amber-500' }
+  return { label: 'Normal occupancy', badge: 'border-green-200 bg-green-50 text-green-700', bar: 'bg-green-500', icon: 'text-green-500' }
+}
+
+function CrowdPredictionPanel({ prediction, horizonHours, onHorizonChange, locationName }) {
   const first = prediction.points[0]
   const confidenceStyle = {
     High: 'border-green-200 bg-green-50 text-green-700',
@@ -388,7 +535,11 @@ function CrowdPredictionPanel({ prediction, horizonHours, onHorizonChange }) {
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 id="crowd-prediction-heading" className="flex items-center gap-2 font-bold text-slate-800"><TrendingUp size={18} className="text-indigo-500" />Crowd prediction</h2>
-          <p className="mt-1 text-xs text-slate-400">Forecast from the locations and historical period selected above</p>
+          <p className="mt-1 text-xs text-slate-400">
+            {locationName
+              ? `Forecast for ${locationName} from the historical period selected above`
+              : 'Forecast from the locations and historical period selected above'}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${confidenceStyle[prediction.confidence]}`}>{prediction.confidence} confidence</span>
@@ -419,7 +570,10 @@ function CrowdPredictionPanel({ prediction, horizonHours, onHorizonChange }) {
               <div className="mt-5 space-y-2 rounded-xl bg-white/10 p-3 text-xs text-white/80">
                 <ForecastSummaryRow label="Expected range" value={`${first.lower.toLocaleString()}–${first.upper.toLocaleString()}`} />
                 <ForecastSummaryRow label="Forecast time" value={first.label} />
-                <ForecastSummaryRow label="Locations" value={`${prediction.locationsCovered}/${prediction.locationCount}`} />
+                <ForecastSummaryRow
+                  label={locationName ? 'Location' : 'Locations'}
+                  value={locationName || `${prediction.locationsCovered}/${prediction.locationCount}`}
+                />
               </div>
             </article>
 
@@ -452,6 +606,11 @@ function ForecastSummaryRow({ label, value }) {
 }
 
 function PeriodFilter({ ref, mode, onModeChange, range, onRangeChange, month, onMonthChange, year, onYearChange, open, onOpenChange, selectedRange }) {
+  const today = dateInputValue(new Date())
+  const currentMonth = today.slice(0, 7)
+  const currentYear = new Date().getFullYear()
+  const startMaximum = range.end && range.end < today ? range.end : today
+
   return (
     <div ref={ref} className="relative">
       <button type="button" onClick={() => onOpenChange(!open)} aria-haspopup="dialog" aria-expanded={open} className={`flex w-full min-w-52 items-center gap-2 rounded-xl border px-3 py-2.5 text-sm transition ${selectedRange.hasFilter ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-600'} hover:border-blue-400`}>
@@ -465,13 +624,13 @@ function PeriodFilter({ ref, mode, onModeChange, range, onRangeChange, month, on
           <div className="mt-4">
             {mode === 'range' ? (
               <div className="grid grid-cols-2 gap-3">
-                <label><span className="mb-1 block text-xs font-semibold text-slate-500">From</span><input type="date" value={range.start} max={range.end || undefined} onChange={(event) => onRangeChange((current) => ({ ...current, start: event.target.value }))} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500" /></label>
-                <label><span className="mb-1 block text-xs font-semibold text-slate-500">To</span><input type="date" value={range.end} min={range.start || undefined} onChange={(event) => onRangeChange((current) => ({ ...current, end: event.target.value }))} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500" /></label>
+                <label><span className="mb-1 block text-xs font-semibold text-slate-500">From</span><input type="date" value={range.start} max={startMaximum} onChange={(event) => { if (!event.target.value || event.target.value <= today) onRangeChange((current) => ({ ...current, start: event.target.value })) }} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500" /></label>
+                <label><span className="mb-1 block text-xs font-semibold text-slate-500">To</span><input type="date" value={range.end} min={range.start || undefined} max={today} onChange={(event) => { if (!event.target.value || event.target.value <= today) onRangeChange((current) => ({ ...current, end: event.target.value })) }} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500" /></label>
               </div>
             ) : mode === 'month' ? (
-              <label><span className="mb-1 block text-xs font-semibold text-slate-500">Choose month</span><input type="month" value={month} onChange={(event) => onMonthChange(event.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500" /></label>
+              <label><span className="mb-1 block text-xs font-semibold text-slate-500">Choose month</span><input type="month" value={month} max={currentMonth} onChange={(event) => { if (!event.target.value || event.target.value <= currentMonth) onMonthChange(event.target.value) }} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500" /></label>
             ) : (
-              <label><span className="mb-1 block text-xs font-semibold text-slate-500">Choose year</span><input type="number" min="2000" max="2100" placeholder="e.g. 2026" value={year} onChange={(event) => onYearChange(event.target.value.replace(/\D/g, '').slice(0, 4))} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500" /></label>
+              <label><span className="mb-1 block text-xs font-semibold text-slate-500">Choose year</span><input type="number" min="2000" max={currentYear} placeholder={`e.g. ${currentYear}`} value={year} onChange={(event) => { const nextYear = event.target.value.replace(/\D/g, '').slice(0, 4); if (!nextYear || Number(nextYear) <= currentYear) onYearChange(nextYear) }} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500" /></label>
             )}
           </div>
           <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
@@ -485,19 +644,33 @@ function PeriodFilter({ ref, mode, onModeChange, range, onRangeChange, month, on
 }
 
 function getSelectedRange(mode, range, month, year) {
-  const validYear = /^\d{4}$/.test(year) && Number(year) >= 2000 && Number(year) <= 2100
-  const monthEnd = month ? new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate() : null
-  const from = mode === 'range' ? range.start : mode === 'month' && month ? `${month}-01` : mode === 'year' && validYear ? `${year}-01-01` : ''
-  const to = mode === 'range' ? range.end : mode === 'month' && month ? `${month}-${monthEnd}` : mode === 'year' && validYear ? `${year}-12-31` : ''
-  const label = mode === 'month' && month ? new Date(`${month}-01T00:00:00`).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }) : mode === 'year' && validYear ? year : from || to ? `${from || 'Any'} – ${to || 'Any'}` : 'Any date'
+  const today = dateInputValue(new Date())
+  const currentMonth = today.slice(0, 7)
+  const currentYear = Number(today.slice(0, 4))
+  const validYear = /^\d{4}$/.test(year) && Number(year) >= 2000 && Number(year) <= currentYear
+  const validMonth = /^\d{4}-\d{2}$/.test(month) && month <= currentMonth
+  const monthEnd = validMonth ? new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate() : null
+  const rangeStart = range.start && range.start <= today ? range.start : ''
+  const rangeEnd = range.end && range.end <= today ? range.end : ''
+  const from = mode === 'range' ? rangeStart : mode === 'month' && validMonth ? `${month}-01` : mode === 'year' && validYear ? `${year}-01-01` : ''
+  const requestedTo = mode === 'range' ? rangeEnd : mode === 'month' && validMonth ? `${month}-${monthEnd}` : mode === 'year' && validYear ? `${year}-12-31` : ''
+  const to = requestedTo && requestedTo > today ? today : requestedTo
+  const label = mode === 'month' && validMonth ? new Date(`${month}-01T00:00:00`).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }) : mode === 'year' && validYear ? year : from || to ? `${from || 'Any'} – ${to || 'Any'}` : 'Any date'
   const start = from ? new Date(`${from}T00:00:00`).getTime() : null
   const end = to ? new Date(`${to}T23:59:59.999`).getTime() : null
   const spanDays = start && end ? (end - start) / (24 * 60 * 60 * 1000) : null
   const granularity = mode === 'year' && validYear ? 'month'
-    : mode === 'month' && month ? 'day'
+    : mode === 'month' && validMonth ? 'day'
       : spanDays != null ? spanDays <= 2 ? 'hour' : spanDays <= 45 ? 'day' : spanDays <= 180 ? 'week' : 'month'
         : undefined
   return { start, end, hasFilter: Boolean(from || to), label, granularity }
+}
+
+function dateInputValue(date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 function SummaryRow({ label, value }) {
