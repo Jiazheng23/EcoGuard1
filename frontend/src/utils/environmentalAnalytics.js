@@ -5,42 +5,48 @@ function numberValue(value) {
 
 const HOUR_MS = 60 * 60 * 1000
 const WEEK_MS = 7 * 24 * HOUR_MS
+const DAY_MS = 24 * HOUR_MS
+const BUCKET_FORMATTERS = {
+  month: new Intl.DateTimeFormat('en-MY', { month: 'short', year: '2-digit' }),
+  week: new Intl.DateTimeFormat('en-MY', { day: '2-digit', month: 'short' }),
+  hour: new Intl.DateTimeFormat('en-MY', { hour: '2-digit', minute: '2-digit' }),
+  day: new Intl.DateTimeFormat('en-MY', { day: '2-digit', month: 'short' }),
+}
 
-function bucketFor(value, granularity) {
+function bucketTimestampFor(value, granularity) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return null
 
   let bucketDate
-  let format
   if (granularity === 'month') {
     bucketDate = new Date(date.getFullYear(), date.getMonth(), 1)
-    format = { month: 'short', year: '2-digit' }
   } else if (granularity === 'week') {
     bucketDate = new Date(date.getFullYear(), date.getMonth(), date.getDate())
     const day = bucketDate.getDay() || 7
     bucketDate.setDate(bucketDate.getDate() - day + 1)
-    format = { day: '2-digit', month: 'short' }
   } else if (granularity === 'hour') {
     bucketDate = new Date(date.getFullYear(), date.getMonth(), date.getDate(), date.getHours())
-    format = { hour: '2-digit', minute: '2-digit' }
   } else {
     bucketDate = new Date(date.getFullYear(), date.getMonth(), date.getDate())
-    format = { day: '2-digit', month: 'short' }
   }
 
-  return {
-    key: bucketDate.toISOString(),
-    timestamp: bucketDate.getTime(),
-    label: new Intl.DateTimeFormat('en-MY', format).format(bucketDate),
-  }
+  return bucketDate.getTime()
 }
 
 function metricBuckets(metrics, requestedGranularity) {
-  const timestamps = (metrics || [])
-    .map((metric) => new Date(metric.recorded_at).getTime())
-    .filter(Number.isFinite)
-  const spanDays = timestamps.length > 1
-    ? (Math.max(...timestamps) - Math.min(...timestamps)) / (24 * 60 * 60 * 1000)
+  const rows = metrics || []
+  let earliest = Infinity
+  let latest = -Infinity
+  let validTimestampCount = 0
+  for (const metric of rows) {
+    const timestamp = new Date(metric.recorded_at).getTime()
+    if (!Number.isFinite(timestamp)) continue
+    earliest = Math.min(earliest, timestamp)
+    latest = Math.max(latest, timestamp)
+    validTimestampCount += 1
+  }
+  const spanDays = validTimestampCount > 1
+    ? (latest - earliest) / DAY_MS
     : 0
   const validRequestedGranularity = ['hour', 'day', 'week', 'month'].includes(requestedGranularity)
     ? requestedGranularity
@@ -50,13 +56,21 @@ function metricBuckets(metrics, requestedGranularity) {
       : spanDays <= 180 ? 'week'
         : 'month')
   const buckets = new Map()
-  for (const metric of metrics || []) {
-    const bucket = bucketFor(metric.recorded_at, granularity)
-    if (!bucket) continue
-    if (!buckets.has(bucket.key)) buckets.set(bucket.key, { ...bucket, rows: [] })
-    buckets.get(bucket.key).rows.push(metric)
+  for (const metric of rows) {
+    const timestamp = bucketTimestampFor(metric.recorded_at, granularity)
+    if (timestamp == null) continue
+    if (!buckets.has(timestamp)) buckets.set(timestamp, [])
+    buckets.get(timestamp).push(metric)
   }
-  return [...buckets.values()].sort((a, b) => a.timestamp - b.timestamp)
+  const formatter = BUCKET_FORMATTERS[granularity]
+  return [...buckets.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([timestamp, bucketRows]) => ({
+      key: new Date(timestamp).toISOString(),
+      timestamp,
+      label: formatter.format(new Date(timestamp)),
+      rows: bucketRows,
+    }))
 }
 
 export function buildVisitorDensitySeries(metrics = [], locations = [], granularity) {

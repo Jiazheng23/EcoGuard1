@@ -1,6 +1,23 @@
 import { supabase } from './supabaseClient'
 
 let environmentalHistoryChannelSequence = 0
+let environmentalHistoryCache = null
+let environmentalHistoryCacheTime = 0
+let environmentalHistoryCacheKey = ''
+let environmentalHistoryRequest = null
+let environmentalHistoryRequestKey = ''
+
+const ENVIRONMENTAL_HISTORY_CACHE_MS = 60 * 1000
+const ENVIRONMENTAL_HISTORY_COLUMNS = [
+  'id',
+  'location_id',
+  'crowd_count',
+  'air_quality_index',
+  'water_quality_score',
+  'temperature_c',
+  'source',
+  'recorded_at',
+].join(',')
 
 function throwIfError(error) {
   if (error) throw error
@@ -93,21 +110,74 @@ export async function listLocationMetrics({ limit = 500 } = {}) {
 }
 
 export async function listEnvironmentalMetricHistory({ limit = 50000, pageSize = 1000 } = {}) {
-  const rows = []
-  while (rows.length < limit) {
-    const requestedSize = Math.min(pageSize, limit - rows.length)
-    const { data, error } = await supabase
-      .from('environmental_metric_history')
-      .select('*')
-      .order('recorded_at', { ascending: false })
-      .order('id', { ascending: false })
-      .range(rows.length, rows.length + requestedSize - 1)
-
-    throwIfError(error)
-    rows.push(...(data || []))
-    if (!data || data.length < requestedSize) break
+  const { data: { session } } = await supabase.auth.getSession()
+  const cacheKey = session?.access_token || ''
+  const now = Date.now()
+  if (
+    cacheKey
+    && environmentalHistoryCacheKey === cacheKey
+    && environmentalHistoryCache
+    && now - environmentalHistoryCacheTime < ENVIRONMENTAL_HISTORY_CACHE_MS
+  ) {
+    return environmentalHistoryCache.slice(0, limit)
   }
-  return rows
+  if (cacheKey && environmentalHistoryRequestKey === cacheKey && environmentalHistoryRequest) {
+    return environmentalHistoryRequest
+  }
+
+  environmentalHistoryRequest = loadEnvironmentalMetricHistory(limit, pageSize)
+  environmentalHistoryRequestKey = cacheKey
+  try {
+    const rows = await environmentalHistoryRequest
+    environmentalHistoryCache = rows
+    environmentalHistoryCacheTime = Date.now()
+    environmentalHistoryCacheKey = cacheKey
+    return rows
+  } finally {
+    environmentalHistoryRequest = null
+    environmentalHistoryRequestKey = ''
+  }
+}
+
+async function loadEnvironmentalMetricHistory(limit, pageSize) {
+  const safeLimit = Math.max(1, Math.min(50000, Number(limit) || 50000))
+  const safePageSize = Math.max(1, Math.min(1000, Number(pageSize) || 1000))
+  const { data: firstPage, error, count } = await environmentalHistoryPage(0, safePageSize, true)
+  throwIfError(error)
+
+  const firstRows = firstPage || []
+  if (firstRows.length < safePageSize || firstRows.length >= safeLimit) {
+    return firstRows.slice(0, safeLimit)
+  }
+
+  const totalRows = Math.min(safeLimit, Number.isFinite(count) ? count : safeLimit)
+  const pages = []
+  for (let offset = safePageSize; offset < totalRows; offset += safePageSize) {
+    pages.push({ offset, size: Math.min(safePageSize, totalRows - offset) })
+  }
+
+  const rows = [...firstRows]
+  const concurrentPages = 5
+  for (let index = 0; index < pages.length; index += concurrentPages) {
+    const batch = pages.slice(index, index + concurrentPages)
+    const results = await Promise.all(batch.map(({ offset, size }) => (
+      environmentalHistoryPage(offset, size)
+    )))
+    for (const result of results) {
+      throwIfError(result.error)
+      rows.push(...(result.data || []))
+    }
+  }
+  return rows.slice(0, safeLimit)
+}
+
+function environmentalHistoryPage(offset, size, includeCount = false) {
+  return supabase
+    .from('environmental_metric_history')
+    .select(ENVIRONMENTAL_HISTORY_COLUMNS, includeCount ? { count: 'exact' } : undefined)
+    .order('recorded_at', { ascending: false })
+    .order('id', { ascending: false })
+    .range(offset, offset + size - 1)
 }
 
 export function subscribeToEnvironmentalMetricHistory(onChange) {
@@ -119,7 +189,16 @@ export function subscribeToEnvironmentalMetricHistory(onChange) {
     .on(
       'postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'environmental_metric_history' },
-      (payload) => onChange?.(payload.new),
+      (payload) => {
+        if (payload.new?.id && environmentalHistoryCache) {
+          environmentalHistoryCache = [
+            payload.new,
+            ...environmentalHistoryCache.filter((row) => String(row.id) !== String(payload.new.id)),
+          ].slice(0, 50000)
+          environmentalHistoryCacheTime = Date.now()
+        }
+        onChange?.(payload.new)
+      },
     )
     .subscribe()
 
