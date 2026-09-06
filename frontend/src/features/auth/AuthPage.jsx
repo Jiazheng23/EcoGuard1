@@ -323,10 +323,16 @@ export default function AuthPage({ initialMode }) {
   }
 
   async function cancelGoogleRegistration() {
+    if (googleRoleChoice) return;
+    setGoogleRoleChoice("cancel");
+    setGoogleRoleMessage("");
     try {
+      await authenticatedRequest("/api/auth/google-onboarding/cancel", { method: "POST" });
       await supabase.auth.signOut({ scope: "local" });
-    } finally {
       navigate("/login", { replace: true, state: null });
+    } catch (error) {
+      setGoogleRoleMessage(error.message || "Could not switch Google accounts. Please try again.");
+      setGoogleRoleChoice("");
     }
   }
 
@@ -637,7 +643,7 @@ export default function AuthPage({ initialMode }) {
             </div>
             {googleRoleMessage && <p className="google-role-error" role="alert">{googleRoleMessage}</p>}
             <button className="google-role-cancel" type="button" disabled={Boolean(googleRoleChoice)} onClick={cancelGoogleRegistration}>
-              Use a different account
+              {googleRoleChoice === "cancel" ? "Switching account..." : "Use a different account"}
             </button>
           </section>
         </>

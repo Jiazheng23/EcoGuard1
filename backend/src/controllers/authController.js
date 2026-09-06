@@ -229,6 +229,32 @@ export async function startGoogleApplication(req, res) {
   return res.json({ success: true })
 }
 
+export async function cancelGoogleOnboarding(req, res) {
+  if (!requireAdminClient(res)) return
+  const user = await requireAuthenticatedUser(req, res)
+  if (!user) return
+  const createdAt = Date.parse(user.created_at || '')
+  const lastSignInAt = Date.parse(user.last_sign_in_at || '')
+  const isOnlyGoogleIdentity = user.identities?.length === 1 && user.identities[0].provider === 'google'
+  const isRecentFirstSignIn = Number.isFinite(createdAt) && Number.isFinite(lastSignInAt)
+    && Math.abs(lastSignInAt - createdAt) <= 60_000
+    && Date.now() - createdAt <= 15 * 60_000
+  if (!isOnlyGoogleIdentity || !isRecentFirstSignIn) {
+    return res.status(409).json({ error: 'This Google account has already completed registration.' })
+  }
+  const { data: profile, error: profileError } = await supabaseAdmin.from('profiles')
+    .select('role').eq('id', user.id).maybeSingle()
+  if (profileError) return respondToAdminClientError(res, profileError)
+  if (!profile) return res.json({ success: true })
+  if (profile.role !== 'tourist') {
+    return res.status(409).json({ error: 'This account already has a protected role.' })
+  }
+  const { error: deleteError } = await supabaseAdmin.from('profiles')
+    .delete().eq('id', user.id).eq('role', 'tourist')
+  if (deleteError) return respondToAdminClientError(res, deleteError)
+  return res.json({ success: true })
+}
+
 export async function register(req, res) {
   const name = req.body?.name?.trim()
   const email = req.body?.email?.trim().toLowerCase()
