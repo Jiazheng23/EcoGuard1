@@ -37,6 +37,8 @@ import { isWestMalaysiaLocation } from '../../utils/westMalaysia'
 import { submitEnvironmentalIncident } from '../../services/incidentService'
 import { listActiveAdvisories, subscribeToAdvisories } from '../../services/advisoryService'
 import LoadingScreen from '../../components/LoadingScreen'
+import TablePagination from '../../components/TablePagination'
+import useTablePagination from '../../hooks/useTablePagination'
 import { useToast } from '../../components/toastContext'
 
 const WEST_MALAYSIA_CENTER = [4.2105, 101.9758]
@@ -382,6 +384,13 @@ export default function EcologicalMonitoring({ onNavigate, user }) {
       }),
     [search, state, warning, selectedTypes, visibleDestinations],
   )
+  const destinationPageSize = view === 'map' ? 8 : 6
+  const destinationPages = useTablePagination(filtered, destinationPageSize)
+  const setDestinationPage = destinationPages.setPage
+
+  useEffect(() => {
+    setDestinationPage(1)
+  }, [search, state, warning, selectedTypes, view, setDestinationPage])
 
   function toggleType(type) {
     setSelectedTypes((current) =>
@@ -538,7 +547,7 @@ export default function EcologicalMonitoring({ onNavigate, user }) {
             : 'md:grid-cols-2 xl:grid-cols-3'
         }`}
       >
-        {filtered.map((item) => (
+        {destinationPages.pageItems.map((item) => (
           <DestinationCard
             destination={item}
             onSelect={() => openDestination(item)}
@@ -546,6 +555,17 @@ export default function EcologicalMonitoring({ onNavigate, user }) {
           />
         ))}
       </div>
+
+      {filtered.length > 0 && (
+        <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+          <TablePagination
+            {...destinationPages}
+            pageSize={destinationPageSize}
+            onPageChange={destinationPages.setPage}
+            label="destinations"
+          />
+        </section>
+      )}
 
       {!filtered.length && (
         <div className="rounded-2xl bg-white py-16 text-center text-slate-400">
@@ -944,7 +964,6 @@ function IncidentReportDialog({ destination, user, onClose }) {
     try {
       await submitEnvironmentalIncident({ locationId: destination.sourceId, locationName: destination.name, reporterId: user.id, category, customCategory, description, photos })
       setSubmitted(true)
-      toast.success('Environmental incident report submitted successfully.')
     } catch (submitError) { const failure = submitError.message || 'Unable to submit the report.'; setError(failure); toast.error(failure) }
     finally { setSaving(false) }
   }

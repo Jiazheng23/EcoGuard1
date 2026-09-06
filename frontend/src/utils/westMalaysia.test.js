@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { inferWestMalaysiaState, isWestMalaysiaCoordinate, isWestMalaysiaLocation, normalizeWestMalaysiaState, westMalaysiaStates } from './westMalaysia.js'
+import { inferWestMalaysiaState, isSameMappedAddress, isWestMalaysiaCoordinate, isWestMalaysiaLocation, normalizeWestMalaysiaState, westMalaysiaStates } from './westMalaysia.js'
 
 test('West Malaysia validation accepts peninsula coordinates', () => {
   assert.equal(isWestMalaysiaCoordinate(3.139, 101.6869), true)
@@ -25,4 +25,12 @@ test('location validation requires a West Malaysia state and coordinates', () =>
   assert.equal(isWestMalaysiaLocation({ state: 'Pahang', latitude: 4.381, longitude: 102.401 }), true)
   assert.equal(isWestMalaysiaLocation({ state: 'Sabah', latitude: 6.075, longitude: 116.558 }), false)
   assert.equal(isWestMalaysiaLocation({ state: 'Sarawak', lat: 4.05, lng: 114.81 }), false)
+})
+
+test('duplicate address validation compares selected map coordinates', () => {
+  const savedLocation = { latitude: 3.1578721, longitude: 101.7115849 }
+
+  assert.equal(isSameMappedAddress(savedLocation, { lat: 3.157872, lng: 101.711585 }), true)
+  assert.equal(isSameMappedAddress(savedLocation, { lat: 3.139, lng: 101.6869 }), false)
+  assert.equal(isSameMappedAddress(savedLocation, { lat: '', lng: '' }), false)
 })

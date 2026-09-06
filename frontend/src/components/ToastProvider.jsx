@@ -26,7 +26,10 @@ export function ToastProvider({ children }) {
   const show = useCallback((message, type = 'info', duration = 4500) => {
     if (!message) return
     const id = `${Date.now()}-${Math.random()}`
-    setToasts((current) => [...current, { id, message, type }].slice(-4))
+    setToasts((current) => {
+      if (current.some((toast) => toast.message === message && toast.type === type)) return current
+      return [...current, { id, message, type }].slice(-4)
+    })
     window.setTimeout(() => dismiss(id), duration)
   }, [dismiss])
 

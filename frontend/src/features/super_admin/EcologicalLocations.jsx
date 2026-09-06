@@ -6,7 +6,7 @@ import {
   updateEcologicalLocation,
 } from '../../services/locationService'
 import WestMalaysiaLocationPicker from './WestMalaysiaLocationPicker'
-import { isWestMalaysiaCoordinate, isWestMalaysiaLocation } from '../../utils/westMalaysia'
+import { isSameMappedAddress, isWestMalaysiaCoordinate, isWestMalaysiaLocation } from '../../utils/westMalaysia'
 import { deleteLocationImages, MAX_GALLERY_IMAGES, uploadLocationImages } from '../../services/locationImageService'
 import TablePagination from '../../components/TablePagination'
 import useTablePagination from '../../hooks/useTablePagination'
@@ -139,10 +139,27 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
     }))
   }
 
+  function duplicateLocationFor(selection) {
+    if (!selection) return null
+    return locations.find((location) => (
+      String(location.id) !== String(editing)
+      && isSameMappedAddress(location, selection)
+    )) || null
+  }
+
+  function duplicateLocationMessage(selection) {
+    const duplicate = duplicateLocationFor(selection)
+    return duplicate
+      ? `This address is already used by ${duplicate.name}. Choose a different location.`
+      : ''
+  }
+
   async function saveLocation(event) {
     event.preventDefault()
     const nextErrors = {}
     if (!form.location_confirmed || !isWestMalaysiaCoordinate(form.latitude, form.longitude) || !form.state) nextErrors.location = 'Search for and confirm a valid destination within West Malaysia.'
+    const duplicateLocation = duplicateLocationFor(form)
+    if (duplicateLocation) nextErrors.location = duplicateLocationMessage(form)
     if (form.name.trim().length < 2) nextErrors.name = 'Enter a location name with at least 2 characters.'
     else if (form.name.trim().length > 120) nextErrors.name = 'Location name cannot exceed 120 characters.'
     if (!locationTypes.includes(form.location_type)) nextErrors.location_type = 'Choose a valid location type.'
@@ -168,10 +185,13 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
         ? await createEcologicalLocation(user.id, values)
         : { id: editing }
       const uploadedGalleryUrls = await uploadLocationImages(savedLocation.id, galleryFiles)
+      const selectedWallpaperIndex = newWallpaperIndex ?? (
+        editing === 'new' && uploadedGalleryUrls.length ? 0 : null
+      )
       const finalValues = {
         ...values,
-        wallpaper_url: isSuperAdmin && newWallpaperIndex != null
-          ? uploadedGalleryUrls[newWallpaperIndex]
+        wallpaper_url: isSuperAdmin && selectedWallpaperIndex != null
+          ? uploadedGalleryUrls[selectedWallpaperIndex]
           : values.wallpaper_url,
         gallery_urls: [...values.gallery_urls, ...uploadedGalleryUrls],
       }
@@ -275,7 +295,16 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
             <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-100 px-6 py-4"><div><h2 id="location-dialog-title" className="text-lg font-bold text-slate-900">{editing === 'new' ? 'Add ecological location' : 'Edit ecological location'}</h2><p className="mt-1 text-sm text-slate-500">This information is shared with the Tourist map.</p></div><button type="button" onClick={() => setEditing(null)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={19} /></button></div>
             <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">
             <div className="mt-5">
-              <div className={fieldErrors.location ? 'rounded-xl ring-2 ring-red-300' : ''}><WestMalaysiaLocationPicker latitude={form.latitude} longitude={form.longitude} state={form.state} onConfirmationChange={(confirmed) => { setForm((current) => ({ ...current, location_confirmed: confirmed })); if (confirmed) setFieldErrors((current) => ({ ...current, location: undefined })) }} onChange={(location) => { setForm((current) => ({ ...current, latitude: location.lat, longitude: location.lng, state: location.state, location_confirmed: true })); setFieldErrors((current) => ({ ...current, location: undefined })) }} /></div>
+              <div className={fieldErrors.location ? 'rounded-xl ring-2 ring-red-300' : ''}><WestMalaysiaLocationPicker latitude={form.latitude} longitude={form.longitude} state={form.state} validateSelection={duplicateLocationMessage} onConfirmationChange={(confirmed) => { setForm((current) => ({ ...current, location_confirmed: confirmed })); if (confirmed) setFieldErrors((current) => ({ ...current, location: undefined })) }} onChange={(location) => {
+                if (!location) {
+                  setForm((current) => ({ ...current, latitude: '', longitude: '', state: '', location_confirmed: false }))
+                  setFieldErrors((current) => ({ ...current, location: undefined }))
+                  return
+                }
+                const duplicateMessage = duplicateLocationMessage(location)
+                setForm((current) => ({ ...current, latitude: location.lat, longitude: location.lng, state: location.state, location_confirmed: Boolean(location.confirmed) && !duplicateMessage }))
+                setFieldErrors((current) => ({ ...current, location: duplicateMessage || undefined }))
+              }} /></div>
               {fieldErrors.location && <p className="mt-2 text-xs text-red-500">{fieldErrors.location}</p>}
             </div>
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
@@ -291,6 +320,7 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
                 form={form}
                 galleryFiles={galleryFiles}
                 isSuperAdmin={isSuperAdmin}
+                autoSelectFirstWallpaper={editing === 'new'}
                 newWallpaperIndex={newWallpaperIndex}
                 onGalleryChange={setGalleryFiles}
                 onSelectSavedWallpaper={(url) => { setForm((current) => ({ ...current, wallpaper_url: url })); setNewWallpaperIndex(null) }}
@@ -326,7 +356,7 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
   )
 }
 
-function ImageFields({ form, galleryFiles, isSuperAdmin, newWallpaperIndex, onGalleryChange, onSelectSavedWallpaper, onSelectNewWallpaper, onRemoveGallery }) {
+function ImageFields({ form, galleryFiles, isSuperAdmin, autoSelectFirstWallpaper, newWallpaperIndex, onGalleryChange, onSelectSavedWallpaper, onSelectNewWallpaper, onRemoveGallery }) {
   const toast = useToast()
   const fileInputRef = useRef(null)
   const [selectionError, setSelectionError] = useState('')
@@ -348,7 +378,11 @@ function ImageFields({ form, galleryFiles, isSuperAdmin, newWallpaperIndex, onGa
       event.target.value = ''
       return
     }
-    onGalleryChange([...galleryFiles, ...newFiles])
+    const nextGalleryFiles = [...galleryFiles, ...newFiles]
+    onGalleryChange(nextGalleryFiles)
+    if (autoSelectFirstWallpaper && !form.wallpaper_url && newWallpaperIndex == null && nextGalleryFiles.length) {
+      onSelectNewWallpaper(0)
+    }
     setSelectionError('')
     event.target.value = ''
   }
@@ -365,7 +399,12 @@ function ImageFields({ form, galleryFiles, isSuperAdmin, newWallpaperIndex, onGa
       <input ref={fileInputRef} type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={chooseGallery} className="hidden" />
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {form.gallery_urls.map((url, index) => <ImagePreview key={url} url={url} label={`Image ${index + 1}`} isWallpaper={url === form.wallpaper_url} canSelectWallpaper={isSuperAdmin} onSelectWallpaper={() => onSelectSavedWallpaper(url)} onRemove={() => onRemoveGallery(url)} />)}
-        {galleryFiles.map((file, index) => <FileImagePreview key={`${file.name}-${file.lastModified}`} file={file} label={`New ${index + 1}`} isWallpaper={newWallpaperIndex === index} canSelectWallpaper={isSuperAdmin} onSelectWallpaper={() => onSelectNewWallpaper(index)} onRemove={() => { onGalleryChange(galleryFiles.filter((_, itemIndex) => itemIndex !== index)); if (newWallpaperIndex === index) onSelectNewWallpaper(null); else if (newWallpaperIndex > index) onSelectNewWallpaper(newWallpaperIndex - 1) }} />)}
+        {galleryFiles.map((file, index) => <FileImagePreview key={`${file.name}-${file.lastModified}`} file={file} label={`New ${index + 1}`} isWallpaper={newWallpaperIndex === index} canSelectWallpaper={isSuperAdmin} onSelectWallpaper={() => onSelectNewWallpaper(index)} onRemove={() => {
+          const remainingFiles = galleryFiles.filter((_, itemIndex) => itemIndex !== index)
+          onGalleryChange(remainingFiles)
+          if (newWallpaperIndex === index) onSelectNewWallpaper(autoSelectFirstWallpaper && remainingFiles.length ? 0 : null)
+          else if (newWallpaperIndex > index) onSelectNewWallpaper(newWallpaperIndex - 1)
+        }} />)}
         {form.gallery_urls.length + galleryFiles.length < MAX_GALLERY_IMAGES && <button type="button" onClick={() => fileInputRef.current?.click()} className="flex min-h-28 flex-col items-center justify-center rounded-xl border-2 border-dashed border-blue-200 bg-blue-50/50 text-blue-600 transition hover:border-blue-400 hover:bg-blue-50">
           <span className="grid size-10 place-items-center rounded-full bg-blue-100"><Plus size={22} /></span>
           <span className="mt-2 text-sm font-semibold">Add images</span>

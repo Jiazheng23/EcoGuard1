@@ -16,7 +16,7 @@ function FocusSelection({ selection }) {
   return null
 }
 
-export default function WestMalaysiaLocationPicker({ latitude, longitude, state, onChange, onConfirmationChange }) {
+export default function WestMalaysiaLocationPicker({ latitude, longitude, state, onChange, onConfirmationChange, validateSelection }) {
   const saved = isWestMalaysiaCoordinate(latitude, longitude)
     ? { lat: Number(latitude), lng: Number(longitude), name: 'Saved destination', state, confirmed: true }
     : null
@@ -37,10 +37,13 @@ export default function WestMalaysiaLocationPicker({ latitude, longitude, state,
         .filter((item) => item.state)
       if (!matches.length) {
         setSelection(null)
+        onChange(null)
         setError('No matching destination was found in West Malaysia. Include the destination, town, and state in your search.')
         return
       }
-      setSelection({ ...matches[0], confirmed: false })
+      const preview = { ...matches[0], confirmed: false }
+      setSelection(preview)
+      onChange(preview)
     } catch (searchError) {
       setError(searchError.message || 'Unable to search for this destination.')
     } finally {
@@ -49,11 +52,16 @@ export default function WestMalaysiaLocationPicker({ latitude, longitude, state,
   }
 
   function confirmSelection() {
+    if (validateSelection?.(selection)) return
     const confirmed = { ...selection, confirmed: true }
     setSelection(confirmed)
     onConfirmationChange(true)
     onChange(confirmed)
   }
+
+  const selectionIssue = selection && !selection.confirmed
+    ? validateSelection?.(selection) || ''
+    : ''
 
   return (
     <section className="sm:col-span-2 rounded-2xl border border-blue-100 bg-blue-50/40 p-4">
@@ -69,9 +77,9 @@ export default function WestMalaysiaLocationPicker({ latitude, longitude, state,
         </MapContainer>
       </div>
 
-      {selection && !selection.confirmed && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-4"><p className="text-sm font-bold text-amber-900">Is this the correct destination?</p><p className="mt-1 text-sm leading-6 text-amber-800">{selection.name}</p><p className="mt-1 text-xs text-amber-700">Detected state: {selection.state} · {selection.lat.toFixed(6)}, {selection.lng.toFixed(6)}</p><div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={confirmSelection} className="inline-flex items-center gap-2 rounded-xl bg-green-600 px-4 py-2.5 text-sm font-semibold text-white"><CheckCircle2 size={16} /> Yes, this is correct</button><button type="button" onClick={() => { setSelection(null); onConfirmationChange(false); setError('Search again using a more complete destination address.') }} className="inline-flex items-center gap-2 rounded-xl border border-amber-300 bg-white px-4 py-2.5 text-sm font-semibold text-amber-800"><XCircle size={16} /> No, search again</button></div></div>}
+      {selection && !selection.confirmed && <div className={`mt-3 rounded-xl border p-4 ${selectionIssue ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'}`}><p className={`text-sm font-bold ${selectionIssue ? 'text-red-900' : 'text-amber-900'}`}>Is this the correct destination?</p><p className={`mt-1 break-words text-sm leading-6 ${selectionIssue ? 'text-red-800' : 'text-amber-800'}`}>{selection.name}</p><p className={`mt-1 text-xs ${selectionIssue ? 'text-red-700' : 'text-amber-700'}`}>Detected state: {selection.state} · {selection.lat.toFixed(6)}, {selection.lng.toFixed(6)}</p>{selectionIssue && <p role="alert" className="mt-3 rounded-lg border border-red-200 bg-white p-3 text-sm font-semibold text-red-700">{selectionIssue}</p>}<div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={confirmSelection} disabled={Boolean(selectionIssue)} className="inline-flex items-center gap-2 rounded-xl bg-green-600 px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"><CheckCircle2 size={16} />{selectionIssue ? 'Address already added' : 'Yes, this is correct'}</button><button type="button" onClick={() => { setSelection(null); setQuery(''); onChange(null); onConfirmationChange(false); setError('Search again using a more complete destination address.') }} className="inline-flex items-center gap-2 rounded-xl border border-amber-300 bg-white px-4 py-2.5 text-sm font-semibold text-amber-800"><XCircle size={16} /> No, search again</button></div></div>}
 
-      {selection?.confirmed && <div className="mt-3 flex items-start justify-between gap-3 rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-800"><p><b>Confirmed destination</b><span className="mt-1 block">{selection.name}</span><span className="mt-1 block text-xs">{selection.state} · {selection.lat.toFixed(6)}, {selection.lng.toFixed(6)}</span></p><button type="button" onClick={() => { setSelection(null); setQuery(''); onConfirmationChange(false) }} className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold"><RotateCcw size={14} /> Change</button></div>}
+      {selection?.confirmed && <div className="mt-3 flex items-start justify-between gap-3 rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-800"><p className="min-w-0"><b>Confirmed destination</b><span className="mt-1 block break-words">{selection.name}</span><span className="mt-1 block text-xs">{selection.state} · {selection.lat.toFixed(6)}, {selection.lng.toFixed(6)}</span></p><button type="button" onClick={() => { setSelection(null); setQuery(''); onChange(null); onConfirmationChange(false) }} className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold"><RotateCcw size={14} /> Change</button></div>}
       {error && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-600">{error}</p>}
     </section>
   )

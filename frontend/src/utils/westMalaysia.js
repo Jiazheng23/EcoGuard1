@@ -29,6 +29,24 @@ export function isWestMalaysiaLocation(location) {
     && isWestMalaysiaCoordinate(location?.latitude ?? location?.lat, location?.longitude ?? location?.lng)
 }
 
+// Map search results use their coordinates as the stable identity for an
+// address. Five decimal places is precise to roughly one metre in Malaysia.
+export function isSameMappedAddress(first, second, tolerance = 0.00001) {
+  const rawCoordinates = [
+    first?.latitude ?? first?.lat,
+    first?.longitude ?? first?.lng,
+    second?.latitude ?? second?.lat,
+    second?.longitude ?? second?.lng,
+  ]
+  if (rawCoordinates.some((value) => value === '' || value == null)) return false
+
+  const [firstLatitude, firstLongitude, secondLatitude, secondLongitude] = rawCoordinates.map(Number)
+
+  if (![firstLatitude, firstLongitude, secondLatitude, secondLongitude].every(Number.isFinite)) return false
+  return Math.abs(firstLatitude - secondLatitude) <= tolerance
+    && Math.abs(firstLongitude - secondLongitude) <= tolerance
+}
+
 export function inferWestMalaysiaState(address) {
   const normalized = String(address || '').toLowerCase()
   return westMalaysiaStates.find((state) => normalized.includes(state.toLowerCase()))

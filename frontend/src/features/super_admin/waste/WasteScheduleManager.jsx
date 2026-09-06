@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { CalendarClock, Edit3, Plus, RefreshCw, Trash2, Truck } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { AlertTriangle, CalendarClock, Edit3, Plus, RefreshCw, Trash2, Truck, X } from 'lucide-react'
 import { cancelWasteSchedule } from '../../../services/wasteService'
 import WasteScheduleForm from './WasteScheduleForm'
 import TablePagination from '../../../components/TablePagination'
@@ -9,6 +10,8 @@ export default function WasteScheduleManager({ location, schedules, loading, onR
   const [editor, setEditor] = useState(null)
   const [filter, setFilter] = useState('all')
   const [workingId, setWorkingId] = useState(null)
+  const [cancelTarget, setCancelTarget] = useState(null)
+  const [cancelError, setCancelError] = useState('')
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
 
@@ -28,19 +31,20 @@ export default function WasteScheduleManager({ location, schedules, loading, onR
     setNotice(editing ? 'Collection schedule updated.' : 'Collection schedule created.')
   }
 
-  async function cancelSchedule(schedule) {
-    const confirmed = window.confirm(`Cancel the collection scheduled for ${formatDate(schedule.scheduled_for)}? The schedule will remain in the audit history.`)
-    if (!confirmed) return
-
+  async function confirmCancelSchedule() {
+    const schedule = cancelTarget
+    if (!schedule) return
     setWorkingId(schedule.id)
+    setCancelError('')
     setNotice('')
     setError('')
     try {
       await cancelWasteSchedule(schedule.id)
       await onRefresh()
+      setCancelTarget(null)
       setNotice('Collection schedule cancelled. Its audit record was retained.')
     } catch (cancelError) {
-      setError(cancelError.message || 'Unable to cancel the collection schedule.')
+      setCancelError(cancelError.message || 'Unable to cancel the collection schedule.')
     } finally {
       setWorkingId(null)
     }
@@ -88,7 +92,7 @@ export default function WasteScheduleManager({ location, schedules, loading, onR
                     <td className="px-5 py-4"><div className="flex justify-end gap-1">
                       {canAct && <button type="button" onClick={() => onRecordCollection(schedule)} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-2 text-xs font-semibold text-green-700 hover:bg-green-50"><Truck size={14} />Record</button>}
                       {canEdit && <button type="button" onClick={() => { setEditor({ schedule }); setNotice(''); setError('') }} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-2 text-xs font-semibold text-blue-600 hover:bg-blue-50"><Edit3 size={14} />Edit</button>}
-                      {canAct && <button type="button" onClick={() => cancelSchedule(schedule)} disabled={workingId === schedule.id} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"><Trash2 size={14} />Cancel</button>}
+                      {canAct && <button type="button" onClick={() => { setCancelTarget(schedule); setCancelError('') }} disabled={workingId === schedule.id} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"><Trash2 size={14} />Cancel</button>}
                     </div></td>
                   </tr>
                 )
@@ -102,6 +106,22 @@ export default function WasteScheduleManager({ location, schedules, loading, onR
       </section>
 
       {editor && <WasteScheduleForm key={editor.schedule?.id || 'new'} location={location} schedule={editor.schedule} schedules={schedules} onClose={() => setEditor(null)} onSaved={scheduleSaved} />}
+      {cancelTarget && createPortal(
+        <div className="fixed inset-0 z-[9999] grid place-items-center bg-slate-950/50 p-4 backdrop-blur-[2px]" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !workingId) setCancelTarget(null) }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="cancel-schedule-title" className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <button type="button" onClick={() => setCancelTarget(null)} disabled={Boolean(workingId)} aria-label="Close cancellation confirmation" className="absolute right-4 top-4 rounded-lg p-2 text-slate-400 hover:bg-slate-100 disabled:opacity-50"><X size={18} /></button>
+            <span className="grid size-12 place-items-center rounded-full bg-red-50 text-red-600"><AlertTriangle size={24} /></span>
+            <h2 id="cancel-schedule-title" className="mt-4 text-lg font-bold text-slate-900">Cancel collection schedule?</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-500">The collection scheduled for <strong className="text-slate-700">{formatDate(cancelTarget.scheduled_for)}</strong> will be cancelled, but retained in the audit history.</p>
+            {cancelError && <p role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{cancelError}</p>}
+            <div className="mt-6 flex justify-end gap-3">
+              <button type="button" onClick={() => setCancelTarget(null)} disabled={Boolean(workingId)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 disabled:opacity-50">Keep schedule</button>
+              <button type="button" onClick={confirmCancelSchedule} disabled={Boolean(workingId)} className="rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50">{workingId ? 'Cancelling...' : 'Cancel schedule'}</button>
+            </div>
+          </section>
+        </div>,
+        document.body,
+      )}
     </>
   )
 }
