@@ -1,14 +1,10 @@
-import { useMemo, useState } from 'react'
-import { Activity, AlertCircle, AlertTriangle, Bell, CheckCircle, MapPin, Save, Search } from 'lucide-react'
+import { Fragment, useMemo, useState } from 'react'
+import { Activity, AlertCircle, Bell, History, Pencil, Save, Search } from 'lucide-react'
 import { latestMetricsByLocation, saveCrowdThreshold } from '../../services/locationService'
 import { useToast } from '../../components/toastContext'
 
-const levelStyles = {
-  optimal: { label: 'Optimal', color: '#22c55e', background: '#f0fdf4' },
-  caution: { label: 'Caution', color: '#f59e0b', background: '#fffbeb' },
-  warning: { label: 'Warning', color: '#f97316', background: '#fff7ed' },
-  critical: { label: 'Critical', color: '#ef4444', background: '#fef2f2' },
-}
+import { crowdLevels as levelStyles, crowdLevel, crowdRanges } from '../../utils/crowdThresholds'
+import CrowdAlertHistory from './CrowdAlertHistory'
 
 const defaultThreshold = (locationId) => ({
   location_id: locationId,
@@ -19,22 +15,14 @@ const defaultThreshold = (locationId) => ({
   notification_email: '',
 })
 
-function statusFor(occupancy, threshold) {
-  if (occupancy >= threshold.critical_percent) return 'critical'
-  if (occupancy >= threshold.warning_percent) return 'warning'
-  if (occupancy >= threshold.caution_percent) return 'caution'
-  return 'optimal'
-}
-
-export default function CrowdThresholds({ user, locations, thresholds, metrics, loading, error, onDataChange, embedded = false, showFilters = true, showSummary = true }) {
+export default function CrowdThresholds({ user, locations, thresholds, metrics, loading, error, onDataChange, embedded = false, showFilters = true, showSummary = true, isSuperAdmin = false }) {
   const toast = useToast()
   const [editing, setEditing] = useState(null)
   const [draft, setDraft] = useState(null)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [query, setQuery] = useState('')
-  const [stateFilter, setStateFilter] = useState('all')
-  const [statusFilter, setStatusFilter] = useState('all')
+  const [history, setHistory] = useState(null)
   const [fieldErrors, setFieldErrors] = useState({})
   const latest = useMemo(() => latestMetricsByLocation(metrics), [metrics])
   const thresholdMap = useMemo(() => Object.fromEntries(thresholds.map((item) => [String(item.location_id), item])), [thresholds])
@@ -42,26 +30,16 @@ export default function CrowdThresholds({ user, locations, thresholds, metrics, 
   const rows = useMemo(() => locations.map((location) => {
     const threshold = thresholdMap[String(location.id)] || defaultThreshold(location.id)
     const metric = latest[String(location.id)]
-    const occupancy = location.max_capacity
-      ? Math.round((Number(metric?.crowd_count || 0) / Number(location.max_capacity)) * 100)
-      : 0
-    return { location, threshold, metric, occupancy, status: statusFor(occupancy, threshold) }
+    const occupancy = Number(location.max_capacity) > 0 && metric?.crowd_count != null
+      ? Number(metric.crowd_count) / Number(location.max_capacity) * 100 : null
+    return { location, threshold, metric, occupancy, status: crowdLevel(metric?.crowd_count, location.max_capacity, threshold) }
   }), [latest, locations, thresholdMap])
 
   const statusCounts = Object.keys(levelStyles).reduce((counts, status) => ({
     ...counts,
     [status]: rows.filter((row) => row.status === status).length,
   }), {})
-  const states = [...new Set(locations.map((item) => item.state))].sort()
-  const filteredRows = showFilters ? rows.filter((row) => {
-    const needle = query.trim().toLowerCase()
-    const matchesQuery = !needle || [row.location.name, row.location.state, row.location.location_type]
-      .some((value) => value?.toLowerCase().includes(needle))
-    const matchesState = stateFilter === 'all' || row.location.state === stateFilter
-    const matchesStatus = statusFilter === 'all' || row.status === statusFilter
-    return matchesQuery && matchesState && matchesStatus
-  }) : rows
-  const filtersActive = query || stateFilter !== 'all' || statusFilter !== 'all'
+  const filteredRows = showFilters ? rows.filter(({ location }) => [location.name, location.state].some((value) => String(value || '').toLowerCase().includes(query.trim().toLowerCase()))) : rows
 
   function beginEdit(row) {
     setEditing(row.location.id)
@@ -112,54 +90,49 @@ export default function CrowdThresholds({ user, locations, thresholds, metrics, 
     }
   }
 
+  if (history) return <CrowdAlertHistory locations={locations} isSuperAdmin={isSuperAdmin} selectedLocationId={history.locationId} onBack={() => setHistory(null)} />
+
   return (
-    <div className={embedded ? 'flex flex-col gap-6' : 'mx-auto flex max-w-6xl flex-col gap-6'}>
-      {!embedded && <header>
-        <h1 className="text-2xl font-bold text-slate-900">Crowd Thresholds</h1>
-        <p className="mt-1 text-sm text-slate-500">Configure occupancy alerts for each managed ecological location</p>
-      </header>}
+    <div className={embedded ? 'flex flex-col gap-6' : 'mx-auto flex max-w-7xl flex-col gap-6'}>
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div><h1 className="text-2xl font-bold text-slate-900">Crowd Threshold Management</h1><p className="mt-1 text-sm text-slate-500">Configure and monitor crowd thresholds for each ecological location</p></div>
+        <button type="button" onClick={() => setHistory({ locationId: null })} className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-orange-600"><History size={17} />Alert History</button>
+      </header>
 
       {showSummary && <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {Object.entries(levelStyles).map(([key, level]) => (
-          <article key={key} className="rounded-2xl border p-4 shadow-sm" style={{ background: level.background, borderColor: `${level.color}30` }}>
-            <span className="grid size-8 place-items-center rounded-lg bg-white" style={{ color: level.color }}><Activity size={16} /></span>
-            <h2 className="mt-3 font-bold" style={{ color: level.color }}>{level.label}</h2>
-            <p className="mt-1 text-2xl font-bold text-slate-800">{loading ? '-' : statusCounts[key]}</p>
+          <article key={key} className="rounded-2xl border p-5 shadow-sm" style={{ background: level.background, borderColor: level.color + '30' }}>
+            <div className="flex items-center justify-between gap-2" style={{ color: level.color }}><h2 className="text-sm font-semibold">{level.label} Crowd</h2><Activity size={20} /></div>
+            <p className="mt-3 text-3xl font-bold text-slate-800">{loading ? '—' : statusCounts[key]}</p><p className="mt-1 text-xs text-slate-500">locations</p>
           </article>
         ))}
       </div>}
 
-      {(error || message) && <div className={`flex items-start gap-2 rounded-xl border p-3 text-sm ${error || /unable|must/i.test(message) ? 'border-red-200 bg-red-50 text-red-600' : 'border-green-200 bg-green-50 text-green-700'}`}><AlertCircle size={17} className="mt-0.5 shrink-0" /><p>{error || message}</p></div>}
-
-      {showFilters && <section className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap gap-2">
-          <label className="relative min-w-56 flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search location, state or type" className="w-full rounded-xl border border-slate-200 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-blue-500" /></label>
-          <select value={stateFilter} onChange={(event) => setStateFilter(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-600 outline-none focus:border-blue-500"><option value="all">All states</option>{states.map((item) => <option key={item}>{item}</option>)}</select>
-          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-600 outline-none focus:border-blue-500"><option value="all">All risk levels</option>{Object.entries(levelStyles).map(([key, item]) => <option key={key} value={key}>{item.label}</option>)}</select>
-          {filtersActive && <button type="button" onClick={() => { setQuery(''); setStateFilter('all'); setStatusFilter('all') }} className="rounded-xl px-3 py-2.5 text-sm font-semibold text-blue-600 hover:bg-blue-50">Clear</button>}
-        </div>
-        <p className="mt-2 text-right text-xs text-slate-400">Showing {filteredRows.length} of {rows.length} locations</p>
-      </section>}
-
-      <section className="space-y-4">
-        {filteredRows.map((row) => {
-          const style = levelStyles[row.status]
-          const isEditing = editing === row.location.id
-          return (
-            <article key={row.location.id} className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-3"><span className="grid size-10 place-items-center rounded-xl bg-blue-50 text-blue-500"><MapPin size={18} /></span><div><h2 className="font-bold text-slate-800">{row.location.name}</h2><p className="text-xs text-slate-400">{row.location.state} · {row.metric?.crowd_count || 0} / {row.location.max_capacity} visitors</p></div></div>
-                <div className="flex items-center gap-2"><span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold" style={{ color: style.color, background: style.background }}>{row.status === 'optimal' ? <CheckCircle size={13} /> : <AlertTriangle size={13} />}{style.label} · {row.occupancy}%</span>{!isEditing && <button type="button" onClick={() => beginEdit(row)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-50">Edit rules</button>}</div>
-              </div>
-              <div className="relative mt-4 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(100, row.occupancy)}%`, background: style.color }} /></div>
-              <div className="mt-2 grid grid-cols-3 text-xs text-slate-400"><span>Caution {row.threshold.caution_percent}%</span><span className="text-center">Warning {row.threshold.warning_percent}%</span><span className="text-right">Critical {row.threshold.critical_percent}%</span></div>
-
-              {isEditing && draft && (
+      {(error || message) && <div role="status" className="flex items-start gap-2 rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700"><AlertCircle size={17} className="mt-0.5 shrink-0" /><p>{error || message}</p></div>}
+      <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+        {showFilters && <div className="border-b border-slate-100 p-4"><label className="relative block max-w-md"><span className="sr-only">Search location</span><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search location..." className="w-full rounded-xl border border-slate-200 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-orange-500" /></label></div>}
+        <div className="overflow-x-auto"><table className="w-full min-w-[1150px] text-left text-sm" aria-busy={loading}>
+          <thead className="bg-slate-50 text-xs text-slate-500"><tr>{['Location', 'Max Capacity', 'Low', 'Moderate', 'High', 'Critical', 'Current Visitors', 'Status', 'Actions'].map((label) => <th key={label} className="px-4 py-4 font-semibold">{label}</th>)}</tr></thead>
+          <tbody className="divide-y divide-slate-100">
+            {!loading && filteredRows.map((row) => {
+              const style = levelStyles[row.status]
+              const isEditing = editing === row.location.id
+              const ranges = crowdRanges(row.location.max_capacity, row.threshold)
+              return <Fragment key={row.location.id}>
+                <tr className="hover:bg-slate-50/60">
+                  <td className="px-4 py-5"><b className="text-slate-800">{row.location.name}</b><p className="mt-1 text-xs text-slate-400">{row.location.state}</p></td>
+                  <td className="px-4 py-5 font-semibold text-slate-700">{Number(row.location.max_capacity).toLocaleString()}</td>
+                  {ranges.map((range, index) => <td key={index} className="whitespace-nowrap px-4 py-5 text-xs font-semibold" style={{ color: Object.values(levelStyles)[index].color }}>{range}</td>)}
+                  <td className="min-w-40 px-4 py-5"><div className="flex justify-between gap-3"><b className="text-slate-700">{row.metric?.crowd_count == null ? '—' : Number(row.metric.crowd_count).toLocaleString()}</b><span className="text-xs text-slate-400">{row.occupancy == null ? 'No reading' : row.occupancy.toFixed(1) + '%'}</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full" style={{ width: Math.min(100, Math.max(0, row.occupancy || 0)) + '%', background: style?.color || '#94a3b8' }} /></div></td>
+                  <td className="px-4 py-5"><span className="whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold" style={{ color: style?.color || '#64748b', background: style?.background || '#f1f5f9' }}>{style ? style.label + ' Crowd' : 'Unavailable'}</span></td>
+                  <td className="px-4 py-5"><div className="flex gap-2"><button type="button" aria-label={'Edit thresholds for ' + row.location.name} onClick={() => beginEdit(row)} className="inline-flex items-center gap-1 rounded-lg border border-blue-200 px-2.5 py-1.5 text-xs font-semibold text-blue-600"><Pencil size={13} />Edit</button><button type="button" aria-label={'Alert history for ' + row.location.name} onClick={() => setHistory({ locationId: row.location.id })} className="inline-flex items-center gap-1 rounded-lg border border-orange-200 px-2.5 py-1.5 text-xs font-semibold text-orange-600"><History size={13} />History</button></div></td>
+                </tr>
+                {isEditing && draft && <tr><td colSpan={9} className="px-4 pb-4">
                 <form onSubmit={save} noValidate className="mt-5 rounded-xl bg-slate-50 p-4">
                   <div className="grid gap-4 sm:grid-cols-3">
-                    <ThresholdInput label="Caution %" name="caution_percent" value={draft.caution_percent} onChange={changeDraft} error={fieldErrors.caution_percent} />
-                    <ThresholdInput label="Warning %" name="warning_percent" value={draft.warning_percent} onChange={changeDraft} error={fieldErrors.warning_percent} />
-                    <ThresholdInput label="Critical %" name="critical_percent" value={draft.critical_percent} onChange={changeDraft} error={fieldErrors.critical_percent} />
+                    <ThresholdInput label="Moderate from (%)" name="caution_percent" value={draft.caution_percent} onChange={changeDraft} error={fieldErrors.caution_percent} />
+                    <ThresholdInput label="High from (%)" name="warning_percent" value={draft.warning_percent} onChange={changeDraft} error={fieldErrors.warning_percent} />
+                    <ThresholdInput label="Critical from (%)" name="critical_percent" value={draft.critical_percent} onChange={changeDraft} error={fieldErrors.critical_percent} />
                   </div>
                   <div className="mt-4 flex flex-wrap items-end gap-4">
                     <label className="min-w-64 flex-1"><span className="mb-1.5 block text-xs font-semibold text-slate-600">Notification email</span><input type="email" name="notification_email" value={draft.notification_email} onChange={changeDraft} placeholder="alerts@ecoguard.my" aria-invalid={Boolean(fieldErrors.notification_email)} className={`w-full rounded-xl border bg-white px-3 py-2.5 text-sm outline-none ${fieldErrors.notification_email ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-100' : 'border-slate-200 focus:border-blue-500'}`} />{fieldErrors.notification_email && <span className="mt-1 block text-xs text-red-500">{fieldErrors.notification_email}</span>}</label>
@@ -167,11 +140,12 @@ export default function CrowdThresholds({ user, locations, thresholds, metrics, 
                     <div className="flex gap-2"><button type="button" onClick={() => { setEditing(null); setDraft(null) }} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600">Cancel</button><button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"><Save size={15} />{saving ? 'Saving...' : 'Save'}</button></div>
                   </div>
                 </form>
-              )}
-            </article>
-          )
-        })}
-        {!loading && !filteredRows.length && <p className="rounded-2xl border border-slate-100 bg-white p-10 text-center text-sm text-slate-400">{rows.length ? 'No crowd thresholds match the current filters.' : 'Add an ecological location before configuring its crowd threshold.'}</p>}
+                </td></tr>}
+              </Fragment>
+            })}
+            {(loading || !filteredRows.length) && <tr><td colSpan={9} className="p-12 text-center text-slate-400">{loading ? 'Loading crowd thresholds…' : rows.length ? 'No locations match your search.' : 'No accessible locations available.'}</td></tr>}
+          </tbody>
+        </table></div>
       </section>
     </div>
   )
