@@ -4,16 +4,17 @@ import { createWasteCollection } from '../../../services/wasteService'
 import { validateWasteCollection, WASTE_COLLECTION_SOURCES, WASTE_COLLECTION_STATUSES, WASTE_TYPES } from '../../../utils/wasteValidation'
 import { useToast } from '../../../components/toastContext'
 
-export default function WasteCollectionForm({ location, schedule, onClose, onSaved }) {
+export default function WasteCollectionForm({ location, schedule, alert, initialStatus = 'completed', onClose, onSaved }) {
   const toast = useToast()
   const [values, setValues] = useState(() => ({
     schedule_id: schedule?.id || null,
+    alert_id: schedule?.alert_id || alert?.id || null,
     location_id: location.id,
     collected_at: toLocalInput(new Date()),
-    total_kg: schedule ? '' : '0',
-    recycled_kg: schedule ? '' : '0',
+    total_kg: initialStatus === 'missed' ? '0' : schedule ? '' : '0',
+    recycled_kg: initialStatus === 'missed' ? '0' : schedule ? '' : '0',
     waste_type: schedule?.waste_type || 'mixed',
-    status: 'completed',
+    status: initialStatus,
     source: 'manual',
     notes: '',
   }))
@@ -37,7 +38,7 @@ export default function WasteCollectionForm({ location, schedule, onClose, onSav
 
   async function submit(event) {
     event.preventDefault()
-    const nextErrors = validateWasteCollection(values)
+    const nextErrors = validateWasteCollection(values, { schedule, alert })
     setErrors(nextErrors)
     if (Object.keys(nextErrors).length) {
       toast.reminder('Please correct the highlighted collection fields.')
@@ -74,6 +75,7 @@ export default function WasteCollectionForm({ location, schedule, onClose, onSav
 
         <form onSubmit={submit} noValidate className="flex min-h-0 flex-1 flex-col">
           <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
+          {values.alert_id && <p className="rounded-xl border border-orange-200 bg-orange-50 p-3 text-sm text-orange-800">Linked waste alert #{values.alert_id}. Recording this attempt does not reset the sensor reading or close the alert.</p>}
           <div className="grid gap-4 md:grid-cols-2">
             <FormField label="Location"><input value={location.name} disabled className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-500" /></FormField>
             <FormField label="Collection time" error={errors.collected_at}><input name="collected_at" type="datetime-local" max={toLocalInput(new Date())} value={values.collected_at} onChange={updateValue} className={inputClass(errors.collected_at)} /></FormField>
@@ -87,7 +89,7 @@ export default function WasteCollectionForm({ location, schedule, onClose, onSav
 
           {values.source === 'simulated_sensor' && <div className="rounded-xl border border-violet-200 bg-violet-50 p-3 text-sm text-violet-700"><b>Automated sensor:</b> this record was captured from the location sensor feed.</div>}
           {missed && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">A missed collection records zero kilograms. For a scheduled record, the schedule will also be marked missed.</div>}
-          <FormField label="Notes (optional)" error={errors.notes}><textarea name="notes" rows="3" maxLength="1000" value={values.notes} onChange={updateValue} placeholder="Collection result, issue, vehicle, or reason for a missed collection" className={inputClass(errors.notes)} /></FormField>
+          <FormField label={missed ? "Reason for missed collection (required)" : "Action taken / notes (optional)"} error={errors.notes}><textarea name="notes" rows="3" maxLength="1000" value={values.notes} onChange={updateValue} placeholder="Collection result, issue, vehicle, or reason for a missed collection" className={inputClass(errors.notes)} /></FormField>
           {submitError && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-600">{submitError}</div>}
           </div>
 

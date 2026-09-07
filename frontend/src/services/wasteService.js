@@ -37,8 +37,9 @@ function throwFriendlyWasteError(error) {
   const messages = {
     '23P01': 'This collection period conflicts with another active schedule for the location.',
     '23503': 'The selected location, schedule, or administrator record no longer exists.',
-    '23505': 'A collection record already exists for this schedule.',
-    '23514': 'The waste record violates one of the required status or quantity rules.',
+    '23505': 'A collection already exists for this schedule, or this alert already has an active schedule. Refresh and use the existing record.',
+    '23514': error.message || 'The waste record violates one of the required status or quantity rules.',
+    'PGRST204': 'The waste alert workflow is not installed. Apply supabase/waste_alert_workflow.sql first.',
     '22007': 'The selected date or time is not allowed.',
     '42501': 'You do not have permission to manage waste data for this location.',
     '42P01': 'Waste Management tables are not available. Apply supabase/waste_management.sql first.',
@@ -47,6 +48,52 @@ function throwFriendlyWasteError(error) {
   friendly.code = error.code
   friendly.cause = error
   throw friendly
+}
+
+export async function listWasteAlertHistory(locationIds) {
+  requireSupabase()
+  if (!locationIds.length) return []
+  return readWastePages(() => supabase.from('early_warning_alerts').select('*')
+    .eq('category', 'waste').in('location_id', locationIds)
+    .order('created_at', { ascending: false }).order('id', { ascending: false }))
+}
+
+async function readWastePages(makeQuery) {
+  const rows = []
+  for (let offset = 0; ; offset += 500) {
+    const { data, error } = await makeQuery().range(offset, offset + 499)
+    if (error) throwFriendlyWasteError(error)
+    rows.push(...(data || []))
+    if (!data || data.length < 500) return rows
+  }
+}
+
+export async function listWasteOperations(locationIds) {
+  requireSupabase()
+  if (!locationIds.length) return { schedules: [], collections: [] }
+  const [schedules, collections] = await Promise.all([
+    readWastePages(() => supabase.from('waste_collection_schedules').select('*').in('location_id', locationIds).order('id', { ascending: false })),
+    readWastePages(() => supabase.from('waste_collection_records').select('*').in('location_id', locationIds).order('id', { ascending: false })),
+  ])
+  return { schedules, collections }
+}
+
+export function subscribeToWasteOperations(onChange) {
+  if (!supabase) return () => {}
+  let timer
+  const refresh = () => {
+    globalThis.clearTimeout(timer)
+    timer = globalThis.setTimeout(onChange, 300)
+  }
+  let channel = supabase.channel(`waste-operations-${crypto.randomUUID()}`)
+  for (const table of ['early_warning_alerts', 'waste_collection_schedules', 'waste_collection_records']) {
+    channel = channel.on('postgres_changes', {
+      event: '*', schema: 'public', table,
+      ...(table === 'early_warning_alerts' ? { filter: 'category=eq.waste' } : {}),
+    }, refresh)
+  }
+  channel.subscribe()
+  return () => { globalThis.clearTimeout(timer); void supabase.removeChannel(channel) }
 }
 
 export async function listWasteSchedules(filters = {}) {
@@ -99,8 +146,13 @@ export async function cancelWasteSchedule(scheduleId) {
   return updateWasteScheduleStatus(scheduleId, 'cancelled')
 }
 
-export async function markWasteScheduleMissed(scheduleId) {
-  return updateWasteScheduleStatus(scheduleId, 'missed')
+export async function linkWasteScheduleToAlert(scheduleId, alertId) {
+  requireSupabase()
+  const { data, error } = await supabase.from('waste_collection_schedules')
+    .update({ alert_id: Number(alertId) }).eq('id', Number(scheduleId))
+    .eq('status', 'scheduled').is('alert_id', null).select('*').single()
+  if (error) throwFriendlyWasteError(error)
+  return data
 }
 
 async function updateWasteScheduleStatus(scheduleId, status) {

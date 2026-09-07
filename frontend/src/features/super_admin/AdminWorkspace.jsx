@@ -28,7 +28,7 @@ import LoadingScreen from '../../components/LoadingScreen'
 const adminPages = new Set([
   'dashboard', 'locations', 'location-detail', 'applications', 'sensors', 'incidents',
   'advisories', 'thresholds', 'waste', 'waste-overview', 'waste-schedules',
-  'waste-history', 'analytics', 'reports', 'profile',
+  'waste-history', 'waste-alerts', 'analytics', 'reports', 'profile',
 ])
 
 export default function AdminWorkspace({ requiredRole }) {
@@ -241,6 +241,7 @@ export default function AdminWorkspace({ requiredRole }) {
     'waste-overview': 'schedules',
     'waste-schedules': 'schedules',
     'waste-history': 'history',
+    'waste-alerts': 'alerts',
   }
   const wasteSection = wasteSections[page]
   const pageContent = wasteSection ? (

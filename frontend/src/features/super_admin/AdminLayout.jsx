@@ -36,6 +36,7 @@ const navItems = [
     children: [
       { label: 'Collection Schedules', page: 'waste-schedules' },
       { label: 'Collection History', page: 'waste-history' },
+      { label: 'Alert History', page: 'waste-alerts' },
     ],
   },
   { icon: Activity, label: 'Environmental Analytics', page: 'analytics' },
@@ -53,6 +54,7 @@ const pageLabels = {
   waste: 'Waste Management',
   'waste-schedules': 'Waste / Collection Schedules',
   'waste-history': 'Waste / Collection History',
+  'waste-alerts': 'Waste / Alert History',
   analytics: 'Environmental Analytics',
   reports: 'Reports & Analytics',
   profile: 'Profile',
