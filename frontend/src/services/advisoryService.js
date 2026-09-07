@@ -47,7 +47,12 @@ export async function listActiveAdvisories() {
 }
 
 export async function listManagedAdvisories() {
-  if (USE_MOCK_ADVISORIES) return mockAdvisories.map(clone)
+  if (USE_MOCK_ADVISORIES) {
+    // A manual refresh must also pick up changes saved by another browser tab.
+    mockAdvisories = loadStoredMockAdvisories(mockAdvisories)
+    sequence = mockAdvisories.reduce((highest, item) => Math.max(highest, Number(item.id) || 0), sequence)
+    return mockAdvisories.map(clone)
+  }
   const { data, error } = await supabase.from('tourist_advisories').select('*, ecological_locations(name,state)').order('created_at', { ascending: false })
   if (error) throw error
   return data || []
