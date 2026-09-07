@@ -11,7 +11,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { BarChart3, CloudSun, Download, Leaf, Recycle, Route, Search, Sparkles, Waves } from 'lucide-react'
+import { BarChart3, Bike, CloudSun, Download, Footprints, Leaf, Recycle, Route, Search, Sparkles, Waves } from 'lucide-react'
 import ReportDownloadDialog from '../../components/ReportDownloadDialog'
 import { latestMetricsByLocation } from '../../services/locationService'
 import { adminReportFilename, buildAdminTripPdfBytes, buildEnvironmentalPdfBytes } from '../../utils/adminReport'
@@ -82,6 +82,10 @@ export default function Reports({ profiles, trips, locations, metrics, loading, 
       }),
     transport: getTransportSeries(filteredTrips),
   }), [eastMalaysiaLocationNames, filteredTrips, profiles])
+  const emittingTransport = analytics.transport.filter((item) => !['walking', 'bicycle'].includes(item.mode) && item.emission > 0)
+  const bicycleTrips = analytics.transport.find((item) => item.mode === 'bicycle')?.trips || 0
+  const walkingTrips = analytics.transport.find((item) => item.mode === 'walking')?.trips || 0
+  const allTripsZeroEmission = filteredTrips.length > 0 && bicycleTrips + walkingTrips === filteredTrips.length
   const environmental = useMemo(() => {
     const latest = latestMetricsByLocation(filteredMetrics)
     const byLocation = filteredLocations.map((location) => {
@@ -234,8 +238,8 @@ export default function Reports({ profiles, trips, locations, metrics, loading, 
         </ResponsiveContainer>
       </article>
 
-      <section className={`grid gap-4 ${isSuperAdmin ? '' : 'lg:grid-cols-2'}`}>
-        <article className={card}>
+      <section className={`grid min-w-0 grid-cols-1 gap-4 ${isSuperAdmin ? '' : 'lg:grid-cols-2'}`}>
+        <article className={`${card} min-w-0`}>
           {isSuperAdmin ? <DestinationCarbonRanking destinations={analytics.destinations} loading={loading} /> : (
             <div className="flex min-h-[250px] flex-col justify-between">
               <div>
@@ -252,17 +256,38 @@ export default function Reports({ profiles, trips, locations, metrics, loading, 
           )}
         </article>
 
-        <article className={card}>
-          <h2 className="mb-4 font-bold text-slate-800">Carbon by transport</h2>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={analytics.transport} margin={{ left: -16 }}>
+        <article className={`${card} min-w-0`}>
+          <h2 className="font-bold text-slate-800">Carbon by transport</h2>
+          <p className="mb-4 mt-1 text-xs text-slate-400">Total carbon emissions by transport mode for the selected report period</p>
+          {loading ? (
+            <div role="status" className="grid min-h-[250px] place-items-center text-sm text-slate-400">Loading transport data...</div>
+          ) : emittingTransport.length ? <ResponsiveContainer width="100%" height={250} minWidth={0}>
+            <BarChart data={emittingTransport} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
               <CartesianGrid stroke="#f1f5f9" strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="name" tick={{ fontSize: 9, fill: '#94a3b8' }} />
               <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} />
               <Tooltip formatter={(value) => [`${value} kg CO₂`, 'Carbon']} />
               <Bar dataKey="emission" fill="#8b5cf6" radius={[5, 5, 0, 0]} isAnimationActive={false} />
             </BarChart>
-          </ResponsiveContainer>
+          </ResponsiveContainer> : (
+            <div className="flex min-h-[250px] flex-col items-center justify-center gap-3 rounded-xl bg-slate-50 p-6 text-center">
+              <Leaf size={28} className="text-green-600" />
+              <p className="text-sm font-semibold text-slate-700">{allTripsZeroEmission ? 'All recorded trips used zero-emission transport' : filteredTrips.length ? 'No transport emissions recorded for this period' : 'No trips match the current filters'}</p>
+              {allTripsZeroEmission && <p className="text-xs text-slate-500">Walking and cycling produce no direct transport emissions.</p>}
+            </div>
+          )}
+          <div className="mt-4 rounded-xl border border-green-100 bg-green-50 p-4">
+            <p className="text-sm font-semibold text-green-700">Zero-emission trips</p>
+            <div className="mt-3 flex flex-wrap gap-x-6 gap-y-3">
+              {[[Bike, 'Bicycle', bicycleTrips], [Footprints, 'Walking', walkingTrips]].map(([Icon, label, count]) => (
+                <div key={label} className="flex items-center gap-2 text-sm text-slate-700">
+                  <Icon size={18} className="shrink-0 text-green-600" />
+                  <span>{label}: <strong>{loading ? '—' : `${count} trip${count === 1 ? '' : 's'}`}</strong></span>
+                </div>
+              ))}
+            </div>
+            <p className="mt-3 text-xs text-slate-500">Walking and cycling have zero direct transport emissions and are shown here instead of as bars.</p>
+          </div>
         </article>
       </section>
     </div>
@@ -282,20 +307,20 @@ function DestinationCarbonRanking({ destinations, loading }) {
   const totalEmission = filteredDestinations.reduce((sum, item) => sum + (Number(item.emission) || 0), 0)
 
   return (
-    <div>
+    <div className="min-w-0">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0 flex-1 basis-56">
           <h2 className="font-bold text-slate-800">Carbon across all destinations</h2>
           <p className="mt-1 text-xs text-slate-400">Ranked by total CO₂ emissions for the selected report period</p>
         </div>
-        <div className="rounded-xl bg-green-50 px-3 py-2 text-right">
+        <div className="max-w-full break-words rounded-xl bg-green-50 px-3 py-2 text-right">
           <p className="text-[10px] font-bold uppercase tracking-wide text-green-600">{query ? 'Matching carbon' : 'Combined carbon'}</p>
           <p className="mt-0.5 text-lg font-bold text-green-700">{loading ? '-' : `${totalEmission.toFixed(1)} kg`}</p>
         </div>
       </div>
 
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-slate-50 p-3">
-        <label className="relative min-w-0 flex-1 sm:max-w-md">
+        <label className="relative min-w-0 flex-1 basis-48 sm:max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
           <input
             type="search"
@@ -321,11 +346,11 @@ function DestinationCarbonRanking({ destinations, loading }) {
             const rank = (currentPage - 1) * pageSize + index + 1
             return (
               <div key={destination.name}>
-                <div className="mb-1.5 flex items-center gap-3 text-sm">
-                  <span className="grid size-6 shrink-0 place-items-center rounded-lg bg-slate-100 text-[11px] font-bold text-slate-500">{rank}</span>
-                  <span className="min-w-0 flex-1 truncate font-semibold text-slate-700" title={destination.name}>{formatDestinationLabel(destination.name, 9999)}</span>
-                  <span className="shrink-0 font-bold text-slate-800">{emission.toFixed(1)} kg</span>
-                  <span className="w-12 shrink-0 text-right text-xs text-slate-400">{share.toFixed(1)}%</span>
+                <div className="mb-1.5 grid min-w-0 grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 text-sm sm:grid-cols-[1.5rem_minmax(0,1fr)_auto_3rem]">
+                  <span className="grid size-6 place-items-center rounded-lg bg-slate-100 text-[11px] font-bold text-slate-500">{rank}</span>
+                  <span className="col-span-2 min-w-0 truncate font-semibold text-slate-700 sm:col-span-1" title={destination.name}>{formatDestinationLabel(destination.name, 9999)}</span>
+                  <span className="col-start-2 min-w-0 break-words font-bold text-slate-800 sm:col-start-auto">{emission.toFixed(1)} kg</span>
+                  <span className="text-right text-xs text-slate-400">{share.toFixed(1)}%</span>
                 </div>
                 <div className="ml-9 h-2.5 overflow-hidden rounded-full bg-slate-100">
                   <div className="h-full rounded-full bg-gradient-to-r from-green-400 to-emerald-600" style={{ width: `${width}%` }} />
