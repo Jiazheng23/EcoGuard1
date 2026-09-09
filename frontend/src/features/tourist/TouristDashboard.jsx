@@ -20,9 +20,9 @@ import {
   Calculator,
   Car,
   CheckCircle2,
-  Clock3,
   LoaderCircle,
   Map,
+  Sparkles,
   Train,
   TrendingDown,
 } from 'lucide-react'
@@ -30,6 +30,7 @@ import { listOwnTrips } from '../../services/tripService'
 import AchievementBadges from '../../components/AchievementBadges'
 import LoadingScreen from '../../components/LoadingScreen'
 import { getAchievementBadges } from '../../services/achievementService'
+import { getEcoRecommendations } from '../../utils/ecoRecommendations'
 import {
   formatCarbon,
   formatEcoPoints,
@@ -143,6 +144,7 @@ export default function TouristDashboard({
   const savedCarbon = numberValue(profile?.total_carbon_saved)
   const achievementBadges = getAchievementBadges(trips, profile)
   const earnedBadges = achievementBadges.filter((badge) => badge.earned).length
+  const ecoRecommendations = useMemo(() => getEcoRecommendations(trips), [trips])
   const greeting = new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 18 ? 'Good afternoon' : 'Good evening'
 
   if (loading) {
@@ -320,21 +322,61 @@ export default function TouristDashboard({
           </div>
         </article>
 
-        <article className={card}>
-          <h2 className="mb-4 font-bold text-slate-800">Eco Recommendations</h2>
+        <article className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-white to-emerald-50/50 p-5 shadow-sm">
+          <header className="mb-4 flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-emerald-600 text-white shadow-sm shadow-emerald-600/20">
+                <Sparkles size={15} />
+              </span>
+              <h2 className="font-bold text-slate-900">Eco Recommendations</h2>
+            </div>
+            <span className="shrink-0 rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold text-emerald-700">
+              {trips.length} recorded trip{trips.length === 1 ? '' : 's'}
+            </span>
+          </header>
+
           <div className="space-y-3">
-            {[
-              [Train, 'Choose MRT, LRT, or ETS for your next suitable route to reduce per-passenger emissions.', 'text-blue-500'],
-              [Car, `${analytics.transport[0]?.name || 'Car trips'} currently represents your most-used recorded mode. Compare alternatives before saving.`, 'text-amber-500'],
-              [Clock3, 'Your dashboard and the administrator reports update from the same saved trip records.', 'text-green-500'],
-            ].map(([Icon, text, color]) => (
-              <div className="flex gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3" key={text}>
-                <span className={`grid size-8 shrink-0 place-items-center rounded-lg bg-white ${color}`}><Icon size={16} /></span>
-                <p className="text-sm leading-5 text-slate-600">{text}</p>
-              </div>
+            {ecoRecommendations.map((recommendation, index) => (
+              <section
+                className={`group relative flex items-center gap-3 overflow-hidden rounded-xl border p-3.5 transition duration-200 hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-sm ${index === 0
+                  ? 'border-emerald-200 bg-emerald-50/80'
+                  : 'border-slate-100 bg-white/90'
+                }`}
+                key={recommendation.id}
+              >
+                {index === 0 && <span className="absolute inset-y-0 left-0 w-1 bg-emerald-500" aria-hidden="true" />}
+                <span className={`grid size-9 shrink-0 place-items-center rounded-xl bg-white shadow-sm ${recommendation.tone}`}>
+                  <RecommendationIcon type={recommendation.type} size={17} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    {index === 0 && (
+                      <span className="shrink-0 rounded bg-emerald-600 px-1.5 py-0.5 text-[8px] font-extrabold uppercase tracking-wider text-white">
+                        Best
+                      </span>
+                    )}
+                    <h3 className="truncate text-sm font-bold text-slate-800">{recommendation.title}</h3>
+                  </div>
+                  <p className="mt-1 truncate text-xs text-slate-500">{recommendation.summary}</p>
+                </div>
+                <div className="hidden shrink-0 flex-col items-end gap-1.5 sm:flex">
+                  {recommendation.metrics.map((metric) => (
+                    <span className="rounded-lg bg-slate-100 px-2 py-1 text-[9px] font-bold text-slate-600 group-hover:bg-emerald-50 group-hover:text-emerald-700" key={metric}>
+                      {metric}
+                    </span>
+                  ))}
+                </div>
+              </section>
             ))}
+
+            <button
+              onClick={() => onNavigate('carbon')}
+              className="group mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 focus:outline-none focus:ring-4 focus:ring-emerald-100"
+            >
+              Calculate New Trip
+              <ArrowRight className="transition group-hover:translate-x-1" size={15} />
+            </button>
           </div>
-          <button onClick={() => onNavigate('carbon')} className="mt-4 w-full rounded-xl bg-green-500 py-2.5 text-sm font-semibold text-white">Calculate New Trip</button>
         </article>
       </section>
     </div>
@@ -355,4 +397,12 @@ function ChartCard({ title, aside, children }) {
 
 function EmptyState({ text }) {
   return <p className="grid min-h-28 place-items-center rounded-xl bg-slate-50 p-4 text-center text-sm text-slate-400">{text}</p>
+}
+
+function RecommendationIcon({ type, size }) {
+  if (type === 'transport') return <Car size={size} />
+  if (type === 'route') return <Map size={size} />
+  if (type === 'trend') return <TrendingDown size={size} />
+  if (type === 'start') return <Calculator size={size} />
+  return <CheckCircle2 size={size} />
 }
