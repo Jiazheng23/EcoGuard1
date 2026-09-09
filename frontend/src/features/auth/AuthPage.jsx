@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import {
+  AlertCircle,
   ArrowLeft,
+  ArrowRight,
   BarChart3,
   CheckCircle2,
   Eye,
@@ -10,6 +12,7 @@ import {
   Mail,
   ShieldCheck,
   UserRound,
+  X,
 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import "./auth.css";
@@ -327,10 +330,21 @@ export default function AuthPage({ initialMode }) {
     setGoogleRoleChoice("cancel");
     setGoogleRoleMessage("");
     try {
-      await authenticatedRequest("/api/auth/google-onboarding/cancel", { method: "POST" });
+      await authenticatedRequest("/api/auth/google-onboarding/cancel", {
+        method: "POST",
+        keepalive: true,
+      });
       await supabase.auth.signOut({ scope: "local" });
       navigate("/login", { replace: true, state: null });
     } catch (error) {
+      // A role was never selected, but the backend's short onboarding window may
+      // have expired while this page was closed. Account switching must still
+      // sign out locally instead of presenting that expiry as a completed signup.
+      if (error.message === "This Google account has already completed registration.") {
+        await supabase.auth.signOut({ scope: "local" });
+        navigate("/login", { replace: true, state: null });
+        return;
+      }
       setGoogleRoleMessage(error.message || "Could not switch Google accounts. Please try again.");
       setGoogleRoleChoice("");
     }
@@ -620,7 +634,10 @@ export default function AuthPage({ initialMode }) {
         <>
           <div className="google-role-backdrop" aria-hidden="true" />
           <section className="google-role-modal" role="dialog" aria-modal="true" aria-labelledby="google-role-title">
-            <span className="google-role-brand"><Leaf size={21} /> EcoGuard</span>
+            <div className="google-role-topline">
+              <span className="google-role-brand"><Leaf size={21} /> EcoGuard</span>
+              <span className="google-role-step">Final step</span>
+            </div>
             <div className="google-role-heading">
               <h1 id="google-role-title">Create your EcoGuard account</h1>
               <p>
@@ -633,15 +650,23 @@ export default function AuthPage({ initialMode }) {
               <button type="button" disabled={!googleRoleUser || Boolean(googleRoleChoice)} onClick={() => chooseGoogleRole("tourist")}>
                 <span><UserRound size={22} /></span>
                 <div><strong>Continue as Tourist</strong><small>Track trips, eco score, and environmental impact</small></div>
-                {googleRoleChoice === "tourist" && <em>Creating...</em>}
+                {googleRoleChoice === "tourist" ? <em>Creating...</em> : <ArrowRight className="google-role-arrow" size={19} />}
               </button>
               <button type="button" disabled={!googleRoleUser || Boolean(googleRoleChoice)} onClick={() => chooseGoogleRole("location_admin")}>
                 <span><ShieldCheck size={22} /></span>
                 <div><strong>Apply as Location Admin</strong><small>Continue to the location and document application</small></div>
-                {googleRoleChoice === "location_admin" && <em>Preparing...</em>}
+                {googleRoleChoice === "location_admin" ? <em>Preparing...</em> : <ArrowRight className="google-role-arrow" size={19} />}
               </button>
             </div>
-            {googleRoleMessage && <p className="google-role-error" role="alert">{googleRoleMessage}</p>}
+            {googleRoleMessage && (
+              <div className="google-role-error" role="alert">
+                <AlertCircle size={19} />
+                <p>{googleRoleMessage}</p>
+                <button type="button" aria-label="Dismiss message" onClick={() => setGoogleRoleMessage("")}>
+                  <X size={17} />
+                </button>
+              </div>
+            )}
             <button className="google-role-cancel" type="button" disabled={Boolean(googleRoleChoice)} onClick={cancelGoogleRegistration}>
               {googleRoleChoice === "cancel" ? "Switching account..." : "Use a different account"}
             </button>
