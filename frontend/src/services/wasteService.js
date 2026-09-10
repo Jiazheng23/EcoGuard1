@@ -190,8 +190,28 @@ export async function listWasteCollections(filters = {}) {
 }
 
 export async function createWasteCollection(values) {
+  if (values.request_id) {
+    requireSupabase()
+    assertWasteValidation(validateWasteCollection(values))
+    const { data, error } = await supabase.rpc('record_waste_collection', {
+      p_record: { ...normalizeWasteCollection(values), apply_to_sensor: values.apply_to_sensor === true },
+      p_request_id: values.request_id,
+    })
+    if (error?.code === 'PGRST202') throw new Error('Collection sensor response is not installed. Apply supabase/waste_collection_sensor_response.sql in Supabase first.')
+    if (error) throwFriendlyWasteError(error)
+    return data
+  }
   if (values.schedule_id) return completeScheduledWasteCollection(values.schedule_id, values)
   return createUnscheduledWasteCollection(values)
+}
+
+export async function getWasteSensorReading(locationId) {
+  requireSupabase()
+  const { data, error } = await supabase.from('location_metrics').select('*')
+    .eq('location_id', locationId).order('recorded_at', { ascending: false })
+    .order('id', { ascending: false }).limit(1).maybeSingle()
+  if (error) throwFriendlyWasteError(error)
+  return data
 }
 
 export async function createUnscheduledWasteCollection(values) {

@@ -4,6 +4,7 @@ import {
   listWasteOperations,
   listWasteAlertHistory,
   subscribeToWasteOperations,
+  getWasteSensorReading,
   listWasteReportExports,
 } from '../../services/wasteService'
 import { DEFAULT_WASTE_COLLECTION_FILTERS } from '../../utils/wasteAnalytics'
@@ -16,7 +17,7 @@ import WasteScheduleForm from './waste/WasteScheduleForm'
 import { filterWasteAlerts } from '../../utils/wasteWorkflow'
 import LoadingScreen from '../../components/LoadingScreen'
 
-export default function WasteManagement({ locations, loading, error, onDataChange, isSuperAdmin, profile, section = 'schedules', onSectionChange, embedded = false }) {
+export default function WasteManagement({ locations, loading, error, onDataChange, onMetricCreated, isSuperAdmin, profile, section = 'schedules', onSectionChange, embedded = false }) {
   const [selectedId, setSelectedId] = useState('')
   const [schedules, setSchedules] = useState([])
   const [collections, setCollections] = useState([])
@@ -99,11 +100,21 @@ export default function WasteManagement({ locations, loading, error, onDataChang
     setCollectionEditor({ schedule, alert: alert || selectedAlerts.find((item) => String(item.id) === String(schedule?.alert_id)), initialStatus })
   }
 
-  async function collectionSaved(_record, scheduled) {
+  async function collectionSaved(record, scheduled) {
+    let sensorMessage = ''
+    if (record.apply_to_sensor) {
+      sensorMessage = ` Waste reading reduced from ${Number(record.sensor_waste_before).toFixed(2)} to ${Number(record.sensor_waste_after).toFixed(2)} kg.`
+      try {
+        const reading = await getWasteSensorReading(record.location_id)
+        if (reading) onMetricCreated?.(reading)
+      } catch {
+        sensorMessage += ' Refresh Sensors to retrieve the latest display.'
+      }
+    }
     await refreshWasteData()
     setCollectionEditor(null)
     onSectionChange?.('history')
-    setOperationMessage(scheduled ? 'Scheduled collection recorded and its schedule status was updated.' : 'Unscheduled collection recorded successfully.')
+    setOperationMessage((scheduled ? 'Scheduled collection recorded and its schedule status was updated.' : 'Unscheduled collection recorded successfully.') + sensorMessage)
   }
 
   const content = {

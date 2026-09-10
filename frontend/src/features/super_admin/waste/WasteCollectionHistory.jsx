@@ -41,7 +41,7 @@ export default function WasteCollectionHistory({ location, collections, filters,
                 <td className="px-5 py-4 text-slate-600">{formatKg(record.landfill_kg)}</td>
                 <td className="px-5 py-4"><SourceBadge source={record.source} /></td>
                 <td className="px-5 py-4"><StatusBadge status={record.status} /></td>
-                <td className="max-w-xs px-5 py-4 text-slate-500">{record.notes || '-'}</td>
+                <td className="max-w-xs px-5 py-4 text-slate-500">{record.notes || '-'}{record.apply_to_sensor && <p className="mt-2 text-xs text-blue-700">Waste: {formatKg(record.sensor_waste_before)} → {formatKg(record.sensor_waste_after)}<br />Recyclable: {formatKg(record.sensor_recycled_before)} → {formatKg(record.sensor_recycled_after)}</p>}</td>
               </tr>
             ))}
           </tbody>

@@ -8,6 +8,8 @@ The migration is transactional and re-runnable. It adds nullable `alert_id` fore
 
 The SQL file must be deployed to enable response linking. Frontend lint, unit tests and a production build do not verify a deployed database or its RLS policies.
 
+For the newer current-collection sensor reduction, also apply [waste_collection_sensor_response.sql](waste_collection_sensor_response.sql) and follow its [setup guide](waste_collection_sensor_response_setup.md). The sensor-unchanged behaviour below describes the base workflow and historical entries; current-mode entries now reduce readings and reevaluate alerts transactionally after that migration.
+
 ## Behaviour
 
 - **Waste → Alert History:** read persisted waste alerts for the selected accessible location, newest first. Search, level and sensor-status filters combine; the visible record count follows those filters. Location administrators remain restricted to their assigned location. Super administrators can switch accessible locations.
