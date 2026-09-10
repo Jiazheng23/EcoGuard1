@@ -1,3 +1,4 @@
+import { averageReadings, sensorValue, formatReading, environmentalDefaults, travelDefaults, filterEnvironmentalReports, filterTravelReports, reportScope, reportCsvCell } from '../../utils/reportFilters'
 import { useMemo, useState } from 'react'
 import {
   Area,
@@ -18,6 +19,7 @@ import { adminReportFilename, buildAdminTripPdfBytes, buildEnvironmentalPdfBytes
 import { downloadWasteReport } from '../../utils/wasteReport'
 import { isWestMalaysiaCoordinate } from '../../utils/westMalaysia'
 import {
+  transportLabels,
   getDestinationSeries,
   getMonthlySeries,
   getTransportSeries,
@@ -32,36 +34,17 @@ function formatDestinationLabel(value, maxLength = 22) {
 }
 
 export default function Reports({ profiles, trips, locations, metrics, loading, error, isSuperAdmin = false, embedded = false }) {
-  const [query, setQuery] = useState('')
-  const [locationFilter, setLocationFilter] = useState('all')
-  const [dateRange, setDateRange] = useState('30')
+  const [environmentFilters, setEnvironmentFilters] = useState(environmentalDefaults)
+  const [travelFilters, setTravelFilters] = useState(travelDefaults)
   const [filterReferenceTime] = useState(() => Date.now())
   const [downloadDialogOpen, setDownloadDialogOpen] = useState(false)
   const [downloadMessage, setDownloadMessage] = useState('')
-  const selectedLocation = locations.find((location) => String(location.id) === locationFilter)
-  const startTimestamp = dateRange === 'all'
-    ? null
-    : filterReferenceTime - Number(dateRange) * 24 * 60 * 60 * 1000
-  const needle = query.trim().toLowerCase()
-  const filteredLocations = useMemo(() => locations.filter((location) => {
-    const matchesLocation = locationFilter === 'all' || String(location.id) === locationFilter
-    const matchesQuery = !needle || [location.name, location.state, location.location_type]
-      .some((value) => value?.toLowerCase().includes(needle))
-    return matchesLocation && matchesQuery
-  }), [locationFilter, locations, needle])
-  const filteredTrips = useMemo(() => trips.filter((trip) => {
-    const matchesDate = !startTimestamp || new Date(trip.travelled_at).getTime() >= startTimestamp
-    const matchesLocation = !selectedLocation
-      || trip.destination?.trim().toLowerCase() === selectedLocation.name.trim().toLowerCase()
-    const matchesQuery = !needle || [trip.starting_location, trip.destination, trip.transport_mode]
-      .some((value) => value?.toLowerCase().includes(needle))
-    return matchesDate && matchesLocation && matchesQuery
-  }), [needle, selectedLocation, startTimestamp, trips])
-  const visibleLocationIds = useMemo(() => new Set(filteredLocations.map((location) => String(location.id))), [filteredLocations])
-  const filteredMetrics = useMemo(() => metrics.filter((metric) => {
-    const matchesDate = !startTimestamp || new Date(metric.recorded_at).getTime() >= startTimestamp
-    return matchesDate && visibleLocationIds.has(String(metric.location_id))
-  }), [metrics, startTimestamp, visibleLocationIds])
+  const { locations: filteredLocations, metrics: filteredMetrics } = useMemo(
+    () => filterEnvironmentalReports(locations, metrics, environmentFilters, filterReferenceTime),
+    [locations, metrics, environmentFilters, filterReferenceTime],
+  )
+  const filteredTrips = useMemo(() => filterTravelReports(trips, travelFilters, filterReferenceTime), [trips, travelFilters, filterReferenceTime])
+  const transportModes = [...new Set([...Object.keys(transportLabels), ...trips.map((trip) => trip.transport_mode).filter(Boolean)])]
   const eastMalaysiaLocationNames = useMemo(() => new Set(
     locations
       .filter((location) => ['sabah', 'sarawak', 'labuan'].includes(String(location.state || '').trim().toLowerCase()))
@@ -92,22 +75,22 @@ export default function Reports({ profiles, trips, locations, metrics, loading, 
       const metric = latest[String(location.id)] || {}
       return {
         name: location.name,
-        waste: Number(metric.waste_kg || 0),
-        recycled: Number(metric.recycled_kg || 0),
-        aqi: Number(metric.air_quality_index || 0),
-        water: Number(metric.water_quality_score || 0),
+        waste: sensorValue(metric.waste_kg),
+        recycled: sensorValue(metric.recycled_kg),
+        aqi: sensorValue(metric.air_quality_index),
+        water: sensorValue(metric.water_quality_score),
       }
     })
     const readingCount = filteredMetrics.length
-    const averageAqi = byLocation.length ? byLocation.reduce((sum, item) => sum + item.aqi, 0) / byLocation.length : 0
-    const averageWater = byLocation.length ? byLocation.reduce((sum, item) => sum + item.water, 0) / byLocation.length : 0
-    const totalWaste = byLocation.reduce((sum, item) => sum + item.waste, 0)
+    const averageAqi = averageReadings(byLocation.map((item) => item.aqi))
+    const averageWater = averageReadings(byLocation.map((item) => item.water))
+    const totalWaste = byLocation.reduce((sum, item) => sum + (item.waste ?? 0), 0)
     return { byLocation, readingCount, averageAqi, averageWater, totalWaste }
   }, [filteredLocations, filteredMetrics])
 
   function exportCsv() {
     const header = ['id', 'tourist_id', 'starting_location', 'destination', 'transport_mode', 'distance_km', 'passengers', 'round_trip', 'carbon_emission', 'total_emission', 'eco_points', 'travelled_at']
-    const escape = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`
+    const escape = reportCsvCell
     const csv = [header.join(','), ...filteredTrips.map((trip) => header.map((key) => escape(trip[key])).join(','))].join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
@@ -121,7 +104,7 @@ export default function Reports({ profiles, trips, locations, metrics, loading, 
   function exportEnvironmentalCsv() {
     const header = ['id', 'location_id', 'location_name', 'crowd_count', 'waste_kg', 'recycled_kg', 'air_quality_index', 'water_quality_score', 'temperature_c', 'source', 'recorded_at']
     const locationNames = Object.fromEntries(filteredLocations.map((location) => [String(location.id), location.name]))
-    const escape = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`
+    const escape = reportCsvCell
     const rows = filteredMetrics.map((metric) => ({ ...metric, location_name: locationNames[String(metric.location_id)] || '' }))
     const csv = [header.join(','), ...rows.map((row) => header.map((key) => escape(row[key])).join(','))].join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
@@ -135,7 +118,9 @@ export default function Reports({ profiles, trips, locations, metrics, loading, 
 
   function downloadReport(type, format) {
     const generatedAt = new Date()
-    const scope = `${selectedLocation?.name || 'All accessible locations'}; ${dateRange === 'all' ? 'all dates' : `last ${dateRange} days`}`
+    const scope = type === 'environment'
+      ? reportScope(environmentFilters, locations.find((item) => String(item.id) === environmentFilters.location)?.name || (isSuperAdmin ? 'All accessible locations' : locations[0]?.name || 'Assigned location'))
+      : reportScope(travelFilters, isSuperAdmin ? 'All accessible trips' : locations[0]?.name || 'Assigned location')
     if (format === 'csv') {
       if (type === 'environment') exportEnvironmentalCsv()
       else exportCsv()
@@ -165,27 +150,15 @@ export default function Reports({ profiles, trips, locations, metrics, loading, 
         onDownload={downloadReport}
       />
 
-      <section className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-        {isSuperAdmin ? (
-          <div className="grid gap-3 md:grid-cols-[1fr_220px_170px_auto]">
-            <label className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search destination, state or transport" className="w-full rounded-xl border border-slate-200 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-blue-500" /></label>
-            <select value={locationFilter} onChange={(event) => setLocationFilter(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-600 outline-none focus:border-blue-500"><option value="all">All ecological locations</option>{locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select>
-            <select aria-label="Report date range" value={dateRange} onChange={(event) => setDateRange(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-600 outline-none focus:border-blue-500"><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="all">All time</option></select>
-            {(query || locationFilter !== 'all' || dateRange !== '30') && <button type="button" onClick={() => { setQuery(''); setLocationFilter('all'); setDateRange('30') }} className="rounded-xl px-3 py-2.5 text-sm font-semibold text-blue-600 hover:bg-blue-50">Reset</button>}
-          </div>
-        ) : (
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-slate-700">Report period</p>
-              <p className="mt-0.5 text-xs text-slate-400">Filter data for your assigned ecological location</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <select aria-label="Report date range" value={dateRange} onChange={(event) => setDateRange(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-600 outline-none focus:border-blue-500"><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="all">All time</option></select>
-              {dateRange !== '30' && <button type="button" onClick={() => setDateRange('30')} className="rounded-xl px-3 py-2.5 text-sm font-semibold text-blue-600 hover:bg-blue-50">Reset</button>}
-            </div>
-          </div>
-        )}
-        <div className="mt-2 flex flex-wrap justify-end gap-3 text-xs text-slate-400"><span>{filteredTrips.length} trips</span><span>{filteredMetrics.length} environmental readings</span><span>{filteredLocations.length} locations</span></div>
+      <section className="grid gap-4">
+        <ReportFilters title="Environmental Filters" filters={environmentFilters} onChange={setEnvironmentFilters} defaults={environmentalDefaults} placeholder="Search location or state">
+          {isSuperAdmin && <label className="grid min-w-0 gap-1 text-xs text-slate-500">Ecological location<select className={filterControl} value={environmentFilters.location} onChange={(event) => setEnvironmentFilters({ ...environmentFilters, location: event.target.value })}><option value="all">All Ecological Locations</option>{locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select></label>}
+          <p className="text-xs text-slate-500 sm:col-span-full" aria-live="polite">{filteredMetrics.length} environmental readings / {filteredLocations.length} ecological locations</p>
+        </ReportFilters>
+        <ReportFilters title="Travel Filters" filters={travelFilters} onChange={setTravelFilters} defaults={travelDefaults} placeholder="Search starting point or destination">
+          <label className="grid min-w-0 gap-1 text-xs text-slate-500">Transport mode<select className={filterControl} value={travelFilters.transport} onChange={(event) => setTravelFilters({ ...travelFilters, transport: event.target.value })}><option value="all">All Transport</option>{transportModes.map((mode) => <option key={mode} value={mode}>{transportLabels[mode] || mode}</option>)}</select></label>
+          <p className="text-xs text-slate-500 sm:col-span-full" aria-live="polite">{filteredTrips.length} trips</p>
+        </ReportFilters>
       </section>
 
       <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -201,8 +174,8 @@ export default function Reports({ profiles, trips, locations, metrics, loading, 
         {[
           ['Current Readings', environmental.readingCount, Recycle, '#22c55e'],
           ['Latest Waste', `${environmental.totalWaste.toFixed(1)} kg`, Leaf, '#f97316'],
-          ['Average AQI', environmental.averageAqi.toFixed(0), CloudSun, '#8b5cf6'],
-          ['Water Quality', `${environmental.averageWater.toFixed(0)} / 100`, Waves, '#0ea5e9'],
+          ['Average AQI', formatReading(environmental.averageAqi), CloudSun, '#8b5cf6'],
+          ['Water Quality', formatReading(environmental.averageWater, 0, ' / 100'), Waves, '#0ea5e9'],
         ].map(([label, value, Icon, color]) => <article key={label} className={card}><Icon size={18} style={{ color }} /><p className="mt-3 text-xs text-slate-500">{label}</p><p className="mt-1 text-2xl font-bold" style={{ color }}>{loading ? '-' : value}</p></article>)}
       </section>
 
@@ -370,4 +343,18 @@ function DestinationCarbonRanking({ destinations, loading }) {
       )}
     </div>
   )
+}
+
+const filterControl = 'w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-600 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
+
+function ReportFilters({ title, filters, onChange, defaults, placeholder, children }) {
+  return <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+    <h3 className="mb-3 text-sm font-semibold text-slate-800">{title}</h3>
+    <div className="grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <label className="grid min-w-0 gap-1 text-xs text-slate-500">{title === 'Environmental Filters' ? 'Location or state' : 'Starting point or destination'}<input type="search" className={filterControl} value={filters.query} onChange={(event) => onChange({ ...filters, query: event.target.value })} placeholder={placeholder} /></label>
+      <label className="grid min-w-0 gap-1 text-xs text-slate-500">{title.replace(' Filters', '')} date range<select className={filterControl} value={filters.dateRange} onChange={(event) => onChange({ ...filters, dateRange: event.target.value })}><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="all">All time</option></select></label>
+      <button type="button" onClick={() => onChange(defaults)} className="rounded-xl px-3 py-2.5 text-sm font-semibold text-blue-600 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-blue-500">Reset {title}</button>
+      {children}
+    </div>
+  </div>
 }

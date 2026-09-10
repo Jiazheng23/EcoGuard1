@@ -7,7 +7,7 @@ export async function listCrowdAlertHistory(locationIds) {
   const pageSize = 500
   for (let offset = 0; ; offset += pageSize) {
     const { data, error } = await supabase.from('early_warning_alerts')
-      .select('*, location_metrics(crowd_count)')
+      .select('*')
       .eq('category', 'crowd').in('location_id', locationIds)
       .order('created_at', { ascending: false }).order('id', { ascending: false })
       .range(offset, offset + pageSize - 1)

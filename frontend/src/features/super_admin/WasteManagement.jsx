@@ -19,6 +19,8 @@ import LoadingScreen from '../../components/LoadingScreen'
 
 export default function WasteManagement({ locations, loading, error, onDataChange, onMetricCreated, isSuperAdmin, profile, section = 'schedules', onSectionChange, embedded = false }) {
   const [selectedId, setSelectedId] = useState('')
+  const [downloadTarget, setDownloadTarget] = useState(null)
+  const [downloadMessageTarget, setDownloadMessageTarget] = useState(null)
   const [schedules, setSchedules] = useState([])
   const [collections, setCollections] = useState([])
   const [exportAudits, setExportAudits] = useState([])
@@ -144,6 +146,8 @@ export default function WasteManagement({ locations, loading, error, onDataChang
     ),
     analytics: (
       <WasteAnalytics
+        downloadTarget={downloadTarget}
+        downloadMessageTarget={downloadMessageTarget}
         location={selected}
         collections={selectedCollections}
         filters={collectionFilters}
@@ -178,8 +182,10 @@ export default function WasteManagement({ locations, loading, error, onDataChang
           <button type="button" onClick={refreshAllData} disabled={loading || wasteLoading} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 shadow-sm disabled:opacity-50">
             <RefreshCw size={16} className={loading || wasteLoading ? 'animate-spin' : ''} /> Refresh
           </button>
+          {section === 'analytics' && <div ref={setDownloadTarget} />}
         </div>
       </header>
+      {section === 'analytics' && <div ref={setDownloadMessageTarget} className="space-y-3 empty:hidden" />}
 
       {!embedded && <div className="flex flex-wrap gap-2"><button type="button" onClick={() => { setFocusedAlertId(null); onSectionChange?.('alerts') }} className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-2 text-sm font-semibold text-orange-700">{focusedAlertId && section === 'alerts' ? 'Show all waste alerts' : 'Alert History'} ({selectedAlerts.filter((item) => !item.resolved_at).length} unresolved)</button>{section === 'alerts' && <><button type="button" onClick={() => onSectionChange?.('schedules')} className="rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-600">Collection schedules</button><button type="button" onClick={() => onSectionChange?.('history')} className="rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-600">Collection history</button></>}</div>}
       {error && <ModuleNotice message={error} />}

@@ -1,3 +1,4 @@
+import { averageReadings, formatReading } from './reportFilters.js'
 import { encodePdf, fillRect, text } from './wasteReport.js'
 import { numberValue, transportLabels } from './tripAnalytics.js'
 
@@ -15,14 +16,14 @@ export function buildAdminTripPdfBytes(trips = [], { generatedAt = new Date(), s
 
 export function buildEnvironmentalPdfBytes(metrics = [], locations = [], { generatedAt = new Date(), scope = 'Authorized administrator view' } = {}) {
   const names = Object.fromEntries(locations.map((location) => [String(location.id), location.name]))
-  const averageAqi = metrics.length ? metrics.reduce((sum, row) => sum + numberValue(row.air_quality_index), 0) / metrics.length : 0
-  const averageWater = metrics.length ? metrics.reduce((sum, row) => sum + numberValue(row.water_quality_score), 0) / metrics.length : 0
+  const averageAqi = averageReadings(metrics.map((row) => row.air_quality_index))
+  const averageWater = averageReadings(metrics.map((row) => row.water_quality_score))
   const totalWaste = metrics.reduce((sum, row) => sum + numberValue(row.waste_kg), 0)
   const pages = [summaryPage('EcoGuard Environmental Report', scope, generatedAt, [
     ['Current readings', metrics.length],
     ['Total estimated waste', `${totalWaste.toFixed(2)} kg`],
-    ['Average AQI', averageAqi.toFixed(1)],
-    ['Average water quality', `${averageWater.toFixed(1)} / 100`],
+    ['Average AQI', formatReading(averageAqi, 1)],
+    ['Average water quality', formatReading(averageWater, 1, ' / 100')],
   ])]
   for (let index = 0; index < metrics.length; index += 21) pages.push(environmentPage(metrics.slice(index, index + 21), names, pages.length + 1))
   return encodePdf(pages)
@@ -38,7 +39,8 @@ function summaryPage(title, scope, generatedAt, cards) {
   text(commands, title, 42, 806, 20, 'F2', [1, 1, 1])
   text(commands, 'Filtered administrative report', 42, 787, 9, 'F1', [0.85, 1, 0.93])
   text(commands, `Generated: ${formatDate(generatedAt)}`, 42, 738, 10)
-  text(commands, `Scope: ${truncate(scope, 82)}`, 42, 720, 9, 'F1', [0.35, 0.4, 0.48])
+  const scopeLines = (`Scope: ${scope}`).match(/.{1,90}(?:\s|$)|.{1,90}/g) || []
+  scopeLines.forEach((line, index) => text(commands, line.trim(), 42, 720 - index * 12, 9, 'F1', [0.35, 0.4, 0.48]))
   cards.forEach(([label, value], index) => {
     const x = 42 + (index % 2) * 255
     const y = 660 - Math.floor(index / 2) * 75
@@ -76,8 +78,8 @@ function environmentPage(rows, names, pageNumber) {
     text(commands, truncate(names[String(row.location_id)] || `Location ${row.location_id}`, 30), 105, y + 3, 7, 'F2')
     text(commands, String(numberValue(row.crowd_count)), 310, y + 3, 7)
     text(commands, numberValue(row.waste_kg).toFixed(1), 375, y + 3, 7)
-    text(commands, String(numberValue(row.air_quality_index)), 440, y + 3, 7)
-    text(commands, numberValue(row.water_quality_score).toFixed(1), 500, y + 3, 7)
+    text(commands, formatReading(row.air_quality_index), 440, y + 3, 7)
+    text(commands, formatReading(row.water_quality_score, 1), 500, y + 3, 7)
   })
   return commands.join('\n')
 }

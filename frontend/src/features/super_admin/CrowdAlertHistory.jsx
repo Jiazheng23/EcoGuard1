@@ -1,3 +1,4 @@
+import { crowdOccupancy } from '../../utils/reportFilters'
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, AlertTriangle, CheckCircle2, RefreshCw } from 'lucide-react'
 import { listCrowdAlertHistory } from '../../services/crowdHistoryService'
@@ -57,7 +58,7 @@ export default function CrowdAlertHistory({ locations, selectedLocationId, isSup
     {error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</p>}
     <div className="overflow-x-auto rounded-2xl border border-slate-100 bg-white shadow-sm" aria-busy={loading}>
       <table className="w-full min-w-[1050px] text-left text-sm">
-        <thead className="bg-slate-50 text-xs text-slate-500"><tr>{['ID', 'Location', 'Date & Time', 'Visitors', 'Triggered', 'Level', 'Status', 'Action Taken'].map((label) => <th key={label} className="px-4 py-4 font-semibold">{label}</th>)}</tr></thead>
+        <thead className="bg-slate-50 text-xs text-slate-500"><tr>{['ID', 'Location', 'Date & Time', 'Occupancy When Triggered', 'Triggered', 'Level', 'Status'].map((label) => <th key={label} className="px-4 py-4 font-semibold">{label}</th>)}</tr></thead>
         <tbody className="divide-y divide-slate-100">
           {!loading && !error && visible.map((row) => {
             const style = crowdLevels[row.severity]
@@ -67,14 +68,13 @@ export default function CrowdAlertHistory({ locations, selectedLocationId, isSup
               <td className="px-4 py-4 text-slate-400">#{row.id}</td>
               <td className="px-4 py-4"><b className="text-slate-800">{names[String(row.location_id)]?.name}</b><p className="mt-1 text-xs text-slate-400">{names[String(row.location_id)]?.state}</p></td>
               <td className="whitespace-nowrap px-4 py-4 text-slate-600">{new Date(row.created_at).toLocaleString('en-MY', { timeZone: 'Asia/Kuala_Lumpur', dateStyle: 'medium', timeStyle: 'short' })}</td>
-              <td className="px-4 py-4 font-semibold text-slate-700">{row.location_metrics?.crowd_count == null ? '—' : Number(row.location_metrics.crowd_count).toLocaleString()}</td>
+              <td className="px-4 py-4 font-semibold text-slate-700" title="Stored alert occupancy. Active alerts may be updated; the original trigger value is not guaranteed." aria-label={`Stored alert occupancy: ${crowdOccupancy(row)}. Active alerts may be updated; the original trigger value is not guaranteed.`}>{crowdOccupancy(row)}</td>
               <td className="px-4 py-4 text-slate-600">{style?.label || row.severity} Threshold<p className="mt-1 text-xs text-slate-400">{row.threshold_value}{row.unit}</p></td>
               <td className="px-4 py-4"><span className="rounded-full px-3 py-1 text-xs font-semibold" style={{ color: style?.color, background: style?.background }}>{style?.label || row.severity}</span></td>
               <td className="px-4 py-4"><span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${resolved ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}><Icon size={13} />{resolved ? 'Resolved' : 'Unresolved'}</span></td>
-              <td className="max-w-xs whitespace-pre-wrap px-4 py-4 text-slate-500">{row.action_taken || 'Not recorded'}</td>
             </tr>
           })}
-          {(loading || error || !visible.length) && <tr><td colSpan={8} className="p-12 text-center text-slate-400">{loading ? 'Loading crowd alert history…' : error ? 'History could not be loaded. Please retry.' : 'No crowd alerts match the selected filters.'}</td></tr>}
+          {(loading || error || !visible.length) && <tr><td colSpan={7} className="p-12 text-center text-slate-400">{loading ? 'Loading crowd alert history…' : error ? 'History could not be loaded. Please retry.' : 'No crowd alerts match the selected filters.'}</td></tr>}
         </tbody>
       </table>
     </div>

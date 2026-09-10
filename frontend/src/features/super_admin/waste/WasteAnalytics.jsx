@@ -26,7 +26,7 @@ import WasteReportExport from './WasteReportExport'
 const chartTick = { fontSize: 10, fill: '#94a3b8' }
 const typeColors = ['#f97316', '#22c55e', '#3b82f6', '#ef4444']
 
-export default function WasteAnalytics({ location, collections, filters, onFiltersChange, exportAudits, onExported, loading }) {
+export default function WasteAnalytics({ location, collections, filters, onFiltersChange, exportAudits, onExported, loading, downloadTarget, downloadMessageTarget }) {
   const filteredCollections = useMemo(() => filterWasteCollections(collections, filters), [collections, filters])
   const summary = useMemo(() => summarizeWasteCollections(filteredCollections), [filteredCollections])
   const trend = useMemo(() => getWasteTrendSeries(filteredCollections), [filteredCollections])
@@ -114,7 +114,7 @@ export default function WasteAnalytics({ location, collections, filters, onFilte
         </article>
       </section>
 
-      <WasteReportExport location={location} collections={filteredCollections} filters={filters} summary={summary} trend={trend} exportAudits={exportAudits} onExported={onExported} />
+      <WasteReportExport location={location} collections={filteredCollections} filters={filters} summary={summary} trend={trend} exportAudits={exportAudits} onExported={onExported} downloadTarget={downloadTarget} downloadMessageTarget={downloadMessageTarget} />
     </div>
   )
 }

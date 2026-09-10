@@ -1,3 +1,4 @@
+import { formatReading } from '../../utils/reportFilters'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Area,
@@ -404,9 +405,9 @@ export default function EnvironmentalAnalytics({
       <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {[
           ['Sensor Readings', filteredMetrics.length, RadioTower, '#3b82f6'],
-          ['Average AQI', summary.averageAqi.toFixed(0), CloudSun, '#8b5cf6'],
-          ['Water Quality', `${summary.averageWater.toFixed(0)} / 100`, Waves, '#0ea5e9'],
-          ['Temperature', `${summary.averageTemperature.toFixed(1)} °C`, Thermometer, '#f97316'],
+          ['Average AQI', formatReading(summary.averageAqi), CloudSun, '#8b5cf6'],
+          ['Water Quality', formatReading(summary.averageWater, 0, ' / 100'), Waves, '#0ea5e9'],
+          ['Temperature', formatReading(summary.averageTemperature, 1, ' \u00b0C'), Thermometer, '#f97316'],
         ].map(([label, value, Icon, color]) => (
           <article key={label} className={card}>
             <Icon size={18} style={{ color }} />
