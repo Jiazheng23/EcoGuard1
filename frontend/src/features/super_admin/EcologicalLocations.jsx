@@ -14,6 +14,7 @@ import { useToast } from '../../components/toastContext'
 
 const locationTypes = ['Cultural Site', 'World Heritage Site', 'National Park', 'Tourist attractions', 'Geopark', 'Marine Park', 'Highland Reserve']
 const localImagePreviewUrls = new WeakMap()
+const localImageFingerprintPromises = new WeakMap()
 const timeOptions = Array.from({ length: 48 }, (_, index) => {
   const hours = String(Math.floor(index / 2)).padStart(2, '0')
   const minutes = index % 2 ? '30' : '00'
@@ -323,8 +324,15 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
                 autoSelectFirstWallpaper={editing === 'new'}
                 newWallpaperIndex={newWallpaperIndex}
                 onGalleryChange={setGalleryFiles}
-                onSelectSavedWallpaper={(url) => { setForm((current) => ({ ...current, wallpaper_url: url })); setNewWallpaperIndex(null) }}
-                onSelectNewWallpaper={setNewWallpaperIndex}
+                onSelectSavedWallpaper={(url) => {
+                  setForm((current) => ({ ...current, wallpaper_url: url }))
+                  setNewWallpaperIndex(null)
+                  setMessage('')
+                }}
+                onSelectNewWallpaper={(index) => {
+                  setNewWallpaperIndex(index)
+                  setMessage('')
+                }}
                 onClearWallpaper={() => {
                   if (form.wallpaper_url && !form.gallery_urls.includes(form.wallpaper_url)) {
                     setRemovedGalleryUrls((current) => [...current, form.wallpaper_url])
@@ -333,13 +341,28 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
                   setNewWallpaperIndex(null)
                 }}
                 onRemoveGallery={(url) => {
-                  if (url === form.wallpaper_url) {
-                    setMessage('Choose another wallpaper before removing the current wallpaper image.')
-                    toast.reminder('Choose another wallpaper before removing the current wallpaper image.')
+                  const removingActiveWallpaper = url === form.wallpaper_url && newWallpaperIndex == null
+                  const remainingSavedImages = form.gallery_urls.filter((item) => item !== url)
+                  if (removingActiveWallpaper && (!isSuperAdmin || (!remainingSavedImages.length && !galleryFiles.length))) {
+                    const reminder = !isSuperAdmin
+                      ? 'Only a super administrator can replace or remove the wallpaper.'
+                      : 'Add another image before removing the only wallpaper.'
+                    setMessage(reminder)
+                    toast.reminder(reminder)
                     return
                   }
+
+                  let replacementWallpaper = form.wallpaper_url === url ? '' : form.wallpaper_url
+                  if (removingActiveWallpaper && galleryFiles.length) setNewWallpaperIndex(0)
+                  else if (removingActiveWallpaper && remainingSavedImages.length) replacementWallpaper = remainingSavedImages[0]
+
                   setRemovedGalleryUrls((current) => [...current, url])
-                  setForm((current) => ({ ...current, gallery_urls: current.gallery_urls.filter((item) => item !== url) }))
+                  setForm((current) => ({
+                    ...current,
+                    wallpaper_url: replacementWallpaper,
+                    gallery_urls: remainingSavedImages,
+                  }))
+                  setMessage('')
                 }}
               />
             </div>
@@ -359,32 +382,64 @@ export default function EcologicalLocations({ user, isSuperAdmin, locations, loa
 function ImageFields({ form, galleryFiles, isSuperAdmin, autoSelectFirstWallpaper, newWallpaperIndex, onGalleryChange, onSelectSavedWallpaper, onSelectNewWallpaper, onRemoveGallery }) {
   const toast = useToast()
   const fileInputRef = useRef(null)
+  const savedImageFingerprintPromises = useRef(new Map())
   const [selectionError, setSelectionError] = useState('')
+  const [checkingImages, setCheckingImages] = useState(false)
 
-  function chooseGallery(event) {
+  async function chooseGallery(event) {
     const files = [...(event.target.files || [])]
+    event.target.value = ''
     const existingKeys = new Set(galleryFiles.map((file) => `${file.name}-${file.size}-${file.lastModified}`))
-    const newFiles = files.filter((file) => !existingKeys.has(`${file.name}-${file.size}-${file.lastModified}`))
+    const knownDuplicate = files.find((file) => existingKeys.has(`${file.name}-${file.size}-${file.lastModified}`))
+    if (knownDuplicate) {
+      const failure = `${knownDuplicate.name} is already included in this location's gallery.`
+      setSelectionError(failure)
+      toast.reminder(failure)
+      return
+    }
+    const newFiles = files
     if (newFiles.some((file) => !['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024)) {
       const failure = 'Each image must be a JPG, PNG, or WebP file no larger than 5 MB.'
       setSelectionError(failure)
       toast.reminder(failure)
-      event.target.value = ''
       return
     }
     if (form.gallery_urls.length + galleryFiles.length + newFiles.length > MAX_GALLERY_IMAGES) {
       setSelectionError(`A location can have up to ${MAX_GALLERY_IMAGES} gallery images.`)
       toast.reminder(`A location can have up to ${MAX_GALLERY_IMAGES} gallery images.`)
-      event.target.value = ''
       return
     }
-    const nextGalleryFiles = [...galleryFiles, ...newFiles]
-    onGalleryChange(nextGalleryFiles)
-    if (autoSelectFirstWallpaper && !form.wallpaper_url && newWallpaperIndex == null && nextGalleryFiles.length) {
-      onSelectNewWallpaper(0)
+
+    setCheckingImages(true)
+    try {
+      const existingFingerprints = new Set(await Promise.all(galleryFiles.map(imageFingerprint)))
+      const savedFingerprints = await Promise.all(form.gallery_urls.map((url) => storedImageFingerprint(url, savedImageFingerprintPromises.current).catch(() => null)))
+      savedFingerprints.filter(Boolean).forEach((fingerprint) => existingFingerprints.add(fingerprint))
+
+      for (const file of newFiles) {
+        const fingerprint = await imageFingerprint(file)
+        if (existingFingerprints.has(fingerprint)) {
+          const failure = `${file.name} is already included in this location's gallery.`
+          setSelectionError(failure)
+          toast.reminder(failure)
+          return
+        }
+        existingFingerprints.add(fingerprint)
+      }
+
+      const nextGalleryFiles = [...galleryFiles, ...newFiles]
+      onGalleryChange(nextGalleryFiles)
+      if (autoSelectFirstWallpaper && !form.wallpaper_url && newWallpaperIndex == null && nextGalleryFiles.length) {
+        onSelectNewWallpaper(0)
+      }
+      setSelectionError('')
+    } catch {
+      const failure = 'Unable to check the selected images. Please try adding them again.'
+      setSelectionError(failure)
+      toast.error(failure)
+    } finally {
+      setCheckingImages(false)
     }
-    setSelectionError('')
-    event.target.value = ''
   }
 
   return <fieldset className="space-y-4 sm:col-span-2">
@@ -396,19 +451,34 @@ function ImageFields({ form, galleryFiles, isSuperAdmin, autoSelectFirstWallpape
     </div>} */}
     <div>
       <div className="mb-2 flex items-center justify-between gap-3"><p className="text-xs font-semibold text-slate-600">Location thumbnails</p>{isSuperAdmin && <p className="text-xs font-semibold text-blue-600">Click an image to set it as the wallpaper</p>}</div>
-      <input ref={fileInputRef} type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={chooseGallery} className="hidden" />
+      <input ref={fileInputRef} type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={(event) => { void chooseGallery(event) }} disabled={checkingImages} className="hidden" />
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {form.gallery_urls.map((url, index) => <ImagePreview key={url} url={url} label={`Image ${index + 1}`} isWallpaper={url === form.wallpaper_url} canSelectWallpaper={isSuperAdmin} onSelectWallpaper={() => onSelectSavedWallpaper(url)} onRemove={() => onRemoveGallery(url)} />)}
-        {galleryFiles.map((file, index) => <FileImagePreview key={`${file.name}-${file.lastModified}`} file={file} label={`New ${index + 1}`} isWallpaper={newWallpaperIndex === index} canSelectWallpaper={isSuperAdmin} onSelectWallpaper={() => onSelectNewWallpaper(index)} onRemove={() => {
+        {form.gallery_urls.map((url, index) => <ImagePreview key={url} url={url} label={`Image ${index + 1}`} isWallpaper={newWallpaperIndex == null && url === form.wallpaper_url} canSelectWallpaper={isSuperAdmin} onSelectWallpaper={() => { setSelectionError(''); onSelectSavedWallpaper(url) }} onRemove={() => onRemoveGallery(url)} />)}
+        {galleryFiles.map((file, index) => <FileImagePreview key={`${file.name}-${file.lastModified}`} file={file} label={`New ${index + 1}`} isWallpaper={newWallpaperIndex === index} canSelectWallpaper={isSuperAdmin} onSelectWallpaper={() => { setSelectionError(''); onSelectNewWallpaper(index) }} onRemove={() => {
           const remainingFiles = galleryFiles.filter((_, itemIndex) => itemIndex !== index)
+          if (newWallpaperIndex === index) {
+            const savedReplacement = form.gallery_urls.includes(form.wallpaper_url)
+              ? form.wallpaper_url
+              : form.gallery_urls[0]
+            if (!savedReplacement && !remainingFiles.length) {
+              const failure = 'Add another image before removing the only wallpaper.'
+              setSelectionError(failure)
+              toast.reminder(failure)
+              return
+            }
+            onGalleryChange(remainingFiles)
+            if (savedReplacement) onSelectSavedWallpaper(savedReplacement)
+            else onSelectNewWallpaper(0)
+            setSelectionError('')
+            return
+          }
           onGalleryChange(remainingFiles)
-          if (newWallpaperIndex === index) onSelectNewWallpaper(autoSelectFirstWallpaper && remainingFiles.length ? 0 : null)
-          else if (newWallpaperIndex > index) onSelectNewWallpaper(newWallpaperIndex - 1)
+          if (newWallpaperIndex > index) onSelectNewWallpaper(newWallpaperIndex - 1)
         }} />)}
-        {form.gallery_urls.length + galleryFiles.length < MAX_GALLERY_IMAGES && <button type="button" onClick={() => fileInputRef.current?.click()} className="flex min-h-28 flex-col items-center justify-center rounded-xl border-2 border-dashed border-blue-200 bg-blue-50/50 text-blue-600 transition hover:border-blue-400 hover:bg-blue-50">
+        {form.gallery_urls.length + galleryFiles.length < MAX_GALLERY_IMAGES && <button type="button" onClick={() => fileInputRef.current?.click()} disabled={checkingImages} className="flex min-h-28 flex-col items-center justify-center rounded-xl border-2 border-dashed border-blue-200 bg-blue-50/50 text-blue-600 transition hover:border-blue-400 hover:bg-blue-50 disabled:cursor-wait disabled:opacity-60">
           <span className="grid size-10 place-items-center rounded-full bg-blue-100"><Plus size={22} /></span>
-          <span className="mt-2 text-sm font-semibold">Add images</span>
-          <span className="mt-0.5 text-[11px] text-blue-400">Select one or many</span>
+          <span className="mt-2 text-sm font-semibold">{checkingImages ? 'Checking images...' : 'Add images'}</span>
+          <span className="mt-0.5 text-[11px] text-blue-400">{checkingImages ? 'Looking for duplicates' : 'Select one or many'}</span>
         </button>}
       </div>
     </div>
@@ -433,6 +503,42 @@ function FileImagePreview({ file, ...props }) {
     localImagePreviewUrls.set(file, url)
   }
   return <ImagePreview {...props} url={url} />
+}
+
+function imageFingerprint(blob) {
+  let fingerprintPromise = localImageFingerprintPromises.get(blob)
+  if (!fingerprintPromise) {
+    fingerprintPromise = blob.arrayBuffer().then(fingerprintBuffer)
+    localImageFingerprintPromises.set(blob, fingerprintPromise)
+  }
+  return fingerprintPromise
+}
+
+function storedImageFingerprint(url, cache) {
+  let fingerprintPromise = cache.get(url)
+  if (!fingerprintPromise) {
+    fingerprintPromise = fetch(url, { cache: 'force-cache' }).then((response) => {
+      if (!response.ok) throw new Error('Unable to read a saved gallery image.')
+      return response.blob()
+    }).then(imageFingerprint)
+    cache.set(url, fingerprintPromise)
+  }
+  return fingerprintPromise
+}
+
+async function fingerprintBuffer(buffer) {
+  if (globalThis.crypto?.subtle) {
+    const digest = await globalThis.crypto.subtle.digest('SHA-256', buffer)
+    return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
+  }
+
+  const bytes = new Uint8Array(buffer)
+  let hash = 2166136261
+  for (const byte of bytes) {
+    hash ^= byte
+    hash = Math.imul(hash, 16777619)
+  }
+  return `${bytes.length}-${(hash >>> 0).toString(16)}`
 }
 
 function Input({ label, required = true, error, ...props }) {
