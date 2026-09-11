@@ -151,11 +151,11 @@ export default function Reports({ profiles, trips, locations, metrics, loading, 
       />
 
       <section className="grid gap-4">
-        <ReportFilters title="Environmental Filters" filters={environmentFilters} onChange={setEnvironmentFilters} defaults={environmentalDefaults} placeholder="Search location or state">
+        <ReportFilters title="Environmental Filters" filters={environmentFilters} onChange={setEnvironmentFilters} defaults={environmentalDefaults} placeholder="e.g. Cameron Highlands or Pahang">
           {isSuperAdmin && <label className="grid min-w-0 gap-1 text-xs text-slate-500">Ecological location<select className={filterControl} value={environmentFilters.location} onChange={(event) => setEnvironmentFilters({ ...environmentFilters, location: event.target.value })}><option value="all">All Ecological Locations</option>{locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select></label>}
           <p className="text-xs text-slate-500 sm:col-span-full" aria-live="polite">{filteredMetrics.length} environmental readings / {filteredLocations.length} ecological locations</p>
         </ReportFilters>
-        <ReportFilters title="Travel Filters" filters={travelFilters} onChange={setTravelFilters} defaults={travelDefaults} placeholder="Search starting point or destination">
+        <ReportFilters title="Travel Filters" filters={travelFilters} onChange={setTravelFilters} defaults={travelDefaults} placeholder="e.g. Kuala Lumpur or Ipoh">
           <label className="grid min-w-0 gap-1 text-xs text-slate-500">Transport mode<select className={filterControl} value={travelFilters.transport} onChange={(event) => setTravelFilters({ ...travelFilters, transport: event.target.value })}><option value="all">All Transport</option>{transportModes.map((mode) => <option key={mode} value={mode}>{transportLabels[mode] || mode}</option>)}</select></label>
           <p className="text-xs text-slate-500 sm:col-span-full" aria-live="polite">{filteredTrips.length} trips</p>
         </ReportFilters>
