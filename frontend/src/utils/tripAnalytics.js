@@ -150,6 +150,40 @@ export function getTransportSeries(trips) {
     .sort((left, right) => right.trips - left.trips)
 }
 
+// Confirmed historical spelling correction. Keep this separate from fuzzy matching.
+const destinationCorrections = new Map([
+  ['watermelon highlands', 'Cameron Highlands'],
+  ['batu caves', 'Batu Cave'],
+])
+
+export function resolveTripDestinations(trips, locations) {
+  return trips.map((trip) => {
+    const savedName = normalizeLocationText(trip.destination)
+    const renamedBatuCave = savedName === 'black widow hole'
+      ? locations.filter((location) => ['batu cave', 'batu caves'].includes(normalizeLocationText(location.name)))
+      : []
+    const destination = renamedBatuCave.length === 1
+      ? renamedBatuCave[0].name
+      : destinationCorrections.get(savedName) || trip.destination
+    const name = normalizeLocationText(destination)
+    const nameMatches = name ? locations.filter((location) =>
+      [location.name, location.address, location.full_address]
+        .some((value) => value && normalizeLocationText(value) === name),
+    ) : []
+    // Only match the same saved point, not other destinations in the surrounding area.
+    const matches = nameMatches.length ? nameMatches : locations.filter((location) => {
+      const values = [trip.destination_lat, trip.destination_lng, location.latitude, location.longitude]
+      if (values.some((value) => value == null || String(value).trim() === '' || !Number.isFinite(Number(value)))) return false
+      return Math.abs(Number(trip.destination_lat) - Number(location.latitude)) <= 0.00001
+        && Math.abs(Number(trip.destination_lng) - Number(location.longitude)) <= 0.00001
+    })
+    const currentName = matches.length === 1 ? matches[0].name : destination
+    return currentName && currentName !== trip.destination
+      ? { ...trip, destination: currentName }
+      : trip
+  })
+}
+
 export function getDestinationSeries(trips) {
   const destinations = new Map()
 
