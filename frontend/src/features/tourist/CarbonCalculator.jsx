@@ -437,6 +437,9 @@ export default function CarbonCalculator({
 
             {isPublicTransport && (
               <div className="mt-4">
+                <p className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800">
+                  This public-transport itinerary is a recommendation only. Please confirm live schedules, fares, and service availability before travelling.
+                </p>
                 {routeUpdating ? (
                   <p className="rounded-xl bg-amber-50 p-3 text-xs font-medium text-amber-700">Finding the public-transport journey...</p>
                 ) : routeError ? (
@@ -444,8 +447,8 @@ export default function CarbonCalculator({
                 ) : routeLegs.length > 0 ? (
                   <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
                     <div className="border-b border-slate-200 bg-white px-3 py-2">
-                      <p className="text-xs font-bold text-slate-700">Journey directions</p>
-                      <p className="mt-0.5 text-[11px] text-slate-400">Follow these legs in order</p>
+                      <p className="text-xs font-bold text-slate-700">Suggested journey directions</p>
+                      <p className="mt-0.5 text-[11px] text-slate-400">Follow these recommended legs in order</p>
                     </div>
                     <ol className="divide-y divide-slate-200">
                       {routeLegs.map((leg, index) => {
@@ -543,6 +546,21 @@ export default function CarbonCalculator({
                 value={`${environmentalImpact.factorG} g CO₂e/passenger-km`}
                 color="#64748b"
               />
+            </div>
+
+            <div className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-[11px] leading-5 text-slate-500">
+              <p>
+                <b>Estimated result.</b> Route data is provided by OSRM or Transitous. Road-transport emission factors are based on{' '}
+                <a className="font-semibold text-green-700 underline" href="https://doi.org/10.1088/1755-1315/373/1/012024" target="_blank" rel="noreferrer">
+                  Muhammad Saifuddin et al. (2019)
+                </a>
+                , while the LRT/MRT factor is based on the{' '}
+                <a className="font-semibold text-green-700 underline" href="https://www.miti.gov.my/miti/resources/IESG/Booklet_Stater_Kit.pdf" target="_blank" rel="noreferrer">
+                  MITI i-ESGStart guide
+                </a>
+                .
+              </p>
+              <p>Actual emissions may vary with traffic, vehicle efficiency, and passenger occupancy.</p>
             </div>
 
             <div className="mt-5 flex gap-3 rounded-xl border border-green-200 bg-green-50 p-3.5 text-sm text-green-700">
