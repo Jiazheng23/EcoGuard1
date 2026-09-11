@@ -7,6 +7,7 @@ import {
   validateWasteCollection,
   validateWasteThresholds,
   wasteLevelFor,
+  WASTE_COLLECTION_STATUSES,
 } from './wasteValidation.js'
 
 test('rejects future collection timestamps and invalid missed quantities', () => {
@@ -38,6 +39,13 @@ const validCollection = {
   location_id: 1, collected_at: '2000-01-01T12:00:00Z', total_kg: 12,
   recycled_kg: 4, waste_type: 'mixed', status: 'completed', source: 'manual', notes: '',
 }
+
+test('new collection and filter status choices exclude partial', () => {
+  assert.deepEqual(WASTE_COLLECTION_STATUSES, ['completed', 'missed'])
+  assert.ok(validateWasteCollection({ ...validCollection, status: 'partial' }).status)
+  assert.deepEqual(validateWasteCollection(validCollection), {})
+  assert.deepEqual(validateWasteCollection({ ...validCollection, status: 'missed', total_kg: 0, recycled_kg: 0, notes: 'Vehicle unavailable' }), {})
+})
 
 test('missed attempts require a meaningful reason and zero quantities', () => {
   const missed = { ...validCollection, status: 'missed', total_kg: 0, recycled_kg: 0, notes: '  ' }

@@ -1,6 +1,7 @@
 export const WASTE_TYPES = ['mixed', 'recyclable', 'organic', 'hazardous']
 export const WASTE_SCHEDULE_STATUSES = ['scheduled', 'completed', 'cancelled', 'missed']
-export const WASTE_COLLECTION_STATUSES = ['completed', 'partial', 'missed']
+// Choices for new records and UI filters. Legacy partial records remain readable.
+export const WASTE_COLLECTION_STATUSES = ['completed', 'missed']
 export const WASTE_COLLECTION_SOURCES = ['manual', 'simulated_sensor']
 
 export class WasteValidationError extends Error {
@@ -89,8 +90,8 @@ export function validateWasteCollection(values, { requireLocation = true, requir
   }
   if (status === 'missed' && !values.notes?.trim()) errors.notes = 'Enter a reason for the missed collection.'
   if (values.notes?.length > 1000) errors.notes = 'Notes cannot exceed 1,000 characters.'
-  if (['completed', 'partial'].includes(status) && Number.isFinite(totalKg) && totalKg <= 0) {
-    errors.total_kg = 'A completed or partial collection must contain more than zero kilograms.'
+  if (status === 'completed' && Number.isFinite(totalKg) && totalKg <= 0) {
+    errors.total_kg = 'A completed collection must contain more than zero kilograms.'
   }
 
   return errors
