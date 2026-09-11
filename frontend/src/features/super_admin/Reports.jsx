@@ -1,5 +1,6 @@
 import { averageReadings, sensorValue, formatReading, environmentalDefaults, travelDefaults, filterEnvironmentalReports, filterTravelReports, reportScope, reportCsvCell } from '../../utils/reportFilters'
 import { useMemo, useState } from 'react'
+import { filterWestMalaysiaTrips, isWestMalaysiaReportLocation } from '../../utils/reportFilters'
 import {
   Area,
   AreaChart,
@@ -33,7 +34,9 @@ function formatDestinationLabel(value, maxLength = 22) {
   return label.length > maxLength ? `${label.slice(0, maxLength - 1)}…` : label
 }
 
-export default function Reports({ profiles, trips, locations, metrics, loading, error, isSuperAdmin = false, embedded = false }) {
+export default function Reports({ profiles, trips: allTrips, locations: allLocations, metrics, loading, error, isSuperAdmin = false, embedded = false }) {
+  const locations = useMemo(() => allLocations.filter(isWestMalaysiaReportLocation), [allLocations])
+  const trips = useMemo(() => filterWestMalaysiaTrips(allTrips, allLocations), [allTrips, allLocations])
   const [environmentFilters, setEnvironmentFilters] = useState(environmentalDefaults)
   const [travelFilters, setTravelFilters] = useState(travelDefaults)
   const [filterReferenceTime] = useState(() => Date.now())
@@ -62,7 +65,8 @@ export default function Reports({ profiles, trips, locations, metrics, loading, 
         const hasCoordinates = destination.lat !== null && destination.lng !== null
           && Number.isFinite(lat) && Number.isFinite(lng)
         return !hasCoordinates || isWestMalaysiaCoordinate(lat, lng)
-      }),
+      })
+      .sort((left, right) => right.emission - left.emission || left.name.localeCompare(right.name)),
     transport: getTransportSeries(filteredTrips),
   }), [eastMalaysiaLocationNames, filteredTrips, profiles])
   const emittingTransport = analytics.transport.filter((item) => !['walking', 'bicycle'].includes(item.mode) && item.emission > 0)

@@ -20,7 +20,7 @@ import WasteManagement from './WasteManagement'
 import AdminApplications from './AdminApplications'
 import SensorManagement from './SensorManagement'
 import LocationDetailPage from '../location_admin/LocationDetailPage'
-import { tripMatchesEcologicalLocation } from '../../utils/tripAnalytics'
+import { resolveTripDestinations, tripMatchesEcologicalLocation } from '../../utils/tripAnalytics'
 import IncidentManagement from './IncidentManagement'
 import AdvisoryManagement from './AdvisoryManagement'
 import LoadingScreen from '../../components/LoadingScreen'
@@ -70,10 +70,11 @@ export default function AdminWorkspace({ requiredRole }) {
       ])
       const assignedLocationId = String(scopeProfile?.location_id || '')
       const assignedLocation = locationRows.find((item) => String(item.id) === assignedLocationId)
+      const currentTrips = resolveTripDestinations(tripRows, locationRows)
       const scopedTrips = isSuper
-        ? tripRows
+        ? currentTrips
         : assignedLocation
-          ? tripRows.filter((trip) => tripMatchesEcologicalLocation(trip, assignedLocation))
+          ? currentTrips.filter((trip) => tripMatchesEcologicalLocation(trip, assignedLocation))
           : []
       setProfiles(profileRows)
       setTrips(scopedTrips)

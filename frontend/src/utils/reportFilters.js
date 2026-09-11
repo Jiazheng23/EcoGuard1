@@ -1,3 +1,26 @@
+import { isWestMalaysiaCoordinate } from './westMalaysia.js'
+
+const eastMalaysiaText = /\b(sabah|sarawak|labuan)\b/i
+
+export function isWestMalaysiaReportLocation(location) {
+  if (eastMalaysiaText.test([location.state, location.name, location.address, location.full_address].filter(Boolean).join(' '))) return false
+  const lat = sensorValue(location.latitude)
+  const lng = sensorValue(location.longitude)
+  return lat === null || lng === null || isWestMalaysiaCoordinate(lat, lng)
+}
+
+export function filterWestMalaysiaTrips(trips, locations) {
+  const excludedNames = new Set(locations.filter((location) => !isWestMalaysiaReportLocation(location))
+    .flatMap((location) => [location.name, location.address, location.full_address])
+    .filter(Boolean).map((name) => name.trim().toLowerCase()))
+  return trips.filter((trip) => {
+    if (eastMalaysiaText.test(trip.destination || '') || excludedNames.has(String(trip.destination || '').trim().toLowerCase())) return false
+    const lat = sensorValue(trip.destination_lat)
+    const lng = sensorValue(trip.destination_lng)
+    return lat === null || lng === null || isWestMalaysiaCoordinate(lat, lng)
+  })
+}
+
 export const environmentalDefaults = Object.freeze({ query: '', location: 'all', dateRange: '30' })
 export const travelDefaults = Object.freeze({ query: '', transport: 'all', dateRange: '30' })
 

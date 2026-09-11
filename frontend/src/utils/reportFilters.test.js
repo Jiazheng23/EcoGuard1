@@ -1,6 +1,28 @@
 ﻿import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { filterWestMalaysiaTrips, isWestMalaysiaReportLocation } from './reportFilters.js'
+
+test('excludes East Malaysia locations and trips before report totals are calculated', () => {
+  const locations = [
+    { name: 'Batu Cave', state: 'Selangor', latitude: 3.24, longitude: 101.68 },
+    { name: 'Kinabalu Park', state: 'Sabah' },
+    { name: 'Gunung Mulu National Park', state: 'Sarawak' },
+    { name: 'Island', latitude: 5.3, longitude: 115.2 },
+  ]
+  assert.deepEqual(locations.filter(isWestMalaysiaReportLocation).map((location) => location.name), ['Batu Cave'])
+  const trips = [
+    { destination: 'Batu Cave', total_emission: 3 },
+    { destination: 'Kinabalu Park', total_emission: 10 },
+    { destination: 'Gunung Mulu National Park', total_emission: 20 },
+    { destination: 'Old island name', destination_lat: 5.3, destination_lng: 115.2, total_emission: 30 },
+    { destination: 'Somewhere, Sarawak', total_emission: 40 },
+    { destination: 'Labuan', total_emission: 50 },
+  ]
+  const result = filterWestMalaysiaTrips(trips, locations)
+  assert.deepEqual(result, [trips[0]])
+  assert.equal(getTripSummary(result).totalEmission, 3)
+})
 import { averageReadings, formatReading, crowdOccupancy, environmentalDefaults, travelDefaults, filterEnvironmentalReports, filterTravelReports, reportScope, reportCsvCell } from './reportFilters.js'
 import { getTripSummary, getTransportSeries } from './tripAnalytics.js'
 import { buildEnvironmentalPdfBytes, buildAdminTripPdfBytes } from './adminReport.js'
