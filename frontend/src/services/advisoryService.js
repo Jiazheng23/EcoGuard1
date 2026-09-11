@@ -1,6 +1,6 @@
 import { supabase } from './supabaseClient'
 
-export const USE_MOCK_ADVISORIES = true
+export const USE_MOCK_ADVISORIES = false
 const MOCK_ADVISORY_STORAGE_KEY = 'ecoguard:mock-tourist-advisories:v1'
 const relativeTime = (hours) => new Date(Date.now() + hours * 3600000).toISOString()
 let mockAdvisories = [
