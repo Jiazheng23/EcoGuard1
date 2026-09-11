@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Megaphone, Pencil, RefreshCw, Trash2 } from 'lucide-react'
 import { listManagedAdvisories, subscribeToAdvisories, withdrawAdvisory } from '../../services/advisoryService'
 import { listEarlyWarningNotifications } from '../../services/notificationService'
@@ -25,18 +25,38 @@ export default function AdvisoryManagement({ locations = [], user, isSuperAdmin,
   const [filter, setFilter] = useState('all')
   const [editor, setEditor] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [message, setMessage] = useState('')
+  const requestRef = useRef(0)
+  const userId = user?.id
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (showSuccess = false) => {
+    const request = ++requestRef.current
+    setRefreshing(true)
+    setMessage('')
     try {
-      const [rows, alerts] = await Promise.all([listManagedAdvisories(), user?.id ? listEarlyWarningNotifications(user.id, 100) : []])
-      setItems(rows)
-      setWarnings(alerts.filter((item) => !item.resolved_at))
-    } catch (error) { setMessage(error.message) }
-    finally { setLoading(false) }
-  }, [user])
+      const [advisories, alerts] = await Promise.allSettled([listManagedAdvisories(), userId ? listEarlyWarningNotifications(userId, 100) : Promise.resolve([])])
+      if (request !== requestRef.current) return
+      const errors = []
+      if (advisories.status === 'fulfilled') setItems(advisories.value)
+      else errors.push(advisories.reason?.message || 'Unable to refresh advisories.')
+      if (alerts.status === 'fulfilled') setWarnings(alerts.value.filter((item) => !item.resolved_at))
+      else { setWarnings([]); errors.push('Warning sources could not be refreshed. Please try again.') }
+      if (errors.length) setMessage(errors.join(' '))
+      else if (showSuccess === true) setMessage('Advisories refreshed successfully.')
+    } catch (error) {
+      if (request === requestRef.current) setMessage(error.message || 'Unable to refresh advisories.')
+    } finally {
+      if (request === requestRef.current) { setLoading(false); setRefreshing(false) }
+    }
+  }, [userId])
 
-  useEffect(() => { void Promise.resolve().then(refresh); return subscribeToAdvisories(refresh) }, [refresh])
+  useEffect(() => {
+    let active = true
+    void Promise.resolve().then(() => { if (active) return refresh() })
+    const unsubscribe = subscribeToAdvisories(() => { if (active) void refresh() })
+    return () => { active = false; requestRef.current += 1; unsubscribe() }
+  }, [refresh])
 
   const counts = useMemo(() => items.reduce((result, item) => {
     result.all += 1
@@ -61,14 +81,14 @@ export default function AdvisoryManagement({ locations = [], user, isSuperAdmin,
   if (loading) return <LoadingScreen tone="blue" label="Loading advisories..." />
 
   return <div className="mx-auto max-w-6xl">
-    <header className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-widest text-blue-600">Tourist communications</p><h1 className="mt-1 flex items-center gap-2 text-2xl font-bold text-slate-900"><Megaphone className="text-orange-500" />Tourist advisories</h1><p className="mt-1 text-sm text-slate-500">Update, withdraw, and review the complete advisory history.</p></div><div className="flex gap-2"><button type="button" disabled={!locations.length} onClick={createStandalone} className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40"><Megaphone size={15} className="mr-2 inline" />Create advisory</button><button type="button" onClick={refresh} className="rounded-xl border border-slate-200 bg-white p-2.5 text-slate-500" aria-label="Refresh advisories"><RefreshCw size={17} /></button></div></header>
+    <header className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-widest text-blue-600">Tourist communications</p><h1 className="mt-1 flex items-center gap-2 text-2xl font-bold text-slate-900"><Megaphone className="text-orange-500" />Tourist advisories</h1><p className="mt-1 text-sm text-slate-500">Update, withdraw, and review the complete advisory history.</p></div><div className="flex gap-2"><button type="button" disabled={!locations.length} onClick={createStandalone} className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40"><Megaphone size={15} className="mr-2 inline" />Create advisory</button><button type="button" onClick={() => refresh(true)} disabled={refreshing} className="rounded-xl border border-slate-200 bg-white p-2.5 text-slate-500 disabled:opacity-50" aria-label="Refresh advisories" aria-busy={refreshing}><RefreshCw size={17} className={refreshing ? 'animate-spin' : ''} /></button></div></header>
     {message && <p className="mt-4 rounded-xl bg-blue-50 p-3 text-sm text-blue-700">{message}</p>}
     <nav className="mt-5 flex gap-1 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm" aria-label="Advisory types">{FILTERS.map((option) => <button key={option.id} type="button" onClick={() => setFilter(option.id)} className={`whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-semibold transition ${filter === option.id ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}>{option.label}<span className={`ml-2 rounded-full px-2 py-0.5 text-xs ${filter === option.id ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>{counts[option.id]}</span></button>)}</nav>
-    <section className="mt-3 max-w-full overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">{visibleItems.length ? <><div className="max-w-full overflow-x-auto"><table className="w-full min-w-[800px] table-fixed text-left text-sm"><thead className="bg-slate-50 text-xs uppercase text-slate-400"><tr><th className="w-[39%] px-5 py-3">Advisory</th><th className="w-[21%] px-5 py-3">Location</th><th className="w-[16%] px-5 py-3">Schedule</th><th className="w-[12%] px-5 py-3">Status</th><th className="w-[12%] px-5 py-3 text-right">Actions</th></tr></thead><tbody className="divide-y divide-slate-100">{advisoryPages.pageItems.map((item) => {
+    {refreshing ? <LoadingScreen tone="blue" label="Refreshing advisories..." /> : <section className="mt-3 max-w-full overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">{visibleItems.length ? <><div className="max-w-full overflow-x-auto"><table className="w-full min-w-[800px] table-fixed text-left text-sm"><thead className="bg-slate-50 text-xs uppercase text-slate-400"><tr><th className="w-[39%] px-5 py-3">Advisory</th><th className="w-[21%] px-5 py-3">Location</th><th className="w-[16%] px-5 py-3">Schedule</th><th className="w-[12%] px-5 py-3">Status</th><th className="w-[12%] px-5 py-3 text-right">Actions</th></tr></thead><tbody className="divide-y divide-slate-100">{advisoryPages.pageItems.map((item) => {
         const status = statusInfo(item)
         const canManage = item.status === 'published' && status.label !== 'Expired'
         return <tr key={item.id}><td className="min-w-0 px-5 py-4 align-top"><b className="block truncate text-slate-800" title={item.title}>{item.title}</b><div className="mt-1"><span className="inline-block max-w-full truncate rounded-full bg-violet-50 px-2 py-1 text-[11px] font-bold text-violet-700" title={sourceLabel(item)}>{sourceLabel(item)}</span></div><p className="mt-2 truncate text-xs text-slate-500" title={item.safety_instructions}>{item.safety_instructions}</p></td><td className="min-w-0 px-5 py-4 align-top text-slate-600"><p className="truncate" title={item.ecological_locations?.name}>{item.ecological_locations?.name}</p></td><td className="px-5 py-4 align-top text-xs text-slate-500">{new Date(item.starts_at).toLocaleString()}<br />to {new Date(item.expires_at).toLocaleString()}</td><td className="px-5 py-4 align-top"><span className={`inline-block whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold ${status.style}`}>{status.label}</span></td><td className="px-5 py-4 align-top"><div className="flex flex-nowrap justify-end gap-2">{canManage && <><button type="button" onClick={() => setEditor({ advisory: item })} className="shrink-0 rounded-lg bg-blue-50 p-2 text-blue-700" aria-label="Edit advisory"><Pencil size={16} /></button><button type="button" onClick={() => withdraw(item.id)} className="shrink-0 rounded-lg bg-red-50 p-2 text-red-700" aria-label="Withdraw advisory"><Trash2 size={16} /></button></>}</div></td></tr>
-      })}</tbody></table></div><TablePagination {...advisoryPages} onPageChange={advisoryPages.setPage} label="advisories" /></> : <p className="p-10 text-center text-sm text-slate-400">No {filter === 'all' ? '' : `${filter} `}advisories found.</p>}</section>
+      })}</tbody></table></div><TablePagination {...advisoryPages} onPageChange={advisoryPages.setPage} label="advisories" /></> : <p className="p-10 text-center text-sm text-slate-400">No {filter === 'all' ? '' : `${filter} `}advisories found.</p>}</section>}
     {editor?.source && <AdvisoryEditor source={editor.source} {...editorProps} />}
     {editor?.advisory && <AdvisoryEditor advisory={editor.advisory} {...editorProps} />}
   </div>

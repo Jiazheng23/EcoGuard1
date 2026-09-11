@@ -181,12 +181,14 @@ export default function AdminDashboard({
       </section>
 
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <ChartCard className="lg:col-span-2">
+        <ChartCard className="flex min-w-0 flex-col lg:col-span-2">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-bold text-slate-900">Trip & Carbon Trend</h2>
             <span className="text-xs text-slate-400">Last 7 months</span>
           </div>
-          <ResponsiveContainer width="100%" height={220}>
+          <div className="relative min-h-80 flex-1">
+            <div className="absolute inset-0">
+          <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={data.monthly} margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
               <defs><linearGradient id="admin-emission" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#3b82f6" stopOpacity={0.2} /><stop offset="100%" stopColor="#3b82f6" stopOpacity={0} /></linearGradient></defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
@@ -196,6 +198,8 @@ export default function AdminDashboard({
               <Area isAnimationActive={false} type="monotone" dataKey="emission" name="Carbon (kg)" stroke="#3b82f6" strokeWidth={2.5} fill="url(#admin-emission)" />
             </AreaChart>
           </ResponsiveContainer>
+            </div>
+          </div>
         </ChartCard>
 
         <ChartCard>

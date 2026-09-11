@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Recycle, Users } from 'lucide-react'
 import { listWasteThresholds } from '../../services/wasteService'
+import { listCrowdThresholds } from '../../services/locationService'
+import LoadingScreen from '../../components/LoadingScreen'
 import CrowdThresholds from './CrowdThresholds'
 import WasteThresholds from './WasteThresholds'
 
@@ -11,38 +13,41 @@ const tabs = [
 
 export default function ThresholdsHub({ locations = [], metrics = [], ...sharedProps }) {
   const [activeTab, setActiveTab] = useState('crowd')
-  const [wasteThresholds, setWasteThresholds] = useState([])
-  const [wasteLoading, setWasteLoading] = useState(false)
-  const [wasteError, setWasteError] = useState('')
+  const [thresholds, setThresholds] = useState([])
+  const [thresholdLoading, setThresholdLoading] = useState(true)
+  const [thresholdError, setThresholdError] = useState('')
+  const requestRef = useRef(0)
 
-  const loadWasteThresholds = useCallback(async () => {
-    setWasteLoading(true)
-    setWasteError('')
+  const loadThresholds = useCallback(async () => {
+    const request = ++requestRef.current
+    setThresholdLoading(true)
+    setThresholdError('')
     try {
-      setWasteThresholds(await listWasteThresholds())
+      const rows = await (activeTab === 'crowd' ? listCrowdThresholds() : listWasteThresholds())
+      if (request === requestRef.current) setThresholds(rows)
     } catch (error) {
-      setWasteError(error.message || 'Unable to load waste thresholds.')
+      if (request === requestRef.current) setThresholdError(error.message || 'Unable to load thresholds.')
     } finally {
-      setWasteLoading(false)
+      if (request === requestRef.current) setThresholdLoading(false)
     }
-  }, [])
+  }, [activeTab])
 
   useEffect(() => {
     let active = true
-    listWasteThresholds()
-      .then((rows) => {
-        if (active) setWasteThresholds(rows)
-      })
-      .catch((error) => {
-        if (active) setWasteError(error.message || 'Unable to load waste thresholds.')
-      })
-      .finally(() => {
-        if (active) setWasteLoading(false)
-      })
+    void Promise.resolve().then(() => { if (active) return loadThresholds() })
     return () => {
       active = false
+      requestRef.current += 1
     }
-  }, [])
+  }, [loadThresholds])
+
+  function selectTab(id) {
+    if (id === activeTab) return
+    requestRef.current += 1
+    setThresholdLoading(true)
+    setThresholdError('')
+    setActiveTab(id)
+  }
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
@@ -55,17 +60,24 @@ export default function ThresholdsHub({ locations = [], metrics = [], ...sharedP
         {tabs.map(({ id, label, icon: Icon }) => {
           const selected = activeTab === id
           return (
-            <button key={id} type="button" onClick={() => setActiveTab(id)} aria-current={selected ? 'page' : undefined} className={`inline-flex min-w-max flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition ${selected ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}>
+            <button key={id} type="button" onClick={() => selectTab(id)} aria-current={selected ? 'page' : undefined} className={`inline-flex min-w-max flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition ${selected ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}>
               <Icon size={16} />{label}
             </button>
           )
         })}
       </nav>
 
-      {activeTab === 'crowd' ? (
-        <CrowdThresholds locations={locations} metrics={metrics} {...sharedProps} embedded />
+      {thresholdLoading ? (
+        <LoadingScreen tone="blue" label={`Loading ${activeTab} thresholds...`} />
+      ) : thresholdError ? (
+        <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <p>{thresholdError}</p>
+          <button type="button" onClick={loadThresholds} className="mt-2 font-semibold underline">Retry</button>
+        </div>
+      ) : activeTab === 'crowd' ? (
+        <CrowdThresholds locations={locations} metrics={metrics} {...sharedProps} thresholds={thresholds} embedded />
       ) : (
-        <WasteThresholds locations={locations} metrics={metrics} thresholds={wasteThresholds} loading={wasteLoading} error={wasteError} onThresholdSaved={loadWasteThresholds} />
+        <WasteThresholds locations={locations} metrics={metrics} thresholds={thresholds} loading={false} onThresholdSaved={loadThresholds} />
       )}
     </div>
   )

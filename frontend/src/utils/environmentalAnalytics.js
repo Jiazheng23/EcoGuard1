@@ -1,3 +1,4 @@
+import { averageReadings } from './reportFilters.js'
 function numberValue(value) {
   const number = Number(value)
   return Number.isFinite(number) ? number : 0
@@ -343,13 +344,12 @@ function crowdPredictionConfidence({ averageMatches, backtestCount, coverage, ma
 
 export function buildEnvironmentalTrend(metrics = [], granularity) {
   return metricBuckets(metrics, granularity).map((bucket) => {
-    const count = bucket.rows.length || 1
     return {
       period: bucket.label,
       timestamp: bucket.timestamp,
-      aqi: Number((bucket.rows.reduce((sum, row) => sum + numberValue(row.air_quality_index), 0) / count).toFixed(1)),
-      water: Number((bucket.rows.reduce((sum, row) => sum + numberValue(row.water_quality_score), 0) / count).toFixed(1)),
-      temperature: Number((bucket.rows.reduce((sum, row) => sum + numberValue(row.temperature_c), 0) / count).toFixed(1)),
+      aqi: averageReadings(bucket.rows.map((row) => row.air_quality_index)),
+      water: averageReadings(bucket.rows.map((row) => row.water_quality_score)),
+      temperature: averageReadings(bucket.rows.map((row) => row.temperature_c)),
     }
   })
 }
@@ -361,9 +361,9 @@ export function getEnvironmentalSummary(metrics = [], visitorDensity = []) {
     averageOccupancy: visitorDensity.length
       ? visitorDensity.reduce((sum, row) => sum + row.occupancy, 0) / visitorDensity.length
       : 0,
-    averageAqi: metrics.reduce((sum, row) => sum + numberValue(row.air_quality_index), 0) / count,
-    averageWater: metrics.reduce((sum, row) => sum + numberValue(row.water_quality_score), 0) / count,
-    averageTemperature: metrics.reduce((sum, row) => sum + numberValue(row.temperature_c), 0) / count,
+    averageAqi: averageReadings(metrics.map((row) => row.air_quality_index)),
+    averageWater: averageReadings(metrics.map((row) => row.water_quality_score)),
+    averageTemperature: averageReadings(metrics.map((row) => row.temperature_c)),
     peakPeriod: visitorDensity.reduce(
       (peak, row) => !peak || row.visitors > peak.visitors ? row : peak,
       null,

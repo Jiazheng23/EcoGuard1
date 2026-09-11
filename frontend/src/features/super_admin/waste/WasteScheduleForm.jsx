@@ -4,10 +4,10 @@ import { createWasteSchedule, updateWasteSchedule } from '../../../services/wast
 import { isWasteScheduleConflict, validateWasteSchedule, WASTE_TYPES } from '../../../utils/wasteValidation'
 import { useToast } from '../../../components/toastContext'
 
-export default function WasteScheduleForm({ location, schedule, schedules, onClose, onSaved }) {
+export default function WasteScheduleForm({ location, schedule, schedules, alert, onClose, onSaved }) {
   const toast = useToast()
   const editing = Boolean(schedule)
-  const [values, setValues] = useState(() => initialValues(location, schedule))
+  const [values, setValues] = useState(() => initialValues(location, schedule, alert))
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
   const [submitError, setSubmitError] = useState('')
@@ -58,6 +58,7 @@ export default function WasteScheduleForm({ location, schedule, schedules, onClo
 
         <form onSubmit={submit} noValidate className="flex min-h-0 flex-1 flex-col">
           <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
+          {values.alert_id && <p className="rounded-xl border border-orange-200 bg-orange-50 p-3 text-sm text-orange-800">Response to waste alert #{values.alert_id}. This link will be retained with the collection result.</p>}
           <FormField label="Location"><input value={location.name} disabled className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-500" /></FormField>
           <div className="grid gap-4 md:grid-cols-2">
             <FormField label="Collection starts" error={errors.scheduled_for}><input name="scheduled_for" type="datetime-local" value={values.scheduled_for} onChange={updateValue} className={inputClass(errors.scheduled_for)} /></FormField>
@@ -81,12 +82,13 @@ export default function WasteScheduleForm({ location, schedule, schedules, onClo
   )
 }
 
-function initialValues(location, schedule) {
+function initialValues(location, schedule, alert) {
   const defaultStart = new Date(Date.now() + 60 * 60 * 1000)
   defaultStart.setMinutes(0, 0, 0)
   const defaultEnd = new Date(defaultStart.getTime() + 60 * 60 * 1000)
   return {
     location_id: location.id,
+    alert_id: schedule?.alert_id || alert?.id || null,
     scheduled_for: toLocalInput(schedule?.scheduled_for || defaultStart),
     scheduled_until: toLocalInput(schedule?.scheduled_until || defaultEnd),
     waste_type: schedule?.waste_type || 'mixed',

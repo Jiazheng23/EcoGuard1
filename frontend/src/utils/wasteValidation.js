@@ -1,6 +1,7 @@
 export const WASTE_TYPES = ['mixed', 'recyclable', 'organic', 'hazardous']
 export const WASTE_SCHEDULE_STATUSES = ['scheduled', 'completed', 'cancelled', 'missed']
-export const WASTE_COLLECTION_STATUSES = ['completed', 'partial', 'missed']
+// Choices for new records and UI filters. Legacy partial records remain readable.
+export const WASTE_COLLECTION_STATUSES = ['completed', 'missed']
 export const WASTE_COLLECTION_SOURCES = ['manual', 'simulated_sensor']
 
 export class WasteValidationError extends Error {
@@ -43,7 +44,7 @@ export function validateWasteSchedule(values, { requireFuture = true } = {}) {
   return errors
 }
 
-export function validateWasteCollection(values, { requireLocation = true, requireWasteType = true } = {}) {
+export function validateWasteCollection(values, { requireLocation = true, requireWasteType = true, schedule, alert } = {}) {
   const errors = {}
   const locationId = Number(values.location_id)
   const collectedAt = parseDate(values.collected_at)
@@ -58,6 +59,14 @@ export function validateWasteCollection(values, { requireLocation = true, requir
     errors.collected_at = 'Enter a valid collection time.'
   } else if (collectedAt > new Date()) {
     errors.collected_at = 'Collection time cannot be in the future.'
+  }
+  if (collectedAt && !errors.collected_at) {
+    if (status === 'missed' && schedule && collectedAt < parseDate(schedule.scheduled_until)) {
+      errors.collected_at = 'A missed attempt must be recorded after the collection window ends.'
+    }
+    if (alert && collectedAt < parseDate(alert.created_at)) {
+      errors.collected_at = 'Collection time cannot be before the linked alert.'
+    }
   }
   if (requireWasteType && !WASTE_TYPES.includes(values.waste_type)) {
     errors.waste_type = 'Select a supported waste type.'
@@ -79,8 +88,10 @@ export function validateWasteCollection(values, { requireLocation = true, requir
   if (status === 'missed' && (totalKg !== 0 || recycledKg !== 0)) {
     errors.total_kg = 'A missed collection must have zero collected quantities.'
   }
-  if (['completed', 'partial'].includes(status) && Number.isFinite(totalKg) && totalKg <= 0) {
-    errors.total_kg = 'A completed or partial collection must contain more than zero kilograms.'
+  if (status === 'missed' && !values.notes?.trim()) errors.notes = 'Enter a reason for the missed collection.'
+  if (values.notes?.length > 1000) errors.notes = 'Notes cannot exceed 1,000 characters.'
+  if (status === 'completed' && Number.isFinite(totalKg) && totalKg <= 0) {
+    errors.total_kg = 'A completed collection must contain more than zero kilograms.'
   }
 
   return errors
@@ -109,6 +120,7 @@ export function assertWasteValidation(errors) {
 
 export function normalizeWasteSchedule(values) {
   return {
+    ...(values.alert_id ? { alert_id: Number(values.alert_id) } : {}),
     location_id: Number(values.location_id),
     scheduled_for: toIsoString(values.scheduled_for),
     scheduled_until: toIsoString(values.scheduled_until),
@@ -121,6 +133,7 @@ export function normalizeWasteSchedule(values) {
 
 export function normalizeWasteCollection(values) {
   return {
+    ...(values.alert_id ? { alert_id: Number(values.alert_id) } : {}),
     schedule_id: values.schedule_id ? Number(values.schedule_id) : null,
     location_id: values.location_id ? Number(values.location_id) : undefined,
     collected_at: toIsoString(values.collected_at),

@@ -5,7 +5,7 @@ import WasteCollectionFilters from './WasteCollectionFilters'
 import TablePagination from '../../../components/TablePagination'
 import useTablePagination from '../../../hooks/useTablePagination'
 
-export default function WasteCollectionHistory({ location, collections, filters, onFiltersChange, loading, onRefresh, onCreateCollection }) {
+export default function WasteCollectionHistory({ location, collections, filters, onFiltersChange, loading, onRefresh, onCreateCollection, onViewAlert }) {
   const filteredCollections = useMemo(() => filterWasteCollections(collections, filters), [collections, filters])
   const collectionPages = useTablePagination(filteredCollections)
 
@@ -34,14 +34,14 @@ export default function WasteCollectionHistory({ location, collections, filters,
           <tbody className="divide-y divide-slate-100">
             {collectionPages.pageItems.map((record) => (
               <tr key={record.id}>
-                <td className="whitespace-nowrap px-5 py-4"><p className="font-semibold text-slate-700">{formatDate(record.collected_at)}</p><p className="mt-0.5 text-[11px] text-slate-400">{record.schedule_id ? `Schedule #${record.schedule_id}` : 'Unscheduled'}</p></td>
+                <td className="whitespace-nowrap px-5 py-4"><p className="font-semibold text-slate-700">{formatDate(record.collected_at)}</p><p className="mt-0.5 text-[11px] text-slate-400">{record.schedule_id ? `Schedule #${record.schedule_id}` : 'Unscheduled'}</p>{record.alert_id && <button type="button" onClick={() => onViewAlert?.(record.alert_id)} className="mt-1 text-xs font-semibold text-orange-600 underline">Alert #{record.alert_id}</button>}</td>
                 <td className="px-5 py-4 capitalize text-slate-600">{record.waste_type}</td>
                 <td className="px-5 py-4 text-slate-700">{formatKg(record.total_kg)}</td>
                 <td className="px-5 py-4 text-green-600">{formatKg(record.recycled_kg)}</td>
                 <td className="px-5 py-4 text-slate-600">{formatKg(record.landfill_kg)}</td>
                 <td className="px-5 py-4"><SourceBadge source={record.source} /></td>
                 <td className="px-5 py-4"><StatusBadge status={record.status} /></td>
-                <td className="max-w-xs px-5 py-4 text-slate-500">{record.notes || '-'}</td>
+                <td className="max-w-xs px-5 py-4 text-slate-500">{record.notes || '-'}{record.apply_to_sensor && <p className="mt-2 text-xs text-blue-700">Waste: {formatKg(record.sensor_waste_before)} → {formatKg(record.sensor_waste_after)}<br />Recyclable: {formatKg(record.sensor_recycled_before)} → {formatKg(record.sensor_recycled_after)}</p>}</td>
               </tr>
             ))}
           </tbody>

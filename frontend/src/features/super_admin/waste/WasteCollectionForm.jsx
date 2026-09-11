@@ -1,25 +1,50 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ClipboardCheck, Save, X } from 'lucide-react'
-import { createWasteCollection } from '../../../services/wasteService'
+import { createWasteCollection, getWasteSensorReading } from '../../../services/wasteService'
+import { previewWasteSensorResponse } from '../../../utils/wasteSensorResponse'
 import { validateWasteCollection, WASTE_COLLECTION_SOURCES, WASTE_COLLECTION_STATUSES, WASTE_TYPES } from '../../../utils/wasteValidation'
 import { useToast } from '../../../components/toastContext'
 
-export default function WasteCollectionForm({ location, schedule, onClose, onSaved }) {
+export default function WasteCollectionForm({ location, schedule, alert, initialStatus = 'completed', onClose, onSaved }) {
   const toast = useToast()
+  const [requestId] = useState(() => crypto.randomUUID())
+  const [timing, setTiming] = useState('current')
+  const [reading, setReading] = useState(null)
+  const [readingError, setReadingError] = useState('')
+  const [readingLoading, setReadingLoading] = useState(true)
+  const submitting = useRef(false)
   const [values, setValues] = useState(() => ({
     schedule_id: schedule?.id || null,
+    alert_id: schedule?.alert_id || alert?.id || null,
     location_id: location.id,
     collected_at: toLocalInput(new Date()),
-    total_kg: schedule ? '' : '0',
-    recycled_kg: schedule ? '' : '0',
+    total_kg: initialStatus === 'missed' ? '0' : schedule ? '' : '0',
+    recycled_kg: initialStatus === 'missed' ? '0' : schedule ? '' : '0',
     waste_type: schedule?.waste_type || 'mixed',
-    status: 'completed',
+    status: initialStatus,
     source: 'manual',
     notes: '',
   }))
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
   const [submitError, setSubmitError] = useState('')
+
+  useEffect(() => {
+    let active = true
+    getWasteSensorReading(location.id)
+      .then((row) => { if (active) setReading(row) })
+      .catch((error) => { if (active) setReadingError(error.message) })
+      .finally(() => { if (active) setReadingLoading(false) })
+    return () => { active = false }
+  }, [location.id])
+
+  async function refreshReading() {
+    setReadingLoading(true)
+    setReadingError('')
+    try { setReading(await getWasteSensorReading(location.id)) }
+    catch (error) { setReadingError(error.message) }
+    finally { setReadingLoading(false) }
+  }
 
   function updateValue(event) {
     const { name, value } = event.target
@@ -37,17 +62,30 @@ export default function WasteCollectionForm({ location, schedule, onClose, onSav
 
   async function submit(event) {
     event.preventDefault()
-    const nextErrors = validateWasteCollection(values)
+    if (submitting.current) return
+    const currentCollection = timing === 'current' && values.status !== 'missed'
+    const payload = {
+      ...values,
+      collected_at: currentCollection ? new Date().toISOString() : values.collected_at,
+      apply_to_sensor: currentCollection,
+      request_id: requestId,
+    }
+    const nextErrors = validateWasteCollection(payload, { schedule, alert })
+    if (currentCollection) {
+      Object.assign(nextErrors, previewWasteSensorResponse(reading, values).errors)
+      if (readingLoading || readingError) nextErrors.sensor = 'Wait for the reading or refresh it before saving.'
+    }
     setErrors(nextErrors)
     if (Object.keys(nextErrors).length) {
       toast.reminder('Please correct the highlighted collection fields.')
       return
     }
 
+    submitting.current = true
     setSaving(true)
     setSubmitError('')
     try {
-      const saved = await createWasteCollection(values)
+      const saved = await createWasteCollection(payload)
       await onSaved(saved, Boolean(schedule))
       toast.success('Waste collection recorded successfully.')
     } catch (saveError) {
@@ -55,6 +93,7 @@ export default function WasteCollectionForm({ location, schedule, onClose, onSav
       setSubmitError(failure)
       toast.error(failure)
     } finally {
+      submitting.current = false
       setSaving(false)
     }
   }
@@ -63,20 +102,37 @@ export default function WasteCollectionForm({ location, schedule, onClose, onSav
   const recycled = Number(values.recycled_kg) || 0
   const landfill = Math.max(0, total - recycled)
   const missed = values.status === 'missed'
+  const adjustsSensor = timing === 'current' && !missed
+  const preview = adjustsSensor ? previewWasteSensorResponse(reading, values) : null
 
   return (
     <div className="fixed inset-0 z-[9999] grid place-items-center overflow-hidden bg-slate-950/45 px-4 pb-4 pt-20 backdrop-blur-[2px]" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) onClose() }} onKeyDown={(event) => { if (event.key === 'Escape' && !saving) onClose() }}>
       <div role="dialog" aria-modal="true" aria-labelledby="waste-collection-title" className="flex max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
         <header className="flex shrink-0 items-start justify-between border-b border-slate-100 p-5">
           <div><h2 id="waste-collection-title" className="flex items-center gap-2 text-lg font-bold text-slate-800"><ClipboardCheck size={20} className="text-green-500" />Record waste collection</h2><p className="mt-1 text-xs text-slate-400">{schedule ? `Completes the ${formatDate(schedule.scheduled_for)} schedule atomically.` : 'Creates an unscheduled collection-history record.'}</p></div>
-          <button type="button" onClick={onClose} aria-label="Close collection form" className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+          <button type="button" onClick={onClose} disabled={saving} aria-label="Close collection form" className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 disabled:opacity-50"><X size={18} /></button>
         </header>
 
         <form onSubmit={submit} noValidate className="flex min-h-0 flex-1 flex-col">
           <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
+          {values.alert_id && <p className="rounded-xl border border-orange-200 bg-orange-50 p-3 text-sm text-orange-800">Linked waste alert #{values.alert_id}. Current collections reduce the stored reading; alert status follows the remaining waste level.</p>}
+          {!missed && <FormField label="Collection timing">
+            <select value={timing} disabled={saving} onChange={(event) => { setTiming(event.target.value); setErrors({}) }} className={inputClass(false)}>
+              <option value="current">Current collection — update waste readings</option>
+              <option value="historical">Historical record — leave readings unchanged</option>
+            </select>
+          </FormField>}
+          {adjustsSensor && <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+            <p>Saving reduces Waste by the total collected and Recyclable material by the recycled amount. Other environmental values stay unchanged.</p>
+            <p className="mt-2">{readingLoading ? 'Loading current reading...' : reading ? `Current: ${Number(reading.waste_kg).toFixed(2)} kg waste / ${Number(reading.recycled_kg).toFixed(2)} kg recyclable.` : 'No stored reading available.'}</p>
+            {preview && !Object.keys(preview.errors).length && <p className="mt-1 font-semibold">After collection: {preview.wasteAfter.toFixed(2)} kg waste / {preview.recycledAfter.toFixed(2)} kg recyclable.</p>}
+            <button type="button" disabled={readingLoading || saving} onClick={refreshReading} className="mt-2 font-semibold underline disabled:opacity-50">Refresh reading</button>
+            {(errors.sensor || readingError) && <p role="alert" className="mt-2 text-red-600">{errors.sensor || readingError}</p>}
+            <p className="mt-2 text-xs">The database rechecks the latest reading when saving. This adjustment models a bin-emptying response for the assignment sensor feed.</p>
+          </div>}
           <div className="grid gap-4 md:grid-cols-2">
             <FormField label="Location"><input value={location.name} disabled className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-500" /></FormField>
-            <FormField label="Collection time" error={errors.collected_at}><input name="collected_at" type="datetime-local" max={toLocalInput(new Date())} value={values.collected_at} onChange={updateValue} className={inputClass(errors.collected_at)} /></FormField>
+            <FormField label="Collection time" error={errors.collected_at}>{adjustsSensor ? <input value="Now — recorded when you save" disabled className={inputClass(false)} /> : <input name="collected_at" type="datetime-local" max={toLocalInput(new Date())} value={values.collected_at} onChange={updateValue} className={inputClass(errors.collected_at)} />}</FormField>
             <FormField label="Waste type" error={errors.waste_type}><select name="waste_type" value={values.waste_type} onChange={updateValue} disabled={Boolean(schedule)} className={`${inputClass(errors.waste_type)} disabled:bg-slate-50 disabled:text-slate-500`}>{WASTE_TYPES.map((type) => <option key={type} value={type}>{titleCase(type)}</option>)}</select></FormField>
             <FormField label="Collection status" error={errors.status}><select name="status" value={values.status} onChange={updateValue} className={inputClass(errors.status)}>{WASTE_COLLECTION_STATUSES.map((status) => <option key={status} value={status}>{titleCase(status)}</option>)}</select></FormField>
             <FormField label="Total collected" error={errors.total_kg}><div className="relative"><input name="total_kg" type="number" min="0" step="0.01" value={values.total_kg} onChange={updateValue} disabled={missed} className={`${inputClass(errors.total_kg)} pr-9 disabled:bg-slate-50`} /><span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">kg</span></div></FormField>
@@ -87,7 +143,7 @@ export default function WasteCollectionForm({ location, schedule, onClose, onSav
 
           {values.source === 'simulated_sensor' && <div className="rounded-xl border border-violet-200 bg-violet-50 p-3 text-sm text-violet-700"><b>Automated sensor:</b> this record was captured from the location sensor feed.</div>}
           {missed && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">A missed collection records zero kilograms. For a scheduled record, the schedule will also be marked missed.</div>}
-          <FormField label="Notes (optional)" error={errors.notes}><textarea name="notes" rows="3" maxLength="1000" value={values.notes} onChange={updateValue} placeholder="Collection result, issue, vehicle, or reason for a missed collection" className={inputClass(errors.notes)} /></FormField>
+          <FormField label={missed ? "Reason for missed collection (required)" : "Action taken / notes (optional)"} error={errors.notes}><textarea name="notes" rows="3" maxLength="1000" value={values.notes} onChange={updateValue} placeholder="Collection result, issue, vehicle, or reason for a missed collection" className={inputClass(errors.notes)} /></FormField>
           {submitError && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-600">{submitError}</div>}
           </div>
 

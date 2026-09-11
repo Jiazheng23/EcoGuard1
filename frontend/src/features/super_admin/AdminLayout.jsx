@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import {
   Activity,
   BarChart2,
@@ -36,6 +36,7 @@ const navItems = [
     children: [
       { label: 'Collection Schedules', page: 'waste-schedules' },
       { label: 'Collection History', page: 'waste-history' },
+      { label: 'Alert History', page: 'waste-alerts' },
     ],
   },
   { icon: Activity, label: 'Environmental Analytics', page: 'analytics' },
@@ -53,6 +54,7 @@ const pageLabels = {
   waste: 'Waste Management',
   'waste-schedules': 'Waste / Collection Schedules',
   'waste-history': 'Waste / Collection History',
+  'waste-alerts': 'Waste / Alert History',
   analytics: 'Environmental Analytics',
   reports: 'Reports & Analytics',
   profile: 'Profile',
@@ -66,6 +68,7 @@ function getAdminDetails(user, profile) {
 }
 
 function AdminSidebar({ activePage, onNavigate, onClose, profile }) {
+  const wasteMenuId = useId()
   const [wasteOpen, setWasteOpen] = useState(() => activePage.startsWith('waste'))
   const visibleItems = navItems.filter((item) => (
     (!item.superOnly || profile?.role === 'super_admin')
@@ -96,6 +99,7 @@ function AdminSidebar({ activePage, onNavigate, onClose, profile }) {
                   type="button"
                   onClick={() => setWasteOpen((current) => !current)}
                   aria-expanded={expanded}
+                  aria-controls={wasteMenuId}
                   className={`admin-nav-item flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors ${active ? 'is-active font-semibold' : ''}`}
                 >
                   <Icon size={17} className="shrink-0" />
@@ -103,7 +107,7 @@ function AdminSidebar({ activePage, onNavigate, onClose, profile }) {
                   {expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
                 </button>
                 {expanded && (
-                  <div className="admin-subnav ml-5 mt-1 space-y-1 border-l pl-3">
+                  <div id={wasteMenuId} className="admin-subnav mt-1 space-y-1 rounded-lg border p-1.5">
                     {children.map((child) => {
                       const childActive = activePage === child.page || (activePage === page && child.page === `${page}-overview`)
                       return (
@@ -112,7 +116,7 @@ function AdminSidebar({ activePage, onNavigate, onClose, profile }) {
                           type="button"
                           onClick={() => navigateTo(child.page)}
                           aria-current={childActive ? 'page' : undefined}
-                          className={`admin-nav-item w-full rounded-md px-3 py-2 text-left text-xs transition-colors ${childActive ? 'is-active font-semibold' : ''}`}
+                          className={`admin-nav-item admin-subnav-item w-full rounded-md px-3 py-2 text-left transition-colors ${childActive ? 'is-active font-semibold' : ''}`}
                         >
                           {child.label}
                         </button>

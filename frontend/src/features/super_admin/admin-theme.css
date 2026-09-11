@@ -14,10 +14,13 @@
 .admin-sidebar { background: linear-gradient(180deg, #102e51 0%, #0d2744 100%); }
 .admin-brand { border-color: rgb(255 255 255 / 10%); }
 .admin-brand-mark { background: #d99436; box-shadow: 0 0 0 5px rgba(217,148,54,.12); }
-.admin-nav-item { color: #aebfd2; }
+.admin-nav-item { color: #aebfd2; font-size: .875rem; line-height: 1.25rem; }
 .admin-nav-item:hover { background: rgb(255 255 255 / 7%); color: #fff; }
 .admin-nav-item.is-active { background: #f5f9ff; color: #125ea9; box-shadow: inset 3px 0 #3b8ddd; }
-.admin-subnav { border-color: rgb(255 255 255 / 14%); }
+.admin-subnav { border-color: rgb(255 255 255 / 14%); background: rgb(0 0 0 / 12%); }
+.admin-subnav-item { font-size: .75rem; line-height: 1.25rem; white-space: nowrap; min-height: 2.25rem; }
+.admin-nav-item.is-active { font-weight: 600; }
+.admin-nav-item:focus-visible { outline: 2px solid #93c5fd; outline-offset: -2px; }
 
 .admin-header { background: rgb(255 255 255 / 96%); border-color: var(--admin-line); box-shadow: 0 1px 0 rgb(15 45 75 / 3%); }
 .admin-main { background-color: var(--admin-bg); background-image: radial-gradient(circle at 85% 0%, rgb(65 145 220 / 8%), transparent 26rem); }

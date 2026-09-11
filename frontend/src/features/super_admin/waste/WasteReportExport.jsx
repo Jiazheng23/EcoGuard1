@@ -1,11 +1,10 @@
 import { useState } from 'react'
-import { CheckCircle2 } from 'lucide-react'
+import { createPortal } from 'react-dom'
 import DownloadMenu from '../../../components/DownloadMenu'
 import { recordWasteReportExport } from '../../../services/wasteService'
 import { buildWasteCsv, buildWastePdfBytes, downloadWasteReport, wasteReportFilename } from '../../../utils/wasteReport'
-import { wasteFilterDescription } from '../../../utils/wasteAnalytics'
 
-export default function WasteReportExport({ location, collections, filters, summary, trend, exportAudits, onExported }) {
+export default function WasteReportExport({ location, collections, filters, summary, trend, onExported, downloadTarget, downloadMessageTarget }) {
   const [exporting, setExporting] = useState('')
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
@@ -54,37 +53,19 @@ export default function WasteReportExport({ location, collections, filters, summ
   }
 
   return (
-    <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div><h3 className="font-bold text-slate-800">Waste history reports</h3><p className="mt-1 max-w-2xl text-xs leading-5 text-slate-400">Both formats use the active collection filters. PDF includes summary statistics, trend bars, source disclosure, and detailed history; CSV contains the detailed filtered rows.</p></div>
-        <DownloadMenu
-          disabled={!collections.length}
-          loading={Boolean(exporting)}
-          items={[
-            { label: 'Download PDF', onClick: () => exportReport('pdf') },
-            { label: 'Download CSV', onClick: () => exportReport('csv') },
-          ]}
-        />
-      </div>
-
-      <div className="mt-4 rounded-xl bg-slate-50 p-3 text-xs text-slate-500"><b className="text-slate-700">Report scope:</b> {wasteFilterDescription(filters)} - {collections.length} matching record{collections.length === 1 ? '' : 's'}.</div>
-      {!collections.length && <p className="mt-3 text-sm text-amber-600">No records match the active filters. Export is disabled to avoid creating an empty report.</p>}
-      {message && <p className="mt-3 flex items-center gap-2 text-sm text-green-600"><CheckCircle2 size={16} />{message}</p>}
-      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
-
-      <div className="mt-5 border-t border-slate-100 pt-4">
-        <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500">Recent export audit</h4>
-        <div className="mt-2 space-y-2">
-          {exportAudits.slice(0, 5).map((audit) => (
-            <div key={audit.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500"><span><b className="uppercase text-slate-700">{audit.export_format}</b> - {audit.record_count} record{audit.record_count === 1 ? '' : 's'}</span><span>{formatDate(audit.generated_at)}</span></div>
-          ))}
-          {!exportAudits.length && <p className="text-xs text-slate-400">No report export has been audited for this location yet.</p>}
-        </div>
-      </div>
-    </section>
+    <>
+      {downloadTarget && createPortal(<DownloadMenu
+        disabled={!collections.length}
+        loading={Boolean(exporting)}
+        items={[
+          { label: 'Download PDF', onClick: () => exportReport('pdf') },
+          { label: 'Download CSV', onClick: () => exportReport('csv') },
+        ]}
+      />, downloadTarget)}
+      {downloadMessageTarget && createPortal(<>
+        {message && <div role="status" className="rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-700">{message}</div>}
+        {error && <div role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-600">{error}</div>}
+      </>, downloadMessageTarget)}
+    </>
   )
-}
-
-function formatDate(value) {
-  return new Intl.DateTimeFormat('en-MY', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
 }
