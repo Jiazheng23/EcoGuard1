@@ -1,4 +1,5 @@
 import { averageReadings, sensorValue, formatReading, environmentalDefaults, travelDefaults, filterEnvironmentalReports, filterTravelReports, reportScope, reportCsvCell } from '../../utils/reportFilters'
+import { getRecordedDestinationSeries } from '../../utils/environmentalTravelReport'
 import { useMemo, useState } from 'react'
 import { filterWestMalaysiaTrips, isWestMalaysiaReportLocation } from '../../utils/reportFilters'
 import {
@@ -18,7 +19,7 @@ import ReportDownloadDialog from '../../components/ReportDownloadDialog'
 import { latestMetricsByLocation } from '../../services/locationService'
 import { adminReportFilename, buildAdminTripPdfBytes, buildEnvironmentalPdfBytes } from '../../utils/adminReport'
 import { downloadWasteReport } from '../../utils/wasteReport'
-import { isWestMalaysiaCoordinate } from '../../utils/westMalaysia'
+import { isWestMalaysiaCoordinate, isWestMalaysiaLocation } from '../../utils/westMalaysia'
 import {
   transportLabels,
   getDestinationSeries,
@@ -35,7 +36,7 @@ function formatDestinationLabel(value, maxLength = 22) {
 }
 
 export default function Reports({ profiles, trips: allTrips, locations: allLocations, metrics, loading, error, isSuperAdmin = false, embedded = false }) {
-  const locations = useMemo(() => allLocations.filter(isWestMalaysiaReportLocation), [allLocations])
+  const locations = useMemo(() => allLocations.filter(isSuperAdmin ? isWestMalaysiaLocation : isWestMalaysiaReportLocation), [allLocations, isSuperAdmin])
   const trips = useMemo(() => filterWestMalaysiaTrips(allTrips, allLocations), [allTrips, allLocations])
   const [environmentFilters, setEnvironmentFilters] = useState(environmentalDefaults)
   const [travelFilters, setTravelFilters] = useState(travelDefaults)
@@ -57,7 +58,7 @@ export default function Reports({ profiles, trips: allTrips, locations: allLocat
   const analytics = useMemo(() => ({
     summary: getTripSummary(filteredTrips, profiles),
     monthly: getMonthlySeries(filteredTrips),
-    destinations: getDestinationSeries(filteredTrips)
+    destinations: (isSuperAdmin ? getRecordedDestinationSeries(filteredTrips) : getDestinationSeries(filteredTrips))
       .filter((destination) => {
         if (eastMalaysiaLocationNames.has(destination.name.trim().toLowerCase())) return false
         const lat = Number(destination.lat)
@@ -68,7 +69,7 @@ export default function Reports({ profiles, trips: allTrips, locations: allLocat
       })
       .sort((left, right) => right.emission - left.emission || left.name.localeCompare(right.name)),
     transport: getTransportSeries(filteredTrips),
-  }), [eastMalaysiaLocationNames, filteredTrips, profiles])
+  }), [eastMalaysiaLocationNames, filteredTrips, profiles, isSuperAdmin])
   const emittingTransport = analytics.transport.filter((item) => !['walking', 'bicycle'].includes(item.mode) && item.emission > 0)
   const bicycleTrips = analytics.transport.find((item) => item.mode === 'bicycle')?.trips || 0
   const walkingTrips = analytics.transport.find((item) => item.mode === 'walking')?.trips || 0
@@ -88,9 +89,10 @@ export default function Reports({ profiles, trips: allTrips, locations: allLocat
     const readingCount = filteredMetrics.length
     const averageAqi = averageReadings(byLocation.map((item) => item.aqi))
     const averageWater = averageReadings(byLocation.map((item) => item.water))
-    const totalWaste = byLocation.reduce((sum, item) => sum + (item.waste ?? 0), 0)
+    const totalWaste = isSuperAdmin && !byLocation.some((item) => item.waste !== null)
+      ? null : byLocation.reduce((sum, item) => sum + (item.waste ?? 0), 0)
     return { byLocation, readingCount, averageAqi, averageWater, totalWaste }
-  }, [filteredLocations, filteredMetrics])
+  }, [filteredLocations, filteredMetrics, isSuperAdmin])
 
   function exportCsv() {
     const header = ['id', 'tourist_id', 'starting_location', 'destination', 'transport_mode', 'distance_km', 'passengers', 'round_trip', 'carbon_emission', 'total_emission', 'eco_points', 'travelled_at']
@@ -155,11 +157,11 @@ export default function Reports({ profiles, trips: allTrips, locations: allLocat
       />
 
       <section className="grid gap-4">
-        <ReportFilters title="Environmental Filters" filters={environmentFilters} onChange={setEnvironmentFilters} defaults={environmentalDefaults} placeholder="e.g. Cameron Highlands or Pahang">
+        <ReportFilters description={isSuperAdmin ? "Controls environmental summary cards and the waste/recycling-by-location chart." : undefined} title="Environmental Filters" filters={environmentFilters} onChange={setEnvironmentFilters} defaults={environmentalDefaults} placeholder="e.g. Cameron Highlands or Pahang">
           {isSuperAdmin && <label className="grid min-w-0 gap-1 text-xs text-slate-500">Ecological location<select className={filterControl} value={environmentFilters.location} onChange={(event) => setEnvironmentFilters({ ...environmentFilters, location: event.target.value })}><option value="all">All Ecological Locations</option>{locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select></label>}
           <p className="text-xs text-slate-500 sm:col-span-full" aria-live="polite">{filteredMetrics.length} environmental readings / {filteredLocations.length} ecological locations</p>
         </ReportFilters>
-        <ReportFilters title="Travel Filters" filters={travelFilters} onChange={setTravelFilters} defaults={travelDefaults} placeholder="e.g. Kuala Lumpur or Ipoh">
+        <ReportFilters description={isSuperAdmin ? "Controls carbon summary cards, recorded trip counts, monthly trips, transport charts and recorded trip destinations." : undefined} title="Travel Filters" filters={travelFilters} onChange={setTravelFilters} defaults={travelDefaults} placeholder="e.g. Kuala Lumpur or Ipoh">
           <label className="grid min-w-0 gap-1 text-xs text-slate-500">Transport mode<select className={filterControl} value={travelFilters.transport} onChange={(event) => setTravelFilters({ ...travelFilters, transport: event.target.value })}><option value="all">All Transport</option>{transportModes.map((mode) => <option key={mode} value={mode}>{transportLabels[mode] || mode}</option>)}</select></label>
           <p className="text-xs text-slate-500 sm:col-span-full" aria-live="polite">{filteredTrips.length} trips</p>
         </ReportFilters>
@@ -170,14 +172,14 @@ export default function Reports({ profiles, trips: allTrips, locations: allLocat
           ['Average Carbon', `${analytics.summary.averageEmission.toFixed(1)} kg`, BarChart3, '#3b82f6'],
           ['Total Carbon', `${analytics.summary.totalEmission.toFixed(1)} kg`, Leaf, '#ef4444'],
           ['Recorded Trips', analytics.summary.totalTrips, Route, '#22c55e'],
-          ['Destinations', analytics.summary.destinationCount, Sparkles, '#8b5cf6'],
+          [isSuperAdmin ? 'Recorded Trip Destinations' : 'Destinations', isSuperAdmin ? analytics.destinations.length : analytics.summary.destinationCount, Sparkles, '#8b5cf6'],
         ].map(([label, value, Icon, color]) => <article key={label} className={card}><Icon size={18} style={{ color }} /><p className="mt-3 text-xs text-slate-500">{label}</p><p className="mt-1 text-2xl font-bold" style={{ color }}>{loading ? '—' : value}</p></article>)}
       </section>
 
       <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {[
           ['Current Readings', environmental.readingCount, Recycle, '#22c55e'],
-          ['Latest Waste', `${environmental.totalWaste.toFixed(1)} kg`, Leaf, '#f97316'],
+          ['Latest Waste', formatReading(environmental.totalWaste, 1, ' kg'), Leaf, '#f97316'],
           ['Average AQI', formatReading(environmental.averageAqi), CloudSun, '#8b5cf6'],
           ['Water Quality', formatReading(environmental.averageWater, 0, ' / 100'), Waves, '#0ea5e9'],
         ].map(([label, value, Icon, color]) => <article key={label} className={card}><Icon size={18} style={{ color }} /><p className="mt-3 text-xs text-slate-500">{label}</p><p className="mt-1 text-2xl font-bold" style={{ color }}>{loading ? '-' : value}</p></article>)}
@@ -191,12 +193,19 @@ export default function Reports({ profiles, trips: allTrips, locations: allLocat
             <CartesianGrid stroke="#f1f5f9" strokeDasharray="3 3" vertical={false} />
             <XAxis dataKey="name" tick={{ fontSize: 9, fill: '#64748b' }} interval={0} angle={-15} textAnchor="end" height={62} />
             <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} />
-            <Tooltip formatter={(value) => [`${Number(value).toFixed(2)} kg`]} />
+            <Tooltip filterNull={!isSuperAdmin} formatter={(value) => [formatReading(value, 2, ' kg')]} />
             <Legend />
             <Bar dataKey="waste" name="Waste" fill="#f97316" radius={[5, 5, 0, 0]} isAnimationActive={false} />
             <Bar dataKey="recycled" name="Recycled" fill="#22c55e" radius={[5, 5, 0, 0]} isAnimationActive={false} />
           </BarChart>
         </ResponsiveContainer> : <p className="p-10 text-center text-sm text-slate-400">No ecological locations are available.</p>}
+        {isSuperAdmin && environmental.byLocation.some((item) => item.waste === null || item.recycled === null) && (
+          <div className="mt-3 space-y-1 text-xs text-slate-500">
+            {environmental.byLocation.filter((item) => item.waste === null || item.recycled === null).map((item, index) => (
+              <p key={index}>{item.name}: Waste: {formatReading(item.waste, 2, ' kg')} · Recycled: {formatReading(item.recycled, 2, ' kg')}</p>
+            ))}
+          </div>
+        )}
       </article>
 
       <article className={card}>
@@ -287,8 +296,8 @@ function DestinationCarbonRanking({ destinations, loading }) {
     <div className="min-w-0">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1 basis-56">
-          <h2 className="font-bold text-slate-800">Carbon across all destinations</h2>
-          <p className="mt-1 text-xs text-slate-400">Ranked by total CO₂ emissions for the selected report period</p>
+          <h2 className="font-bold text-slate-800">Carbon by Recorded Trip Destination</h2>
+          <p className="mt-1 text-xs text-slate-400">Ranked by total CO₂ emissions from tourists’ recorded trips during the selected period.</p>
         </div>
         <div className="max-w-full break-words rounded-xl bg-green-50 px-3 py-2 text-right">
           <p className="text-[10px] font-bold uppercase tracking-wide text-green-600">{query ? 'Matching carbon' : 'Combined carbon'}</p>
@@ -351,9 +360,10 @@ function DestinationCarbonRanking({ destinations, loading }) {
 
 const filterControl = 'w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-600 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
 
-function ReportFilters({ title, filters, onChange, defaults, placeholder, children }) {
+function ReportFilters({ title, description, filters, onChange, defaults, placeholder, children }) {
   return <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
     <h3 className="mb-3 text-sm font-semibold text-slate-800">{title}</h3>
+    {description && <p className="mb-3 text-xs text-slate-500">{description}</p>}
     <div className="grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <label className="grid min-w-0 gap-1 text-xs text-slate-500">{title === 'Environmental Filters' ? 'Location or state' : 'Starting point or destination'}<input type="search" className={filterControl} value={filters.query} onChange={(event) => onChange({ ...filters, query: event.target.value })} placeholder={placeholder} /></label>
       <label className="grid min-w-0 gap-1 text-xs text-slate-500">{title.replace(' Filters', '')} date range<select className={filterControl} value={filters.dateRange} onChange={(event) => onChange({ ...filters, dateRange: event.target.value })}><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="all">All time</option></select></label>
