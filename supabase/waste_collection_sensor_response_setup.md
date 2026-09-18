@@ -2,13 +2,21 @@
 
 Apply `waste_collection_sensor_response.sql` in Supabase SQL Editor **after** the existing `waste_alert_workflow.sql`, `sensor_current_metrics.sql` and `sensor_location_controls.sql`. This migration has not been applied automatically. It is transactional, re-runnable and does not adjust existing collection records or readings during installation.
 
+### Current-collection clock fix (19 September 2026)
+
+If the sensor-response migration is already installed, run **`waste_collection_server_time.sql`** once in Supabase SQL Editor, then reload the frontend. It replaces only the collection RPC; it does not alter existing data. Fresh installations using the updated sensor-response migration already contain this fix.
+
+Current collections now get `collected_at = now()` inside the database transaction **before** the insert and its validation triggers run. The frontend no longer supplies or compares a laptop-generated collection timestamp in this mode. Historical/missed records retain their entered timestamps and existing validation. Do not remove the time-validation triggers or switch to Historical just to work around clock skew.
+
+Verify after applying: save a small valid Current collection, confirm its server timestamp and the reduced balances, and check that a future Historical entry is still rejected. Retrying the same request UUID must still return the original record and original timestamp. This change has not been live-tested against your Supabase project.
+
 ## Behaviour
 
 - New form submissions use `record_waste_collection(jsonb, uuid)`. Existing collection endpoints still work as history-only entry paths.
 - **Current collection** (default for completed/partial): the form uses the save time. Within the same transaction, the database locks the latest metric, subtracts collected total/recycled kg, records before/after values, inserts the result, and updates its schedule via the existing workflow trigger. A failed step rolls everything back.
 - **Historical record**: enter a past collection time; save history without touching today's reading. Existing seeded rows are not replayed against current readings.
 - **Missed**: zero quantities and a required reason; no sensor reduction.
-- Current entries older than five minutes or future-dated are rejected by the database. This tolerance covers submission/network delay, not retrospective data entry. Current mode deliberately records time at save; use history mode for backdated records.
+- The current-collection RPC assigns the database transaction time and ignores any client timestamp, including timestamps sent by older frontend versions. The five-minute/future guard remains on direct table inserts as defense in depth. Use Historical mode for backdated records; its timestamp is not rewritten.
 - A per-form UUID identifies the request. Retrying the same request returns its saved result without repeating the reduction. The existing one-record-per-schedule constraint also prevents a second result from another session. A separately opened unscheduled form is a new operation, so do not intentionally enter the same physical collection twice.
 - The total, recycled and non-recycled portions cannot exceed their corresponding current balances. Quantities are compared at two-decimal precision. Nothing is silently clamped or reset to zero.
 - The new Waste value is old waste minus total collected; the new Recyclable material value is old recyclable minus recycled collected. A full collection reaches zero only when those input quantities match the balances.

@@ -192,9 +192,10 @@ export async function listWasteCollections(filters = {}) {
 export async function createWasteCollection(values) {
   if (values.request_id) {
     requireSupabase()
-    assertWasteValidation(validateWasteCollection(values))
+    const useServerTime = values.apply_to_sensor === true
+    assertWasteValidation(validateWasteCollection(values, { useServerTime }))
     const { data, error } = await supabase.rpc('record_waste_collection', {
-      p_record: { ...normalizeWasteCollection(values), apply_to_sensor: values.apply_to_sensor === true },
+      p_record: { ...normalizeWasteCollection(values, { useServerTime }), apply_to_sensor: useServerTime },
       p_request_id: values.request_id,
     })
     if (error?.code === 'PGRST202') throw new Error('Collection sensor response is not installed. Apply supabase/waste_collection_sensor_response.sql in Supabase first.')

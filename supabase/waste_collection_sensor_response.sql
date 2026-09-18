@@ -124,7 +124,11 @@ begin
     waste_type, status, source, notes, recorded_by, apply_to_sensor, request_id
   ) values (
     location_id_value, schedule_id_value, (p_record->>'alert_id')::bigint,
-    (p_record->>'collected_at')::timestamptz, (p_record->>'total_kg')::numeric,
+    -- Current collections use the same database transaction clock as validation
+    -- triggers. Historical entries retain their explicit user-entered time.
+    case when coalesce((p_record->>'apply_to_sensor')::boolean, false)
+      then now() else (p_record->>'collected_at')::timestamptz end,
+    (p_record->>'total_kg')::numeric,
     (p_record->>'recycled_kg')::numeric, p_record->>'waste_type', p_record->>'status',
     p_record->>'source', nullif(btrim(p_record->>'notes'), ''), auth.uid(),
     coalesce((p_record->>'apply_to_sensor')::boolean, false), p_request_id

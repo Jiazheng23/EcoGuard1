@@ -72,3 +72,26 @@ test('normalization persists a supplied alert link without inventing links for e
   assert.equal(normalizeWasteSchedule({ ...values, alert_id: '17' }).alert_id, 17)
   assert.equal(Object.hasOwn(normalizeWasteSchedule(values), 'alert_id'), false)
 })
+
+test('current collections defer timestamp validation to the database regardless of the client clock', () => {
+  const alert = { created_at: '2026-09-19T01:00:00Z' }
+  for (const collected_at of [null, '2000-01-01T12:00:00Z', '2099-01-01T12:00:00Z']) {
+    const values = { ...validCollection, collected_at, apply_to_sensor: true }
+    assert.deepEqual(validateWasteCollection(values, { useServerTime: true, alert }), {})
+    assert.equal(Object.hasOwn(normalizeWasteCollection(values, { useServerTime: true }), 'collected_at'), false)
+  }
+})
+
+test('server timestamps do not bypass quantity or status validation', () => {
+  const errors = validateWasteCollection({ ...validCollection, collected_at: null, total_kg: -1, status: 'partial' }, { useServerTime: true })
+  assert.ok(errors.total_kg)
+  assert.ok(errors.status)
+})
+
+test('historical and missed entries retain timestamp validation and entered time', () => {
+  assert.ok(validateWasteCollection({ ...validCollection, collected_at: null }).collected_at)
+  assert.ok(validateWasteCollection({ ...validCollection, collected_at: '2099-01-01T12:00:00Z' }).collected_at)
+  assert.equal(normalizeWasteCollection(validCollection).collected_at, '2000-01-01T12:00:00.000Z')
+  const missed = { ...validCollection, status: 'missed', total_kg: 0, recycled_kg: 0, notes: 'Vehicle unavailable' }
+  assert.ok(validateWasteCollection(missed, { schedule: { scheduled_until: '2000-01-01T13:00:00Z' } }).collected_at)
+})

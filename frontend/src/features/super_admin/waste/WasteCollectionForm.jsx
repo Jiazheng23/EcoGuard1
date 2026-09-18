@@ -66,11 +66,11 @@ export default function WasteCollectionForm({ location, schedule, alert, initial
     const currentCollection = timing === 'current' && values.status !== 'missed'
     const payload = {
       ...values,
-      collected_at: currentCollection ? new Date().toISOString() : values.collected_at,
+      collected_at: currentCollection ? null : values.collected_at,
       apply_to_sensor: currentCollection,
       request_id: requestId,
     }
-    const nextErrors = validateWasteCollection(payload, { schedule, alert })
+    const nextErrors = validateWasteCollection(payload, { schedule, alert, useServerTime: currentCollection })
     if (currentCollection) {
       Object.assign(nextErrors, previewWasteSensorResponse(reading, values).errors)
       if (readingLoading || readingError) nextErrors.sensor = 'Wait for the reading or refresh it before saving.'

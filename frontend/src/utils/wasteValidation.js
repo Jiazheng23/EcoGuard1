@@ -44,7 +44,7 @@ export function validateWasteSchedule(values, { requireFuture = true } = {}) {
   return errors
 }
 
-export function validateWasteCollection(values, { requireLocation = true, requireWasteType = true, schedule, alert } = {}) {
+export function validateWasteCollection(values, { requireLocation = true, requireWasteType = true, schedule, alert, useServerTime = false } = {}) {
   const errors = {}
   const locationId = Number(values.location_id)
   const collectedAt = parseDate(values.collected_at)
@@ -55,12 +55,12 @@ export function validateWasteCollection(values, { requireLocation = true, requir
   if (requireLocation && (!Number.isInteger(locationId) || locationId < 1)) {
     errors.location_id = 'Select a valid ecological location.'
   }
-  if (!collectedAt) {
+  if (!useServerTime && !collectedAt) {
     errors.collected_at = 'Enter a valid collection time.'
-  } else if (collectedAt > new Date()) {
+  } else if (!useServerTime && collectedAt > new Date()) {
     errors.collected_at = 'Collection time cannot be in the future.'
   }
-  if (collectedAt && !errors.collected_at) {
+  if (!useServerTime && collectedAt && !errors.collected_at) {
     if (status === 'missed' && schedule && collectedAt < parseDate(schedule.scheduled_until)) {
       errors.collected_at = 'A missed attempt must be recorded after the collection window ends.'
     }
@@ -131,12 +131,12 @@ export function normalizeWasteSchedule(values) {
   }
 }
 
-export function normalizeWasteCollection(values) {
+export function normalizeWasteCollection(values, { useServerTime = false } = {}) {
   return {
     ...(values.alert_id ? { alert_id: Number(values.alert_id) } : {}),
     schedule_id: values.schedule_id ? Number(values.schedule_id) : null,
     location_id: values.location_id ? Number(values.location_id) : undefined,
-    collected_at: toIsoString(values.collected_at),
+    ...(useServerTime ? {} : { collected_at: toIsoString(values.collected_at) }),
     total_kg: roundKilograms(values.total_kg),
     recycled_kg: roundKilograms(values.recycled_kg),
     waste_type: values.waste_type,
