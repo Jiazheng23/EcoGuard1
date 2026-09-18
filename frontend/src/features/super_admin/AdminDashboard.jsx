@@ -47,6 +47,22 @@ const tooltipStyle = {
   fontSize: '0.75rem',
 }
 
+function shortDestinationLabels(destinations) {
+  const labelCounts = new Map()
+
+  return destinations.map((destination) => {
+    const placeName = destination.name.split(',')[0].trim()
+    const shortName = placeName.length > 15 ? `${placeName.slice(0, 14)}…` : placeName
+    const count = (labelCounts.get(shortName) || 0) + 1
+    labelCounts.set(shortName, count)
+
+    return {
+      ...destination,
+      chartLabel: count === 1 ? shortName : `${shortName} (${count})`,
+    }
+  })
+}
+
 export default function AdminDashboard({
   onNavigate,
   profiles,
@@ -63,6 +79,7 @@ export default function AdminDashboard({
     const summary = getTripSummary(trips, profiles)
     const monthly = getMonthlySeries(trips)
     const destinations = getDestinationSeries(trips)
+    const chartDestinations = shortDestinationLabels(destinations.slice(0, 8))
     const highCarbonTrips = [...trips]
       .filter((trip) => numberValue(trip.carbon_emission) > 15)
       .sort((left, right) => new Date(right.travelled_at) - new Date(left.travelled_at))
@@ -71,7 +88,7 @@ export default function AdminDashboard({
       trips.map((trip) => trip.tourist_id).filter(Boolean),
     ).size
 
-    return { summary, monthly, destinations, highCarbonTrips, recordedTourists }
+    return { summary, monthly, chartDestinations, highCarbonTrips, recordedTourists }
   }, [profiles, trips])
 
   const latestMetrics = useMemo(() => latestMetricsByLocation(metrics), [metrics])
@@ -225,15 +242,19 @@ export default function AdminDashboard({
 
       <ChartCard>
         <h2 className="mb-4 font-bold text-slate-900">Carbon Emission by Destination</h2>
-        <ResponsiveContainer width="100%" height={190}>
-          <BarChart data={data.destinations.slice(0, 8)} margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} />
-            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} />
-            <Tooltip contentStyle={tooltipStyle} formatter={(value) => [`${value} kg CO₂`, 'Carbon']} />
-            <Bar isAnimationActive={false} dataKey="emission" fill="#3b82f6" radius={[5, 5, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
+        <div className="overflow-x-auto">
+          <div className="min-w-[720px]">
+            <ResponsiveContainer width="100%" height={190}>
+              <BarChart data={data.chartDestinations} margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                <XAxis dataKey="chartLabel" axisLine={false} tickLine={false} interval={0} tick={{ fontSize: 10, fill: '#94a3b8' }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} />
+                <Tooltip contentStyle={tooltipStyle} labelFormatter={(label, payload) => payload?.[0]?.payload?.name || label} formatter={(value) => [`${value} kg CO₂`, 'Carbon']} />
+                <Bar isAnimationActive={false} dataKey="emission" fill="#3b82f6" radius={[5, 5, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
       </ChartCard>
 
       <section className="grid grid-cols-2 gap-4 md:grid-cols-4">
