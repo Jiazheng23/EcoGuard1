@@ -1,88 +1,336 @@
 # EcoGuard EEWS
 
-EcoGuard is a React, Express, and Supabase ecological early-warning system for Malaysian tourist locations.
+EcoGuard is a web-based ecological early-warning and sustainable-tourism platform for Malaysian tourist locations. It combines a React frontend, an Express API, and Supabase services to support tourist carbon calculations, personal Eco Scores, ecological monitoring, waste operations, environmental analytics, administrator workflows, realtime warnings, and critical email alerts.
 
-## Roles and access
+## Main modules
 
-- `super_admin` can manage every location and all location-linked thresholds and metrics.
-- `pending_location_admin` has submitted a company document but has no administrator privileges.
-- `location_admin` has the same operational tools but is assigned exactly one `location_id`. It can edit that location, but cannot create/delete locations or access another location's thresholds or metrics.
-- `tourist` uses trip, profile, carbon, and ecological-monitoring features.
+### Tourist
 
-Supabase Row Level Security (RLS) is the authorization boundary. Routes and hidden buttons are only user-experience safeguards.
+- **Carbon Footprint Calculator and Recommendation**
+  - Search for Malaysian locations or select them from a Leaflet/OpenStreetMap map.
+  - Calculate routes for car, motorcycle, bicycle, walking, bus, LRT/MRT, and mixed transport.
+  - Compare estimated emissions and receive a distance-based greener-mode recommendation.
+  - Review public-transport journey legs returned by Transitous.
+  - Calculate freely without saving; Trip History and the stored Eco Score change only after **Save Trip** is selected.
+- **Personal Eco Dashboard**
+  - View the current Eco Score, trip emissions, transport usage, trends, recommendations, and earned badges.
+- **Trip History and Achievements**
+  - Search and filter saved journeys, review positive or negative Eco Score changes, and export trip reports.
+- **Ecological Monitoring**
+  - View tourist-safe environmental indicators, active advisories, location details, and incident reporting features.
 
-## Supabase and administrator setup
+### Location administrator
 
-1. Back up the affected tables, then run `supabase/admin_location_scope.sql` in Supabase SQL Editor. If that setup was already applied before profile-picture support was added, run only `supabase/profile_avatar_storage.sql`.
-2. Run the SQL inside `supabase/profile_details.sql` to add the optional profile gender field. Paste the file contents into SQL Editor, not the file name.
-3. Run `supabase/waste_management.sql` to create the waste schedules, immutable collection history, thresholds, export audit data, validation, and location-scoped RLS policies.
-4. Run `supabase/environmental_incident_reporting.sql` to enable tourist-submitted, location-routed incident reports and private photo evidence. Enable **Supabase Cron** from Dashboard > Integrations > Cron. Then run `supabase/early_warning_notifications.sql`, `supabase/tourist_advisories.sql`, `supabase/sensor_current_metrics.sql`, `supabase/backend_sensor_automation.sql`, and finally `supabase/sensor_location_controls.sql`. Advisories can be published from verified incidents or active warnings and are automatically hidden from tourists after withdrawal, expiry, or source resolution.
-5. Optionally run `supabase/waste_demo_data.sql` to add idempotent, clearly labelled assignment demonstration records for up to three active locations.
-6. Assign a `location_id` to every migrated location administrator returned by the verification query at the end of the administrator-scope script.
-7. Synchronize trusted `auth.users.raw_app_meta_data` using the commented example in the administrator-scope SQL script, then validate the pending constraint. Roles must never be stored in user-editable `user_metadata`.
-8. Add the server-only values below to `.env.local`. Never prefix secret values with `VITE_` or expose them to frontend code.
+- Access exactly one assigned ecological location.
+- View its dashboard, sensor readings, thresholds, alerts, waste workflows, analytics, reports, incidents, advisories, and profile.
+- Schedule or record waste collections and review traceable alert-response history.
+- Cannot create/delete locations, view global profiles, or access another location's protected data.
+
+### Super administrator
+
+- Manage all locations, administrator applications, sensors, thresholds, warnings, waste operations, incidents, advisories, analytics, reports, and profiles.
+- Approve or reject location-administrator applications and assign one unreserved location.
+- Pause or resume the five-minute simulated sensor update for individual locations.
+
+## Roles and authorization
+
+EcoGuard uses these profile roles:
+
+- `tourist`
+- `pending_location_admin`
+- `location_admin`
+- `super_admin`
+
+Supabase Row Level Security (RLS), trusted Auth metadata, database functions, and backend checks form the authorization boundary. Hidden navigation items and frontend route guards improve the user experience but are not treated as the security boundary.
+
+A location administrator is restricted to one `location_id`. A super administrator has global access. Public registration never creates a super administrator.
+
+## Technology stack
+
+| Area | Technology |
+| --- | --- |
+| Frontend | React 19, Vite, React Router, Tailwind CSS, Recharts |
+| Map UI | Leaflet and React Leaflet with OpenStreetMap tiles |
+| Backend | Node.js, Express 5 |
+| Platform | Supabase Auth, PostgreSQL, PostgREST/RPC, Realtime, Storage, RLS, Cron, Database Webhooks, Edge Functions |
+| Location search | Nominatim |
+| Road routing | OSRM-compatible driving, cycling, and walking endpoints |
+| Public transport | Transitous/MOTIS |
+| Critical email | Gmail API through a Supabase Edge Function |
+
+## Carbon Calculator behaviour
+
+The routing APIs provide route information; they do not calculate CO2 emissions.
+
+- Nominatim searches for Malaysian locations and reverse-geocodes map selections.
+- OSRM-compatible endpoints calculate car, motorcycle, bicycle, and walking routes.
+- Transitous/MOTIS supplies suggested bus, LRT/MRT, and mixed public-transport itineraries.
+- Public-transport legs and schedules are recommendations and should be confirmed before travelling.
+
+EcoGuard calculates estimated emissions using:
+
+```text
+CO2 per passenger (kg)
+= route distance (km) x emission factor (g CO2e/passenger-km)
+  x round-trip multiplier / 1000
+```
+
+Road-transport factors are based on Muhammad Saifuddin et al. (2019), and the LRT/MRT factor uses the transit-rail value in the MITI i-ESGStart guide. Walking and bicycle are treated as having zero direct operational transport emissions. Actual results can vary with traffic, vehicle efficiency, occupancy, and service conditions.
+
+- [Muhammad Saifuddin et al. (2019)](https://doi.org/10.1088/1755-1315/373/1/012024)
+- [MITI i-ESGStart](https://www.miti.gov.my/miti/resources/IESG/Booklet_Stater_Kit.pdf)
+
+## Architecture overview
+
+```text
+React presentation layer
+        |
+        +--> Supabase Auth, database, RPC, Realtime, and Storage
+        |
+        `--> Express API
+                |
+                +--> Nominatim
+                +--> OSRM-compatible route services
+                `--> Transitous/MOTIS
+
+Supabase PostgreSQL
+        |
+        +--> database functions, triggers, RLS, and Cron
+        `--> critical-alert webhook --> Edge Function --> Gmail API
+```
+
+## Prerequisites
+
+- Node.js and npm
+- A Supabase project
+- A database containing the base EcoGuard tables, including `profiles`, `ecological_locations`, `crowd_thresholds`, `location_metrics`, and `trips`
+- Supabase Cron enabled when the five-minute sensor simulation is required
+- A contact email for Nominatim and Transitous requests
+
+> **Important:** The SQL files in `supabase/` are incremental migrations, not a complete empty-database schema. Back up the target database before applying them. The frontend currently uses live Supabase incident and advisory services (`USE_MOCK_INCIDENTS = false` and `USE_MOCK_ADVISORIES = false`), but the base migrations that create `environmental_incidents`, `tourist_advisories`, their RPCs, and private evidence policies are not present in this repository. Those objects must already exist in the target Supabase project before those two workflows can be used.
+
+## Environment configuration
+
+Create `.env.local` in the repository root:
 
 ```dotenv
-VITE_SUPABASE_URL=
-VITE_SUPABASE_PUBLISHABLE_KEY=
-SUPABASE_SECRET_KEY=
-MAP_CONTACT_EMAIL=
+VITE_SUPABASE_URL=https://your-project-ref.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=your_publishable_key
+
+# Backend only. Never expose this value through a VITE_ variable.
+SUPABASE_SECRET_KEY=your_server_secret_key
+
+# Required by the map-service usage policies.
+MAP_CONTACT_EMAIL=your_email@example.com
+
+# Routing overrides.
+TRANSITOUS_API_URL=https://api.transitous.org/api/v6/plan
+OSRM_DRIVING_URL=https://router.project-osrm.org/route/v1/driving
+OSRM_CYCLING_URL=https://routing.openstreetmap.de/routed-bike/route/v1/driving
+OSRM_WALKING_URL=https://routing.openstreetmap.de/routed-foot/route/v1/driving
+
+# Keep 5000 unless frontend/vite.config.js is updated as well.
 PORT=5000
 ```
 
-9. Create the first super administrator in Supabase Auth. Set its `profiles` row to `role = 'super_admin'`, `location_id = null`, and its trusted `app_metadata.role` to `super_admin`. Super-admin public registration is intentionally unavailable.
+The Vite frontend loads its public Supabase values from the root environment file. The Express backend also loads the root `.env.local`. Do not commit real secrets.
 
-   For legacy accounts where only `profiles.role` was updated, the protected application endpoint verifies that canonical profile and synchronizes the missing Auth `app_metadata.role`. The browser refreshes its session immediately afterward so RLS sees the updated claim.
+## Install and run locally
 
-Location administrators first register with only their full name, email, and password. They are then sent to a protected onboarding page where they can search for a place through OpenStreetMap, paste and resolve an address, or choose an existing unassigned location, before uploading a PDF, JPG, or PNG company document (maximum 5 MB). A super admin reviews the private document and requested location from **Admin Applications**; approval writes the trusted `location_admin` role and assigned location. Super admins cannot be created through public registration.
-
-## Run locally
+Install the two applications:
 
 ```powershell
-npm install
 npm install --prefix backend
 npm install --prefix frontend
+```
+
+Run the backend in the first terminal:
+
+```powershell
 npm run dev --prefix backend
+```
+
+Run the frontend in the second terminal:
+
+```powershell
 npm run dev --prefix frontend
 ```
 
-Dashboard routes are `/tourist/dashboard`, `/location_admin/dashboard`, and `/super_admin/dashboard`. The old `/admin/dashboard` redirects to the location-admin route.
+Default development URLs:
 
-Sign-in requires only email and password. The application reads the approved account role and routes the user automatically; role selection appears only during registration.
+- Frontend: `http://localhost:5173`
+- Backend health check: `http://localhost:5000/api/health`
 
-## Password recovery for every role
+The frontend proxies `/api` to port `5000`, so both processes must normally be running for map search, route calculation, and protected administrator application endpoints.
 
-Tourists, pending location administrators, approved location administrators, and super administrators use the same self-service recovery flow:
+Production-style local commands:
 
-1. Select **Forgot password?** on `/login` and submit the account email.
-2. Open the Supabase recovery email.
-3. The link returns to `/reset-password`, where EcoGuard verifies the recovery session.
-4. Enter a password containing at least 8 characters, uppercase, lowercase, and a number.
-5. After the password is updated, existing sessions are globally signed out and the user signs in again. Role and location assignments are unchanged.
+```powershell
+npm start --prefix backend
+npm run build --prefix frontend
+npm run preview --prefix frontend
+```
 
-In **Supabase Dashboard > Authentication > URL Configuration**, add these redirect URLs:
+## Main application routes
+
+```text
+/
+/login
+/register
+/forgot-password
+/reset-password
+/auth/callback
+/tourist/:page
+/location_admin/:page
+/super_admin/:page
+```
+
+Dashboard entry points are:
+
+- `/tourist/dashboard`
+- `/location_admin/dashboard`
+- `/super_admin/dashboard`
+
+The legacy `/admin/dashboard` route redirects to `/location_admin/dashboard`.
+
+## Supabase database setup
+
+The exact migrations required depend on which features are already installed in the target project. For a project with the base EcoGuard schema, apply the relevant scripts in this dependency order.
+
+### 1. Roles, administrator onboarding, profiles, and location images
+
+1. `supabase/admin_location_scope.sql`
+2. `supabase/location_admin_assignment_uniqueness.sql`
+3. `supabase/location_admin_rejection_reason.sql`
+4. `supabase/profile_details.sql`
+5. `supabase/profile_avatar_storage.sql`
+6. `supabase/location_images.sql`
+
+Afterward, assign `location_id` values to approved location administrators and synchronize trusted `auth.users.raw_app_meta_data.role` values as described in `admin_location_scope.sql`.
+
+### 2. Trip emissions, Eco Score, LRT/MRT, and mixed transport
+
+1. `supabase/normalize_trip_transport_modes.sql`
+2. `supabase/trip_emissions_and_eco_score.sql`
+3. `supabase/mixed_trip_transport_support.sql`
+
+The database trigger recalculates saved trip emissions and Eco Score values. The frontend result is a preview; the value returned after saving is the authoritative persisted result.
+
+### 3. Waste, warnings, current sensor rows, and five-minute simulation
+
+1. `supabase/waste_management.sql`
+2. `supabase/early_warning_notifications.sql`
+3. `supabase/ecological_monitoring_simulation.sql` when seed/demo monitoring data is required
+4. `supabase/sensor_current_metrics.sql`
+5. Enable Supabase Cron from **Dashboard > Integrations > Cron**
+6. `supabase/backend_sensor_automation.sql`
+7. `supabase/sensor_location_controls.sql`
+
+The scheduled `ecoguard-sensor-refresh` job runs every five minutes and updates one simulated current `location_metrics` row per enabled location. This is a classroom/backend simulation, not a connection to physical IoT hardware.
+
+### 4. Environmental analytics history
+
+Choose the appropriate history migration:
+
+- `supabase/environmental_analytics_history.sql` creates history storage and archives current/future readings.
+- `supabase/environmental_analytics_simulated_backfill.sql` also creates the history support and adds idempotent simulated historical data for demonstrations.
+
+The analytics page can fall back to current readings when history is not installed, but historical day/week/month charts require the history table.
+
+### 5. Waste alert response and collection-to-sensor workflow
+
+1. `supabase/waste_alert_workflow.sql`
+2. `supabase/waste_collection_sensor_response.sql`
+3. `supabase/waste_collection_server_time.sql`
+
+See:
+
+- [`supabase/waste_alert_workflow_setup.md`](supabase/waste_alert_workflow_setup.md)
+- [`supabase/waste_collection_sensor_response_setup.md`](supabase/waste_collection_sensor_response_setup.md)
+- [`WASTE_MANAGEMENT_TEST_GUIDE.md`](WASTE_MANAGEMENT_TEST_GUIDE.md)
+
+Optional demonstration records can be added with `supabase/waste_demo_data.sql` after the base waste schema is installed.
+
+## Authentication setup
+
+### Email and password
+
+Sign-in uses email and password; EcoGuard reads the approved profile role and redirects the user automatically. Password recovery returns to `/reset-password` and requires at least eight characters, uppercase, lowercase, and a number.
+
+Add these redirect URLs in **Supabase Dashboard > Authentication > URL Configuration**:
 
 ```text
 http://localhost:5173/reset-password
 https://YOUR-PRODUCTION-DOMAIN/reset-password
 ```
 
-Keep the production URL aligned with the domain that hosts the Vite frontend. The reset-request success message intentionally does not reveal whether an email is registered.
+### Google sign-in
 
-## Changes made
+Google OAuth is configured through Supabase. New Google users choose whether to continue as a Tourist or begin the Location Administrator application. Existing users retain their stored role; Google sign-in does not overwrite it.
 
-- Replaced legacy `admin` handling with `super_admin` and `location_admin`.
-- Added `profiles.location_id`, assignment/role constraints, indexes, trusted JWT helpers, table grants, and RLS policies.
-- Scoped location-admin access on locations, crowd thresholds, and metrics to one location.
-- Prevented the location-admin workspace from requesting global profiles or trips and added assigned-location filtering as defense in depth.
-- Reserved location creation/deletion and global profile access for super admins.
-- Added private company-document upload and a pending application record during location-admin registration.
-- Added user-owned profile-picture uploads through the public `profile-avatars` Storage bucket; `profiles.avatar_url` stores the display URL.
-- Added a super-admin review page and protected backend approve/reject endpoints.
-- Added location selection during registration and role-aware login redirects.
-- Shared the administrator workspace between both roles and removed global create/delete controls for location admins.
-- Added the complete Waste Management workflow: simulated fallback monitoring, thresholds, schedules, immutable collection history, persisted analytics, and audited CSV/PDF reports.
-- Added a security-definer tourist RPC that returns only aggregate environmental and waste status bands, never operational waste records.
+Follow [`supabase/google_sign_in_setup.md`](supabase/google_sign_in_setup.md) for the Google Cloud client, Supabase provider, callback URL, and redirect configuration.
+
+## Location-administrator application flow
+
+1. Register with email/password or start through Google onboarding.
+2. Search for a West Malaysia location, resolve an address, or choose an existing unassigned location.
+3. Upload a PDF, JPG, or PNG company document, up to 5 MB.
+4. A super administrator reviews the private document and requested location.
+5. Approval writes the trusted `location_admin` role and assigned `location_id`; rejection retains the submitted reason.
+
+The backend uses `SUPABASE_SECRET_KEY` only for protected server-side approval and onboarding operations. It must never be exposed to frontend code.
+
+## Critical alert email
+
+The `critical-alert-email` Supabase Edge Function sends a combined email for qualifying critical alerts. It verifies the alert against the database, reads the configured recipient, obtains a Gmail access token from an offline refresh token, and records successful delivery to reduce duplicate emails for one sensor cycle.
+
+Required Edge Function secrets:
+
+```powershell
+supabase secrets set GMAIL_CLIENT_ID="...apps.googleusercontent.com"
+supabase secrets set GMAIL_CLIENT_SECRET="..."
+supabase secrets set GMAIL_REFRESH_TOKEN="..."
+supabase secrets set GMAIL_FROM="sender@gmail.com"
+```
+
+Then:
+
+1. Run `supabase/critical_alert_email_deliveries.sql`.
+2. Deploy the function with `supabase functions deploy critical-alert-email`.
+3. Create an `INSERT` Database Webhook on `public.early_warning_alerts`.
+4. Send the project's legacy anon JWT in the webhook `Authorization` header while JWT verification remains enabled.
+5. Enable Auto Alerts and configure a notification email for the location.
+
+Full instructions and troubleshooting are in [`supabase/critical_alert_email_setup.md`](supabase/critical_alert_email_setup.md).
+
+## Realtime and background behaviour
+
+- Environmental readings, warnings, advisories, incidents, and waste operations use Supabase Realtime where configured.
+- Waste operations also use a polling fallback.
+- The sensor Cron job updates simulated metrics every five minutes for enabled locations.
+- Threshold triggers create or resolve persisted early-warning records.
+- The critical-alert webhook reacts to new critical alert rows; updating an existing alert does not behave like a new `INSERT` event.
+
+## Tests and verification
+
+Run frontend checks:
+
+```powershell
+npm run lint --prefix frontend
+npm test --prefix frontend
+npm run build --prefix frontend
+```
+
+Run backend tests and syntax checks:
+
+```powershell
+npm test --prefix backend
+node --check backend/index.js
+node --check backend/src/controllers/authController.js
+node --check backend/src/routes/mapRoutes.js
+```
+
+Automated tests do not verify the deployed Supabase database, RLS, Storage policies, Cron, webhooks, OAuth providers, Gmail credentials, or live third-party routing services. Test those integrations on a non-production Supabase project with separate tourist, location-admin, and super-admin accounts. A SQL Editor owner session bypasses RLS and is not a valid authorization test.
 
 ## Current project structure
 
@@ -90,16 +338,14 @@ Generated `.git`, `node_modules`, and `frontend/dist` directories are omitted.
 
 ```text
 EcoGuard1/
-|-- .env.local
+|-- .env.example
+|-- .env.local                  # local only; do not commit
 |-- README.md
 |-- WASTE_MANAGEMENT_REQUIREMENTS.md
 |-- WASTE_MANAGEMENT_TEST_GUIDE.md
-|-- package.json
-|-- package-lock.json
 |-- backend/
 |   |-- index.js
 |   |-- package.json
-|   |-- package-lock.json
 |   `-- src/
 |       |-- config/env.js
 |       |-- controllers/authController.js
@@ -108,104 +354,32 @@ EcoGuard1/
 |       |   `-- mapRoutes.js
 |       `-- services/supabase.js
 |-- frontend/
-|   |-- index.html
-|   |-- README.md
 |   |-- package.json
-|   |-- package-lock.json
 |   |-- vite.config.js
-|   |-- eslint.config.js
-|   |-- postcss.config.js
-|   |-- tailwind.config.js
-|   |-- public/
-|   |   |-- favicon.svg
-|   |   `-- icons.svg
 |   `-- src/
-|       |-- main.jsx
 |       |-- App.jsx
-|       |-- App.css
-|       |-- index.css
-|       |-- assets/ (hero.png, react.svg, vite.svg)
+|       |-- components/
+|       |-- hooks/
 |       |-- services/
-|       |   |-- authService.js
-|       |   |-- adminApplicationService.js
-|       |   |-- locationService.js
-|       |   |-- mapService.js
-|       |   |-- profileService.js
-|       |   |-- supabaseClient.js
-|       |   |-- tripService.js
-|       |   `-- wasteService.js
 |       |-- utils/
-|       |   |-- tripAnalytics.js
-|       |   |-- wasteAnalytics.js
-|       |   |-- wasteReport.js
-|       |   `-- wasteValidation.js (with focused `*.test.js` files)
 |       `-- features/
-|           |-- auth/ (AuthPage.jsx, auth.css)
-|           |-- landing/ (LandingPage.jsx, landing.css)
+|           |-- auth/
+|           |-- landing/
 |           |-- location_admin/
-|           |   |-- LocationAdminWorkspace.jsx
-|           |   |-- PendingApprovalPage.jsx
-|           |   |-- DashboardPage.jsx
-|           |   |-- LocationPage.jsx
-|           |   |-- CrowdThresholdsPage.jsx
-|           |   |-- WasteManagementPage.jsx
-|           |   |-- ReportsPage.jsx
-|           |   `-- ProfilePage.jsx
+|           |-- profile/
 |           |-- super_admin/
-|           |   |-- AdminDashboard.jsx
-|           |   |-- AdminApplications.jsx
-|           |   |-- AdminLayout.jsx
-|           |   |-- AdminProfile.jsx
-|           |   |-- AdminWorkspace.jsx
-|           |   |-- CrowdThresholds.jsx
-|           |   |-- DestinationManagement.jsx
-|           |   |-- EcologicalLocations.jsx
-|           |   |-- EnvironmentalData.jsx
-|           |   |-- Reports.jsx
-|           |   |-- SystemActivity.jsx
-|           |   |-- WarningManagement.jsx
-|           |   |-- WasteManagement.jsx
-|           |   `-- waste/
-|           |       |-- WasteOverview.jsx
-|           |       |-- WasteSimulator.jsx
-|           |       |-- WasteThresholdSettings.jsx
-|           |       |-- WasteScheduleForm.jsx
-|           |       |-- WasteScheduleManager.jsx
-|           |       |-- WasteCollectionForm.jsx
-|           |       |-- WasteCollectionFilters.jsx
-|           |       |-- WasteCollectionHistory.jsx
-|           |       |-- WasteAnalytics.jsx
-|           |       `-- WasteReportExport.jsx
 |           `-- tourist/
-|               |-- CarbonCalculator.jsx
-|               |-- EcologicalMonitoring.jsx
-|               |-- MalaysiaMapPicker.jsx
-|               |-- TouristDashboard.jsx
-|               |-- TouristHistory.jsx
-|               |-- TouristLayout.jsx
-|               |-- TouristProfile.jsx
-|               `-- TouristWorkspace.jsx
 `-- supabase/
-    |-- admin_location_scope.sql
-    |-- backend_sensor_automation.sql
-    |-- early_warning_notifications.sql
-    |-- profile_details.sql
-    |-- sensor_current_metrics.sql
-    |-- sensor_location_controls.sql
-    |-- waste_management.sql
-    `-- waste_demo_data.sql
+    |-- functions/critical-alert-email/index.ts
+    |-- *_setup.md
+    `-- *.sql
 ```
 
-## Verification
+## Important limitations
 
-After applying the SQL, test separate super-admin, location-admin, and tourist accounts. Also attempt direct REST mutations: a location admin must not be able to read or write a different location even if the browser UI is bypassed.
-
-```powershell
-npm run build --prefix frontend
-npm run lint --prefix frontend
-npm run test --prefix frontend
-node --check backend/index.js
-node --check backend/src/controllers/authController.js
-```
-
-See `WASTE_MANAGEMENT_TEST_GUIDE.md` for the complete administrator, tourist, export, and RLS demonstration walkthrough.
+- Public-transport itineraries depend on Transitous coverage and current upstream data. They are recommendations, not guaranteed live schedules.
+- OSRM public/demo endpoints and Nominatim are external services with their own availability and usage policies.
+- Carbon values are estimates based on configured passenger-kilometre factors.
+- The five-minute sensor process is simulated backend data, not physical IoT telemetry.
+- Critical email depends on a valid Gmail OAuth refresh token. Google OAuth applications left in Testing can issue refresh tokens with limited lifetimes.
+- This repository does not currently include the base incident/advisory database migrations described in the prerequisites section.
