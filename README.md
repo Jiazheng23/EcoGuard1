@@ -123,7 +123,8 @@ SUPABASE_SECRET_KEY=your_server_secret_key
 # Required by the map-service usage policies.
 MAP_CONTACT_EMAIL=your_email@example.com
 
-# Routing overrides.
+# Optional routing overrides. The application uses built-in public endpoints
+# when these values are not included in .env.local.
 TRANSITOUS_API_URL=https://api.transitous.org/api/v6/plan
 OSRM_DRIVING_URL=https://router.project-osrm.org/route/v1/driving
 OSRM_CYCLING_URL=https://routing.openstreetmap.de/routed-bike/route/v1/driving
@@ -134,6 +135,10 @@ PORT=5000
 ```
 
 The Vite frontend loads its public Supabase values from the root environment file. The Express backend also loads the root `.env.local`. Do not commit real secrets.
+
+`.env.example` is the complete configuration template, while `.env.local` contains the private values for one development machine. `TRANSITOUS_API_URL` is optional because the backend falls back to `https://api.transitous.org/api/v6/plan` when it is not defined. Adding it to `.env.local` is still recommended because it makes the selected endpoint explicit and easier to change later. `MAP_CONTACT_EMAIL` remains required for the map and public-transport requests.
+
+Restart the backend after changing `.env.local` so that Node.js loads the updated values.
 
 ## Install and run locally
 
